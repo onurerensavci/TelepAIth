@@ -200,7 +200,8 @@ final class RobotModel: ObservableObject {
                 celebrateStart = now
                 RobotModel.play("Glass")
                 remember(withEmoji(s.emoji, text), now: now)
-                if e.forceNotify || duration >= Preferences.longTurnSeconds {
+                // Anlatıcının "bitti"si bildirim atmaz (izleyici ya da hook zaten haber veriyor)
+                if e.sessionID != "mcp" && (e.forceNotify || duration >= Preferences.longTurnSeconds) {
                     var body = (s.project ?? loc("Görev", "Task")) + " — " + formatDuration(duration)
                     if let m = e.lastMessage, !m.isEmpty { body += "\n" + clip(m, 140) }
                     notice = Notice(title: withEmoji(s.emoji, theme.displayName + loc(" bitirdi", " is done")), body: body)
@@ -224,6 +225,8 @@ final class RobotModel: ObservableObject {
                 break
             }
             sessions[e.sessionID] = s
+            // Uygulama işi bitirdiyse anlatıcının son cümlesi ekranda asılı kalmasın
+            if e.kind == .stop && e.sessionID != "mcp" { sessions.removeValue(forKey: "mcp") }
         }
 
         refresh(now: now)
@@ -269,8 +272,8 @@ final class RobotModel: ObservableObject {
 
         var bestSession: Session?
         var bestState: RobotState = .idle
-        for (_, s) in sessions {
-            let st = effectiveState(s, now: now)
+        for (id, s) in sessions {
+            let st = effectiveState(s, id: id, now: now)
             if let b = bestSession {
                 if st.priority > bestState.priority || (st.priority == bestState.priority && s.updated > b.updated) {
                     bestSession = s
@@ -316,8 +319,9 @@ final class RobotModel: ObservableObject {
         if subtitle != bubbleSubtitle { bubbleSubtitle = subtitle }
     }
 
-    private func effectiveState(_ s: Session, now: Date) -> RobotState {
+    private func effectiveState(_ s: Session, id: String, now: Date) -> RobotState {
         let age = now.timeIntervalSince(s.updated)
+        if id == "mcp" && s.state.isWorking && age > 90 { return .idle }   // anlatıcı sustuysa
         if s.state == .done && age > 90 { return .idle }
         if s.state == .error && age > 60 { return .idle }
         if s.state.isWorking && age > 300 { return .idle } // takılı kalan oturum

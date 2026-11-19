@@ -53,6 +53,18 @@ func loc(_ tr: String, _ en: String) -> String {
 enum Preferences {
     private static let defaults = UserDefaults.standard
 
+    /// Kalkan: Claude Code'da tehlikeli görünen komutlarda Claude Code senden onay istesin.
+    static var shield: Bool {
+        get { defaults.object(forKey: "shield") as? Bool ?? true }
+        set { defaults.set(newValue, forKey: "shield") }
+    }
+
+    /// Önemli anlarda (bitti, seni bekliyor, güncelleme) robot sesli söylesin.
+    static var speak: Bool {
+        get { defaults.object(forKey: "speak") as? Bool ?? false }
+        set { defaults.set(newValue, forKey: "speak") }
+    }
+
     /// Bitti, bekliyor, hata gibi anlarda kısa sesler.
     static var sounds: Bool {
         get { defaults.object(forKey: "sounds") as? Bool ?? false }

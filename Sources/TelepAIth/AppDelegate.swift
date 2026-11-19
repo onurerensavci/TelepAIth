@@ -109,6 +109,15 @@ final class AppController: NSObject {
         updateIcon()
         let health = currentHealth()
         manager.setHealth(health)
+        Diagnostics.shared.general = [
+            (loc("Sürüm", "Version"), Updater.shared.currentVersion),
+            (loc("Sunucu", "Server"), server.port > 0 ? "127.0.0.1:\(server.port)" : (serverError ?? "—")),
+            (loc("Erişilebilirlik izni", "Accessibility"), AppWatcher.isTrusted ? loc("var", "granted") : loc("yok", "missing")),
+            (loc("Masaüstü izleme", "Desktop watching"), Preferences.watchApps ? loc("açık", "on") : loc("kapalı", "off")),
+            ("Claude Code", HookInstaller.isInstalled(.claude) ? loc("bağlı", "connected") : loc("bağlı değil", "not connected")),
+            ("Codex", HookInstaller.isInstalled(.codex) ? loc("bağlı", "connected") : loc("bağlı değil", "not connected")),
+            (loc("Anlatıcı", "Narrator"), NarratorInstaller.isInstalled() ? loc("Claude masaüstüne ekli", "added to Claude desktop") : loc("ekli değil", "not added")),
+        ]
 
         let menu = NSMenu()
         menu.autoenablesItems = false
@@ -179,6 +188,7 @@ final class AppController: NSObject {
         menu.addItem(language)
 
         menu.addItem(toggleItem(loc("Sesler", "Sounds"), on: Preferences.sounds, action: #selector(toggleSounds)))
+        menu.addItem(toggleItem(loc("Sesli konuşsun", "Speak out loud"), on: Preferences.speak, action: #selector(toggleSpeak)))
 
         menu.addItem(.separator())
         let connections = NSMenuItem(title: loc("Bağlantılar", "Connections"), action: nil, keyEquivalent: "")
@@ -211,11 +221,22 @@ final class AppController: NSObject {
             }
         }
         for target in HookTarget.allCases {
-            let item = toggleItem(target.displayName, on: HookInstaller.isInstalled(target), action: #selector(toggleHook(_:)))
+            let installed = HookInstaller.isInstalled(target)
+            let item = toggleItem(target.displayName, on: installed, action: #selector(toggleHook(_:)))
             item.representedObject = target.rawValue
             item.indentationLevel = 1
             menu.addItem(item)
+            if target == .claude && installed {
+                let shield = toggleItem(loc("Kalkan: tehlikeli komutta onay iste", "Shield: ask before risky commands"),
+                                        on: Preferences.shield, action: #selector(toggleShield))
+                shield.indentationLevel = 2
+                menu.addItem(shield)
+            }
         }
+        let narrator = toggleItem(loc("Anlatıcı (Claude kendisi söylesin)", "Narrator (Claude tells it)"),
+                                  on: NarratorInstaller.isInstalled(), action: #selector(toggleNarrator))
+        narrator.indentationLevel = 1
+        menu.addItem(narrator)
         let claudeBar = actionItem(loc("ClaudeBar kota uyarıları…", "ClaudeBar quota alerts…"), #selector(showClaudeBarHelp))
         claudeBar.indentationLevel = 1
         menu.addItem(claudeBar)
@@ -228,6 +249,7 @@ final class AppController: NSObject {
         demoMenu.addItem(actionItem(loc("Claude: kota uyarısı", "Claude: quota alert"), #selector(demoQuota)))
         demo.submenu = demoMenu
         menu.addItem(demo)
+        menu.addItem(actionItem(loc("Teşhis…", "Diagnostics…"), #selector(openDiagnostics)))
         menu.addItem(actionItem(loc("Ayar klasörünü aç", "Open settings folder"), #selector(openSupportDir)))
         menu.addItem(actionItem(loc("Renkleri ve kostümleri yeniden yükle", "Reload colors and skins"), #selector(reloadAppearance)))
         let checkTitle = Updater.shared.isBusy
@@ -273,6 +295,59 @@ final class AppController: NSObject {
 
     @objc private func toggleNotifications() {
         Preferences.notificationsEnabled.toggle()
+        rebuildMenu()
+    }
+
+    @objc private func toggleSpeak() {
+        Preferences.speak.toggle()
+        if Preferences.speak { Speech.say(loc("Merhaba, ben TelepAIth.", "Hi, I'm TelepAIth.")) }
+        rebuildMenu()
+    }
+
+    @objc private func toggleShield() {
+        Preferences.shield.toggle()
+        if HookInstaller.isInstalled(.claude) { try? HookInstaller.install(.claude) }
+        rebuildMenu()
+    }
+
+    @objc private func openDiagnostics() {
+        rebuildMenu()
+        DiagnosticsWindow.shared.show()
+    }
+
+    @objc private func toggleNarrator() {
+        do {
+            if NarratorInstaller.isInstalled() {
+                try NarratorInstaller.uninstall()
+            } else {
+                try NarratorInstaller.install()
+                NSApp.activate(ignoringOtherApps: true)
+                let alert = NSAlert()
+                alert.messageText = loc("Anlatıcı Claude masaüstüne eklendi", "Narrator added to Claude desktop")
+                let trText = "1) Claude uygulamasını kapatıp yeniden aç.\n"
+                    + "2) Claude'un ne zaman haber vereceğini bilmesi için bu talimatı Claude → Ayarlar → Profil'deki tercihlere ekle (aşağıdaki düğme kopyalar):\n\n"
+                    + NarratorInstaller.suggestedInstruction
+                    + "\n\nClaude Code için Terminal'de bir kere:\n" + NarratorInstaller.claudeCodeCommand
+                let enText = "1) Quit and reopen the Claude app.\n"
+                    + "2) Add this to Claude → Settings → Profile preferences so Claude knows when to report (the button copies it):\n\n"
+                    + NarratorInstaller.suggestedInstruction
+                    + "\n\nFor Claude Code, run once in Terminal:\n" + NarratorInstaller.claudeCodeCommand
+                alert.informativeText = loc(trText, enText)
+                alert.addButton(withTitle: loc("Talimatı kopyala", "Copy instruction"))
+                alert.addButton(withTitle: loc("Claude Code komutunu kopyala", "Copy Claude Code command"))
+                alert.addButton(withTitle: loc("Tamam", "OK"))
+                let response = alert.runModal()
+                if response == .alertFirstButtonReturn {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(NarratorInstaller.suggestedInstruction, forType: .string)
+                } else if response == .alertSecondButtonReturn {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(NarratorInstaller.claudeCodeCommand, forType: .string)
+                }
+            }
+        } catch {
+            showAlert(title: loc("Anlatıcı eklenemedi", "Couldn't add the narrator"), text: error.localizedDescription)
+        }
         rebuildMenu()
     }
 

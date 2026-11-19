@@ -229,6 +229,7 @@ final class AvatarHostingView: NSHostingView<AvatarView> {
     var onDrag: ((CGFloat, CGFloat) -> Void)?
     var onDragEnd: (() -> Void)?
     var onRightClick: ((NSEvent) -> Void)?
+    var onDoubleClick: (() -> Void)?
 
     private var mouseStart: NSPoint = .zero
     private var dragging = false
@@ -256,6 +257,8 @@ final class AvatarHostingView: NSHostingView<AvatarView> {
         if dragging {
             dragging = false
             onDragEnd?()
+        } else if event.clickCount >= 2 {
+            onDoubleClick?()
         } else {
             onClick?()
         }
@@ -270,6 +273,7 @@ final class AvatarWindowController: NSObject {
     let avatar: RobotAvatar
     var onHide: (() -> Void)?
     var onClick: (() -> Void)?
+    var onDoubleClick: (() -> Void)?
 
     private let panel: RobotPanel
     private let host: AvatarHostingView
@@ -312,6 +316,7 @@ final class AvatarWindowController: NSObject {
         }
         host.onDragEnd = { [weak self] in self?.avatar.endDrag() }
         host.onRightClick = { [weak self] event in self?.showMenu(event) }
+        host.onDoubleClick = { [weak self] in self?.onDoubleClick?() }
     }
 
     func show() {
@@ -347,6 +352,10 @@ final class AvatarWindowController: NSObject {
         history.target = self
         menu.addItem(history)
         menu.addItem(.separator())
+        let diagnostics = NSMenuItem(title: loc("Teşhis…", "Diagnostics…"), action: #selector(diagnosticsAction), keyEquivalent: "")
+        diagnostics.target = self
+        menu.addItem(diagnostics)
+        menu.addItem(.separator())
         let hide = NSMenuItem(title: loc("Robotu gizle", "Hide robot"), action: #selector(hideAction), keyEquivalent: "")
         hide.target = self
         menu.addItem(hide)
@@ -355,6 +364,10 @@ final class AvatarWindowController: NSObject {
 
     @objc private func historyAction() {
         avatar.current.showHistory()
+    }
+
+    @objc private func diagnosticsAction() {
+        DiagnosticsWindow.shared.show()
     }
 
     @objc private func hideAction() {

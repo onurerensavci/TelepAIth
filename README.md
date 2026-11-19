@@ -70,6 +70,30 @@ ClaudeBar → Settings → Sync & Alerts → Webhooks → Add Webhook:
 
 Menüdeki **ClaudeBar kota uyarıları…** URL'yi panoya kopyalar.
 
+## Anlatıcı: Claude kendisi söylesin
+
+Ekrandan tahmin etmek yerine Claude'un robota doğrudan "şunu yapıyorum" demesi için TelepAIth küçük bir MCP aracı (`telepaith_say`) içerir.
+
+1. Menü → Bağlantılar → **Anlatıcı (Claude kendisi söylesin)**. Claude masaüstünün MCP ayarına eklenir (`claude_desktop_config.json`, ilk değişiklikten önce yedeği alınır).
+2. Claude uygulamasını kapatıp aç.
+3. Claude → Ayarlar → Profil tercihlerine şu talimatı ekle (açılan pencerede kopyalama düğmesi var): *"Çalışırken her önemli adımın başında telepaith_say aracıyla ne yaptığını kısa Türkçe bir cümleyle söyle, iş bitince state "done" ile haber ver."*
+
+Claude Code için Terminal'de bir kere: `claude mcp add --scope user telepaith -- "/Applications/TelepAIth.app/Contents/MacOS/TelepAIth" --mcp --source claude`
+
+## Kalkan
+
+Claude Code bağlıyken `rm -rf`, `git push --force`, `git reset --hard`, `DROP TABLE` gibi tehlikeli görünen komutlarda Claude Code senden onay ister (komutu engellemez, sadece sordurur). Menü → Bağlantılar → Claude Code altındaki **Kalkan** ile kapatılabilir.
+
+## Teşhis
+
+Menü → **Teşhis…** (ya da robota sağ tık): robotun her uygulamada ne gördüğünü gösterir: pencere, yazı kutusu, Durdur/Gönder/İzin ver düğmeleri, metin akışı, aşama, düğme adları. **Panoya kopyala** ile raporu paylaşabilirsin.
+
+## Diğer
+
+- **Çift tıklama:** robota çift tıklayınca o an gösterdiği AI'ın uygulamasını öne getirir.
+- **Sesli konuşma:** menü → Sesli konuşsun; iş bitince, seni beklerken ve güncelleme olunca Türkçe sesli söyler.
+- **Testler:** `swift test` (GitHub'da her push'ta çalışır).
+
 ## Kendi AI'ını bağla
 
 Herhangi bir araç `POST` ile olay gönderebilir. Yeni bir `source` ilk olayda yeni bir robot olarak belirir.

@@ -62,6 +62,7 @@ final class RobotManager {
             self?.onChange?()
         }
         window.onClick = { [weak self] in self?.robotClicked() }
+        window.onDoubleClick = { [weak self] in self?.openCurrentApp() }
         self.window = window
 
         let t = Timer(timeInterval: 1.0 / 30.0, repeats: true) { [weak self] _ in
@@ -93,6 +94,9 @@ final class RobotManager {
         frontmostChanged(NSWorkspace.shared.frontmostApplication)
 
         watcher.onEvent = { [weak self] event in self?.handle(event) }
+        watcher.onDiagnostics = { diagnostics in
+            if Diagnostics.shared.apps != diagnostics { Diagnostics.shared.apps = diagnostics }
+        }
         watcher.onStatus = { [weak self] status in
             guard let self = self, self.watcherStatus != status else { return }
             self.watcherStatus = status
@@ -124,6 +128,7 @@ final class RobotManager {
                 && NSWorkspace.shared.frontmostApplication?.processIdentifier == event.quietIfFrontmostPID
             if !lookingAtIt {
                 Notifier.shared.notify(title: notice.title, body: notice.body)
+                Speech.say(notice.title)
             }
         }
         chooseDisplay()
@@ -177,8 +182,25 @@ final class RobotManager {
 
     private func announceUpdate(_ version: String) {
         lastUpdateAnnounce = CACurrentMediaTime()
-        avatar?.current.say(withEmoji("⬆️", loc("Güncelleme var: \(version)! Bana tıkla, kurayım.",
-                                                  "Update available: \(version)! Click me to install.")), for: 10)
+        let text = loc("Güncelleme var: \(version)! Bana tıkla, kurayım.", "Update available: \(version)! Click me to install.")
+        avatar?.current.say(withEmoji("⬆️", text), for: 10)
+        Speech.say(text)
+    }
+
+    /// Robota çift tıklayınca o an gösterdiği AI'ın uygulamasını öne getir (açık değilse aç).
+    private func openCurrentApp() {
+        guard let source = avatar?.current.source else { return }
+        let ownPID = ProcessInfo.processInfo.processIdentifier
+        if let app = NSWorkspace.shared.runningApplications.first(where: {
+            $0.processIdentifier != ownPID && $0.activationPolicy == .regular && AppMatcher.source(for: $0) == source
+        }) {
+            app.activate(options: [.activateAllWindows])
+            return
+        }
+        let bundleIDs: [String: String] = ["claude": "com.anthropic.claudefordesktop", "gpt": "com.openai.chat"]
+        if let id = bundleIDs[source], let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: id) {
+            NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration())
+        }
     }
 
     /// Robota tıklayınca: güncelleme varsa kur, bir sorun varsa söyle, yoksa son olayları göster.

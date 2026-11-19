@@ -72,6 +72,10 @@ enum HookInstaller {
             + "{ printf '%s' \"$P\" | curl -s -m 3 --noproxy '*' -H 'Content-Type: application/json' -H 'Expect:' --data-binary @- \"\(url)\"; } >/dev/null 2>&1 & }; \(m)"
     }
 
+    /// Kalkan: tehlikeli görünen Bash komutlarında Claude Code'un onay sormasını sağlar
+    /// (komutu engellemez, sadece "izin veriyor musun?" diye sordurur).
+    static let shieldCommand = #"__telepaith_hook_shield() { P=$(cat); if printf '%s' "$P" | grep -qiE 'rm[[:space:]]+-[a-z]*r[a-z]*f|rm[[:space:]]+-[a-z]*f[a-z]*r|git[[:space:]]+push[^"]*(--force|[[:space:]]-f([^a-z]|$))|git[[:space:]]+reset[[:space:]]+--hard|git[[:space:]]+clean[[:space:]]+-[a-z]*f|drop[[:space:]]+(table|database)|mkfs|dd[[:space:]]+if=|chmod[[:space:]]+-r[[:space:]]+777|sudo[[:space:]]+rm'; then printf '%s' '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"TelepAIth kalkanı: tehlikeli görünen komut, onayın gerekiyor."}}'; fi; }; __telepaith_hook_shield"#
+
     static func isInstalled(_ target: HookTarget) -> Bool {
         guard let data = try? Data(contentsOf: target.fileURL.resolvingSymlinksInPath()),
               let text = String(data: data, encoding: .utf8) else { return false }
@@ -88,6 +92,9 @@ enum HookInstaller {
             var group: [String: Any] = ["hooks": [["type": "command", "command": cmd]]]
             if let matcher = event.matcher { group["matcher"] = matcher }
             groups.append(group)
+            if target == .claude && event.name == "PreToolUse" && Preferences.shield {
+                groups.append(["matcher": "Bash", "hooks": [["type": "command", "command": shieldCommand]]])
+            }
             hooks[event.name] = groups
         }
         root["hooks"] = hooks

@@ -9,6 +9,8 @@ final class AppWatcher {
     var onEvent: ((AgentEvent) -> Void)?
     /// Menü için: uygulama adı → ne görüyorum
     var onStatus: (([String: String]) -> Void)?
+    /// Teşhis paneli için ayrıntılar
+    var onDiagnostics: (([AppDiagnostics]) -> Void)?
 
     private struct Target {
         let pid: pid_t
@@ -180,17 +182,18 @@ final class AppWatcher {
         }
         busy = true
         queue.async {
-            let status = self.scan(targets)
+            let (status, diagnostics) = self.scan(targets)
             DispatchQueue.main.async {
                 self.busy = false
                 self.onStatus?(status)
+                self.onDiagnostics?(diagnostics)
             }
         }
     }
 
     // MARK: - Tarama (arka planda)
 
-    private func scan(_ targets: [Target]) -> [String: String] {
+    private func scan(_ targets: [Target]) -> ([String: String], [AppDiagnostics]) {
         let now = ProcessInfo.processInfo.systemUptime
         let alive = Set(targets.map { $0.pid })
         for pid in states.keys where !alive.contains(pid) {
@@ -199,6 +202,7 @@ final class AppWatcher {
         }
 
         var status: [String: String] = [:]
+        var diagnostics: [AppDiagnostics] = []
         for target in targets {
             var st = states[target.pid] ?? AppState(source: target.source, name: target.name)
             let app = AXUIElementCreateApplication(target.pid)
@@ -289,9 +293,23 @@ final class AppWatcher {
             } else {
                 status[target.name] = loc("izleniyor", "watching")
             }
+            diagnostics.append(AppDiagnostics(
+                name: target.name,
+                windows: found.windowsInfo.isEmpty ? "—" : found.windowsInfo,
+                composer: found.composer != nil,
+                stopButton: found.stop != nil,
+                sendButton: found.send != nil,
+                approveButton: found.approve,
+                streaming: streaming,
+                generating: st.generating,
+                phase: st.phase?.phrase ?? "—",
+                chat: st.chatKey.map { clip($0, 70) } ?? "—",
+                buttons: Array(found.buttonLabels.prefix(25)),
+                roles: found.roles.sorted { $0.value > $1.value }.prefix(10).map { "\($0.key)=\($0.value)" }.joined(separator: ", "),
+                texts: Array(found.sampleTexts.prefix(6))))
             states[target.pid] = st
         }
-        return status
+        return (status, diagnostics)
     }
 
     private func update(_ st: inout AppState, pid: pid_t, found: Found, generatingNow: Bool, streaming: Bool, now: TimeInterval) {
