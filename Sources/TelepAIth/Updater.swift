@@ -39,7 +39,7 @@ final class Updater {
         DispatchQueue.main.asyncAfter(deadline: .now() + 15) { [weak self] in
             self?.check(userInitiated: false)
         }
-        let t = Timer(timeInterval: 6 * 3600, repeats: true) { [weak self] _ in
+        let t = Timer(timeInterval: 3 * 3600, repeats: true) { [weak self] _ in
             self?.check(userInitiated: false)
         }
         RunLoop.main.add(t, forMode: .common)

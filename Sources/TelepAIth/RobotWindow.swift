@@ -5,12 +5,20 @@ enum Corner: String, CaseIterable {
     case bottomLeft, bottomRight, topLeft, topRight
 }
 
+/// Alındaki ışık: yeşil her şey yolunda, turuncu güncelleme var, kırmızı bir şey çalışmıyor.
+enum Health: Equatable {
+    case ok
+    case update(String)
+    case broken(String)
+}
+
 /// Ekrandaki tek robot: hangi AI'ı gösterdiği, nerede durduğu, köşelere yapışma,
 /// AI uygulamasının penceresine uçma.
 final class RobotAvatar: ObservableObject {
     @Published private(set) var current: RobotModel
     @Published private(set) var alignLeft = false     // kafa pencerenin solunda, balon sağa uzar
     @Published private(set) var bubbleBelow = false   // ekranın üst yarısında: balon kafanın altında
+    @Published private(set) var health: Health = .ok
 
     /// Kafanın merkezi (ekran koordinatı, ana ekranın sol-alt köşesi köken)
     private(set) var head: CGPoint = .zero
@@ -28,6 +36,10 @@ final class RobotAvatar: ObservableObject {
 
     init(model: RobotModel) {
         current = model
+    }
+
+    func setHealth(_ value: Health) {
+        if health != value { health = value }
     }
 
     /// Gösterilen AI'ı değiştirir (küçük bir "puf" animasyonuyla).
@@ -252,6 +264,7 @@ final class AvatarHostingView: NSHostingView<AvatarView> {
 final class AvatarWindowController: NSObject {
     let avatar: RobotAvatar
     var onHide: (() -> Void)?
+    var onClick: (() -> Void)?
 
     private let panel: RobotPanel
     private let host: AvatarHostingView
@@ -280,7 +293,10 @@ final class AvatarWindowController: NSObject {
         self.host = host
         super.init()
 
-        host.onClick = { [weak self] in self?.avatar.current.showHistory() }
+        host.onClick = { [weak self] in
+            guard let self = self else { return }
+            if let handler = self.onClick { handler() } else { self.avatar.current.showHistory() }
+        }
         host.onDragStart = { [weak self] in self?.avatar.beginDrag() }
         host.onDrag = { [weak self] dx, dy in
             guard let self = self else { return }

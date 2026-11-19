@@ -85,14 +85,58 @@ final class AppController: NSObject {
         }
     }
 
+    /// Robotun alnındaki ışık: kırmızı çalışamıyor, turuncu güncelleme var, yeşil her şey yolunda.
+    private func currentHealth() -> Health {
+        if let error = serverError {
+            return .broken(loc("Sunucu açılamadı: ", "Server failed: ") + clip(error, 40))
+        }
+        if Preferences.watchApps && !AppWatcher.isTrusted {
+            return .broken(loc("Erişilebilirlik izni yok. Menü → Bağlantılar'dan izin ver.",
+                               "No Accessibility permission. Grant it from the menu → Connections."))
+        }
+        let anyHook = HookTarget.allCases.contains { HookInstaller.isInstalled($0) }
+        if !anyHook && !Preferences.watchApps {
+            return .broken(loc("Hiçbir AI'a bağlı değilim. Menü → Bağlantılar'dan bağla.",
+                               "I'm not connected to any AI. Connect one from the menu → Connections."))
+        }
+        if let release = Updater.shared.available {
+            return .update(release.version)
+        }
+        return .ok
+    }
+
     private func rebuildMenu() {
         updateIcon()
+        let health = currentHealth()
+        manager.setHealth(health)
+
         let menu = NSMenu()
         menu.autoenablesItems = false
 
         let header = NSMenuItem(title: serverLine, action: nil, keyEquivalent: "")
         header.isEnabled = false
         menu.addItem(header)
+
+        let healthItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+        healthItem.isEnabled = false
+        let dotColor: NSColor
+        let healthText: String
+        switch health {
+        case .ok:
+            dotColor = .systemGreen
+            healthText = loc("Her şey yolunda", "All good")
+        case .update(let version):
+            dotColor = .systemOrange
+            healthText = loc("Güncelleme var: \(version)", "Update available: \(version)")
+        case .broken(let reason):
+            dotColor = .systemRed
+            healthText = reason
+        }
+        let healthTitle = NSMutableAttributedString(string: "● ", attributes: [.foregroundColor: dotColor])
+        healthTitle.append(NSAttributedString(string: healthText, attributes: [.font: NSFont.menuFont(ofSize: 0),
+                                                                                .foregroundColor: NSColor.secondaryLabelColor]))
+        healthItem.attributedTitle = healthTitle
+        menu.addItem(healthItem)
 
         if let release = Updater.shared.available {
             let title = "⬆︎ " + loc("Güncelle: \(release.version) hazır", "Update: \(release.version) is ready")

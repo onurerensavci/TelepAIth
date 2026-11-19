@@ -227,6 +227,12 @@ final class RobotModel: ObservableObject {
         return notice
     }
 
+    /// Robotun balonda bir şey söylemesi (güncelleme haberi, uyarı…)
+    func say(_ text: String, for seconds: TimeInterval = 8) {
+        showOverride(text, for: seconds, now: Date())
+        refresh(now: Date())
+    }
+
     func showHistory() {
         let lines = history.suffix(5)
         showOverride(lines.isEmpty ? loc("Henüz bir şey olmadı", "Nothing has happened yet") : lines.joined(separator: "\n"),

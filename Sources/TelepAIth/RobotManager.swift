@@ -28,6 +28,7 @@ final class RobotManager {
     private let watcher = AppWatcher()
     private var lastTrustCheck = CACurrentMediaTime()
     private var wasTrusted = AppWatcher.isTrusted
+    private var lastUpdateAnnounce: CFTimeInterval = 0
 
     var onChange: (() -> Void)?
 
@@ -58,6 +59,7 @@ final class RobotManager {
             self?.visible = false
             self?.onChange?()
         }
+        window.onClick = { [weak self] in self?.robotClicked() }
         self.window = window
 
         let t = Timer(timeInterval: 1.0 / 30.0, repeats: true) { [weak self] _ in
@@ -135,6 +137,37 @@ final class RobotManager {
             Preferences.knownSources.append(source)
         }
         return m
+    }
+
+    // MARK: - Sağlık ışığı ve güncelleme haberi
+
+    func setHealth(_ health: Health) {
+        guard let avatar = avatar, avatar.health != health else { return }
+        let wasUpdate: Bool
+        if case .update = avatar.health { wasUpdate = true } else { wasUpdate = false }
+        avatar.setHealth(health)
+        if case .update(let version) = health, !wasUpdate {
+            announceUpdate(version)
+        }
+    }
+
+    private func announceUpdate(_ version: String) {
+        lastUpdateAnnounce = CACurrentMediaTime()
+        avatar?.current.say(withEmoji("⬆️", loc("Güncelleme var: \(version)! Bana tıkla, kurayım.",
+                                                  "Update available: \(version)! Click me to install.")), for: 10)
+    }
+
+    /// Robota tıklayınca: güncelleme varsa kur, bir sorun varsa söyle, yoksa son olayları göster.
+    private func robotClicked() {
+        guard let avatar = avatar else { return }
+        switch avatar.health {
+        case .update:
+            Updater.shared.promptInstall()
+        case .broken(let reason):
+            avatar.current.say(withEmoji("🔴", reason), for: 8)
+        case .ok:
+            avatar.current.showHistory()
+        }
     }
 
     // MARK: - Hangi AI gösterilsin?
@@ -242,6 +275,11 @@ final class RobotManager {
                 }
                 onChange?()
             }
+        }
+        // Güncelleme hâlâ bekliyorsa, robot boştayken arada bir hatırlatsın
+        if let avatar = avatar, case .update(let version) = avatar.health,
+           now - lastUpdateAnnounce > 45 * 60, avatar.current.state == .idle {
+            announceUpdate(version)
         }
         if visible { window?.tick(dt: dt) }
     }

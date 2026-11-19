@@ -11,7 +11,7 @@ struct AvatarView: View {
             ? (avatar.alignLeft ? .topLeading : .topTrailing)
             : (avatar.alignLeft ? .bottomLeading : .bottomTrailing)
         return ZStack {
-            AvatarStage(model: avatar.current, alignLeft: avatar.alignLeft, bubbleBelow: avatar.bubbleBelow)
+            AvatarStage(model: avatar.current, alignLeft: avatar.alignLeft, bubbleBelow: avatar.bubbleBelow, health: avatar.health)
                 .id(avatar.current.source)
                 .transition(.scale(scale: 0.4).combined(with: .opacity))
         }
@@ -24,6 +24,7 @@ struct AvatarStage: View {
     @ObservedObject var model: RobotModel
     let alignLeft: Bool
     let bubbleBelow: Bool
+    let health: Health
 
     var body: some View {
         VStack(alignment: alignLeft ? .leading : .trailing, spacing: 2) {
@@ -55,7 +56,8 @@ struct AvatarStage: View {
         TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: false)) { context in
             HeadFigure(model: model,
                        time: context.date.timeIntervalSinceReferenceDate,
-                       look: alignLeft ? 2.5 : -2.5)
+                       look: alignLeft ? 2.5 : -2.5,
+                       health: health)
         }
         .frame(width: Layout.headSize.width, height: Layout.headSize.height)
     }
@@ -139,6 +141,7 @@ struct HeadFigure: View {
     let model: RobotModel
     let time: TimeInterval
     let look: CGFloat
+    let health: Health
 
     var body: some View {
         let state = model.state
@@ -166,7 +169,7 @@ struct HeadFigure: View {
                         .frame(width: 96, height: 90)
                         .position(x: 50, y: 48)
                 } else {
-                    FaceView(state: state, mood: model.mood, time: time, look: look, eyeColor: eyeColor)
+                    FaceView(state: state, mood: model.mood, time: time, look: look, eyeColor: eyeColor, health: health)
                 }
             }
             .rotationEffect(.degrees(headTilt(state)), anchor: UnitPoint(x: 0.5, y: 0.9))
@@ -242,6 +245,7 @@ struct FaceView: View {
     let time: TimeInterval
     let look: CGFloat
     let eyeColor: Color
+    let health: Health
 
     var body: some View {
         ZStack {
@@ -260,7 +264,7 @@ struct FaceView: View {
             DotEyes(state: state, mood: mood, look: look, time: time, color: eyeColor)
                 .frame(width: 70, height: 44)
                 .position(x: 50, y: 52)
-            // Alında durum LED'i
+            // Alında sağlık ışığı: yeşil yolunda, turuncu güncelleme var, kırmızı çalışmıyor
             Circle()
                 .fill(ledColor.opacity(0.3))
                 .frame(width: 11, height: 11)
@@ -275,28 +279,25 @@ struct FaceView: View {
     }
 
     private var ledColor: Color {
-        switch state {
-        case .waiting, .error: return Color(red: 0.97, green: 0.44, blue: 0.44)
-        case .thinking: return Color(red: 0.98, green: 0.82, blue: 0.3)
-        case .sleeping: return Color.gray
-        case .idle: return Color(red: 0.75, green: 0.72, blue: 0.85)
-        default: return Color(red: 0.2, green: 0.83, blue: 0.6)
+        switch health {
+        case .ok: return Color(red: 0.2, green: 0.83, blue: 0.47)       // yeşil
+        case .update: return Color(red: 1.0, green: 0.6, blue: 0.2)     // turuncu
+        case .broken: return Color(red: 0.97, green: 0.3, blue: 0.3)    // kırmızı
         }
     }
 
     private var ledOpacity: Double {
-        switch state {
-        case .waiting: return sin(time * 10) > 0 ? 1 : 0.25
-        case .thinking: return 0.55 + 0.45 * sin(time * 4)
-        case .sleeping: return 0.4
-        case .idle, .done, .error: return 1
-        default: return 0.6 + 0.4 * sin(time * 7)
+        switch health {
+        case .ok: return state == .sleeping ? 0.45 : 0.85 + 0.15 * sin(time * 2)
+        case .update: return 0.6 + 0.4 * sin(time * 3)
+        case .broken: return sin(time * 6) > 0 ? 1 : 0.3
         }
     }
 }
 
-/// LED nokta matrisi gözler: her göz 7 × 9 minik noktadan oluşur.
-/// Yanan noktaların deseni duruma ve ruh hâline göre değişir.
+/// LED nokta matrisi gözler: her göz 14 × 18 minik noktadan oluşur.
+/// Şekiller sürekli koordinatlarda tanımlı (göz merkezi 3,4; eski 7 × 9 ızgaranın birimleri),
+/// her nokta kendi konumunda örneklenir; böylece çözünürlük artınca desenler pürüzsüzleşir.
 struct DotEyes: View {
     let state: RobotState
     let mood: Mood?
@@ -304,40 +305,33 @@ struct DotEyes: View {
     let time: TimeInterval
     let color: Color
 
-    private static let cols = 7
-    private static let rows = 9
-    private static let spacing: CGFloat = 3.5
-    private static let dot: CGFloat = 2.4
-
-    // Kalp deseni (memnun)
-    private static let heart: [String] = [
-        ".......",
-        ".##.##.",
-        "#######",
-        "#######",
-        "#######",
-        ".#####.",
-        "..###..",
-        "...#...",
-        ".......",
-    ]
+    private static let cols = 14
+    private static let rows = 18
+    private static let spacing: CGFloat = 1.75
+    private static let dot: CGFloat = 1.3
 
     var body: some View {
         Canvas { context, size in
             let tint = (state == .error && mood == nil) ? Color(red: 1, green: 0.42, blue: 0.42) : color
+            let dim = tint.opacity(0.09)
             let centers: [CGFloat] = [size.width / 2 - 14, size.width / 2 + 14]
+            let midC = Double(DotEyes.cols - 1) / 2
+            let midR = Double(DotEyes.rows - 1) / 2
             for (eye, cx) in centers.enumerated() {
                 for r in 0..<DotEyes.rows {
                     for c in 0..<DotEyes.cols {
-                        let x = cx + (CGFloat(c) - 3) * DotEyes.spacing
-                        let y = size.height / 2 + (CGFloat(r) - 4) * DotEyes.spacing
+                        let x = cx + (CGFloat(c) - CGFloat(midC)) * DotEyes.spacing
+                        let y = size.height / 2 + (CGFloat(r) - CGFloat(midR)) * DotEyes.spacing
                         let rect = CGRect(x: x - DotEyes.dot / 2, y: y - DotEyes.dot / 2, width: DotEyes.dot, height: DotEyes.dot)
-                        let b = brightness(c: Double(c), r: Double(r), eye: eye)
+                        // Eski 7 × 9 birimlerine çevir (merkez 3,4)
+                        let u = (Double(c) - midC) / 2 + 3
+                        let v = (Double(r) - midR) / 2 + 4
+                        let b = brightness(u: u, v: v, eye: eye)
                         if b > 0.05 {
-                            context.fill(Path(ellipseIn: rect.insetBy(dx: -1.5, dy: -1.5)), with: .color(tint.opacity(0.22 * b)))
+                            context.fill(Path(ellipseIn: rect.insetBy(dx: -0.8, dy: -0.8)), with: .color(tint.opacity(0.25 * b)))
                             context.fill(Path(ellipseIn: rect), with: .color(tint.opacity(b)))
                         } else {
-                            context.fill(Path(ellipseIn: rect), with: .color(tint.opacity(0.1)))
+                            context.fill(Path(ellipseIn: rect), with: .color(dim))
                         }
                     }
                 }
@@ -350,85 +344,84 @@ struct DotEyes: View {
     }
 
     /// Bir noktanın parlaklığı (0…1)
-    private func brightness(c: Double, r: Double, eye: Int) -> Double {
+    private func brightness(u: Double, v: Double, eye: Int) -> Double {
         let lookShift = Double(look) / 2.5   // ekranın ortasına doğru bak
         if let mood = mood {
             switch mood {
-            case .pleased: return bitmap(DotEyes.heart, c: c, r: r) * (0.8 + 0.2 * sin(time * 6))
-            case .shocked: return capsule(c, r, cx: 3, cy: 4, rx: 2.9, ry: 4.2)
-            case .nervous: return capsule(c, r, cx: 3 + sin(time * 14) * 1.1, cy: 4.5, rx: 1.2, ry: 2)
-            case .scared: return capsule(c, r, cx: 3 + sin(time * 40) * 0.4, cy: 4, rx: 1.4, ry: 3.8)
-            case .proud, .party: return arc(c, r, cx: 3, cy: 6.2, radius: 2.7)
-            case .tired: return capsule(c, r, cx: 3, cy: 5.2, rx: 2.1, ry: 1.1) * 0.8
-            case .dizzy: return spiral(c, r, eye: eye)
-            case .denied: return capsule(c, r, cx: 3, cy: 6, rx: 1.7, ry: 1.3)
+            case .pleased: return heart(u, v) * (0.8 + 0.2 * sin(time * 6))
+            case .shocked: return capsule(u, v, cx: 3, cy: 4, rx: 2.9, ry: 4.2)
+            case .nervous: return capsule(u, v, cx: 3 + sin(time * 14) * 1.1, cy: 4.5, rx: 1.2, ry: 2)
+            case .scared: return capsule(u, v, cx: 3 + sin(time * 40) * 0.4, cy: 4, rx: 1.4, ry: 3.8)
+            case .proud, .party: return arc(u, v, cx: 3, cy: 6.2, radius: 2.7)
+            case .tired: return capsule(u, v, cx: 3, cy: 5.2, rx: 2.1, ry: 1.1) * 0.8
+            case .dizzy: return spiral(u, v, eye: eye)
+            case .denied: return capsule(u, v, cx: 3, cy: 6, rx: 1.7, ry: 1.3)
             }
         }
-        if blinking { return capsule(c, r, cx: 3 + lookShift, cy: 4.5, rx: 2, ry: 0.6) }
+        if blinking { return capsule(u, v, cx: 3 + lookShift, cy: 4.5, rx: 2, ry: 0.5) }
         switch state {
         case .done:
-            return arc(c, r, cx: 3, cy: 6.2, radius: 2.7)
+            return arc(u, v, cx: 3, cy: 6.2, radius: 2.7)
         case .error:
-            return cross(c, r)
+            return cross(u, v)
         case .sleeping:
-            return (abs(r - 6) < 0.5 && abs(c - 3) <= 2) ? 0.5 : 0
+            return (abs(v - 6) < 0.3 && abs(u - 3) <= 2.2) ? 0.5 : 0
         case .thinking:
-            return capsule(c, r, cx: 3 + 0.9, cy: 2.8, rx: 1.5, ry: 2.6)
+            return capsule(u, v, cx: 3 + 0.9, cy: 2.8, rx: 1.5, ry: 2.6)
         case .reading, .searching:
-            return capsule(c, r, cx: 3 + sin(time * 3) * 1.5, cy: 4.4, rx: 1.5, ry: 2.3)
+            return capsule(u, v, cx: 3 + sin(time * 3) * 1.5, cy: 4.4, rx: 1.5, ry: 2.3)
         case .editing:
-            return capsule(c, r, cx: 3 + lookShift * 0.5, cy: 5, rx: 1.9, ry: 1.5)
+            return capsule(u, v, cx: 3 + lookShift * 0.5, cy: 5, rx: 1.9, ry: 1.5)
         case .running, .delegating:
-            let shimmer = 0.75 + 0.25 * sin(time * 18 + c * 1.3 + r * 0.7)
-            return capsule(c, r, cx: 3, cy: 4, rx: 1.6, ry: 2.8) * shimmer
+            let shimmer = 0.75 + 0.25 * sin(time * 18 + u * 2.6 + v * 1.4)
+            return capsule(u, v, cx: 3, cy: 4, rx: 1.6, ry: 2.8) * shimmer
         case .waiting:
-            return capsule(c, r, cx: 3, cy: 4, rx: 2.5, ry: 3.9) * (0.75 + 0.25 * sin(time * 6))
+            return capsule(u, v, cx: 3, cy: 4, rx: 2.5, ry: 3.9) * (0.75 + 0.25 * sin(time * 6))
         case .idle:
-            return capsule(c, r, cx: 3 + lookShift, cy: 4, rx: 1.7, ry: 3.3)
+            return capsule(u, v, cx: 3 + lookShift, cy: 4, rx: 1.7, ry: 3.3)
         }
     }
 
-    private func capsule(_ c: Double, _ r: Double, cx: Double, cy: Double, rx: Double, ry: Double) -> Double {
-        let dx = (c - cx) / rx
-        let dy = (r - cy) / ry
+    private func capsule(_ u: Double, _ v: Double, cx: Double, cy: Double, rx: Double, ry: Double) -> Double {
+        let dx = (u - cx) / rx
+        let dy = (v - cy) / ry
         let d = dx * dx + dy * dy
         if d <= 1 { return 1 }
-        if d <= 1.35 { return 0.35 }
+        if d <= 1.22 { return 0.35 }
         return 0
     }
 
     /// ^ biçimi (mutlu)
-    private func arc(_ c: Double, _ r: Double, cx: Double, cy: Double, radius: Double) -> Double {
-        guard r <= cy else { return 0 }
-        let d = ((c - cx) * (c - cx) + (r - cy) * (r - cy)).squareRoot()
-        return abs(d - radius) < 0.6 ? 1 : 0
+    private func arc(_ u: Double, _ v: Double, cx: Double, cy: Double, radius: Double) -> Double {
+        guard v <= cy else { return 0 }
+        let d = ((u - cx) * (u - cx) + (v - cy) * (v - cy)).squareRoot()
+        return abs(d - radius) < 0.45 ? 1 : 0
     }
 
-    private func cross(_ c: Double, _ r: Double) -> Double {
-        let x = c - 3
-        let y = r - 4
-        guard abs(x) <= 2.5 && abs(y) <= 2.5 else { return 0 }
-        return (abs(x - y) < 0.5 || abs(x + y) < 0.5) ? 1 : 0
+    private func cross(_ u: Double, _ v: Double) -> Double {
+        let x = u - 3
+        let y = v - 4
+        guard abs(x) <= 2.6 && abs(y) <= 2.6 else { return 0 }
+        return (abs(x - y) < 0.4 || abs(x + y) < 0.4) ? 1 : 0
+    }
+
+    /// Kalp (memnun): (x² + y² − 1)³ − x²·y³ ≤ 0
+    private func heart(_ u: Double, _ v: Double) -> Double {
+        let x = (u - 3) / 2.6
+        let y = -(v - 4.3) / 2.6
+        let a = x * x + y * y - 1
+        return a * a * a - x * x * y * y * y <= 0 ? 1 : 0
     }
 
     /// Dönen halka (başı dönmüş)
-    private func spiral(_ c: Double, _ r: Double, eye: Int) -> Double {
-        let x = c - 3
-        let y = r - 4
+    private func spiral(_ u: Double, _ v: Double, eye: Int) -> Double {
+        let x = u - 3
+        let y = v - 4
         let d = (x * x + y * y).squareRoot()
-        guard abs(d - 2.4) < 0.7 else { return d < 0.6 ? 1 : 0 }
+        guard abs(d - 2.4) < 0.5 else { return d < 0.45 ? 1 : 0 }
         let angle = atan2(y, x)
         let phase = time * (eye == 0 ? 6 : -6)
         return 0.35 + 0.65 * max(0, cos(angle - phase))
-    }
-
-    private func bitmap(_ rows: [String], c: Double, r: Double) -> Double {
-        let ri = Int(r)
-        let ci = Int(c)
-        guard ri >= 0, ri < rows.count else { return 0 }
-        let row = Array(rows[ri])
-        guard ci >= 0, ci < row.count else { return 0 }
-        return row[ci] == "#" ? 1 : 0
     }
 }
 
