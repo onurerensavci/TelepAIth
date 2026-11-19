@@ -113,7 +113,11 @@ final class AppWatcher {
         var texts: [(String, CGRect)] = []
         var buttonLabels: [String] = []
         var urls: [String] = []
-        var composerTop: CGFloat? { [stop, send].compactMap { $0?.minY }.min() }
+        var composer: CGRect?          // en alttaki yazılabilir metin alanı (yazı kutusu)
+        var roles: [String: Int] = [:]
+        var sampleTexts: [String] = []
+        var windowsInfo = ""
+        var composerTop: CGFloat? { [stop, send, composer].compactMap { $0?.minY }.min() }
     }
 
     private let queue = DispatchQueue(label: "telepaith.appwatcher")
@@ -207,7 +211,12 @@ final class AppWatcher {
 
             var found = Found()
             var windowTitle: String?
-            for window in AppWatcher.windows(of: app) {
+            let windows = AppWatcher.windows(of: app)
+            found.windowsInfo = windows.compactMap { w -> String? in
+                guard let f = AppWatcher.frame(w) else { return nil }
+                return "\(AppWatcher.string(w, kAXTitleAttribute) ?? "?") \(Int(f.width))x\(Int(f.height))"
+            }.joined(separator: ", ")
+            for window in windows {
                 if windowTitle == nil { windowTitle = AppWatcher.string(window, kAXTitleAttribute) }
                 guard let windowFrame = AppWatcher.frame(window), windowFrame.height > 100 else { continue }
                 // Sadece pencerenin alt %50'si: yazı kutusu, son mesaj, izin düğmeleri burada.
@@ -216,18 +225,18 @@ final class AppWatcher {
                 walk(window, zone: zone, budget: 3000, found: &found)
             }
             // Alt kısımda yazı kutusu bulunamadıysa ara sıra tüm pencereye bak
-            if found.stop == nil && found.send == nil && now - st.lastFullScan > 6 {
+            if found.stop == nil && found.send == nil && found.composer == nil && now - st.lastFullScan > 6 {
                 st.lastFullScan = now
                 for window in AppWatcher.windows(of: app) {
                     walk(window, zone: nil, budget: 8000, found: &found)
                 }
-                if found.stop == nil && found.send == nil && now - st.lastDebugDump > 60 {
+                if found.stop == nil && found.send == nil && found.composer == nil && now - st.lastDebugDump > 60 {
                     st.lastDebugDump = now
                     dumpDebug(target: target, found: found)
                 }
             }
 
-            if found.stop != nil || found.send != nil { st.sawComposer = true }
+            if found.stop != nil || found.send != nil || found.composer != nil { st.sawComposer = true }
 
             // Başka sohbete geçildi mi? Geçildiyse eski sohbet için "bitti" deme, tıklanan sohbete geç.
             let chatKey = found.urls.first(where: { $0.contains("/chat") }) ?? found.urls.last ?? windowTitle
@@ -397,6 +406,20 @@ final class AppWatcher {
             let role = AppWatcher.string(element, kAXRoleAttribute) ?? ""
             let elementFrame = AppWatcher.frame(element)
             if let zone = zone, let f = elementFrame, f.width > 0, f.height > 0, !f.intersects(zone) { continue }
+            found.roles[role, default: 0] += 1
+
+            // Metin alanları: yazılabilir olan yazı kutusudur, değilse mesaj metnidir
+            if role == kAXTextAreaRole || role == kAXTextFieldRole {
+                var settable: DarwinBoolean = false
+                AXUIElementIsAttributeSettable(element, kAXValueAttribute as CFString, &settable)
+                if settable.boolValue, let f = elementFrame, f.width > 80 {
+                    if found.composer == nil || f.maxY > found.composer!.maxY { found.composer = f }
+                } else if let f = elementFrame, let text = AppWatcher.string(element, kAXValueAttribute), !text.isEmpty {
+                    found.texts.append((text, f))
+                    if found.sampleTexts.count < 12 { found.sampleTexts.append("[\(role)] " + clip(text, 60)) }
+                }
+                continue
+            }
 
             if role == kAXButtonRole {
                 let label = AppWatcher.label(of: element)
@@ -414,6 +437,7 @@ final class AppWatcher {
                    let text = AppWatcher.string(element, kAXValueAttribute) ?? AppWatcher.string(element, kAXTitleAttribute),
                    !text.isEmpty {
                     found.texts.append((text, f))
+                    if found.sampleTexts.count < 12 { found.sampleTexts.append("[\(role)] " + clip(text, 60)) }
                 }
                 continue
             }
@@ -428,8 +452,12 @@ final class AppWatcher {
 
     /// Algılama tutmazsa düğme adlarını dosyaya yazar (düzeltmek için).
     private func dumpDebug(target: Target, found: Found) {
+        let roles = found.roles.sorted { $0.value > $1.value }.prefix(20).map { "\($0.key)=\($0.value)" }
         let lines = ["\(Date()) \(target.name) (pid \(target.pid))",
+                     "Pencereler / windows: \(found.windowsInfo)",
+                     "Roller / roles: " + roles.joined(separator: ", "),
                      "Düğmeler / buttons: " + found.buttonLabels.prefix(120).joined(separator: " | "),
+                     "Metinler / texts: " + found.sampleTexts.joined(separator: " | "),
                      ""]
         let text = lines.joined(separator: "\n") + "\n"
         let url = AppWatcher.debugFile
@@ -469,14 +497,19 @@ final class AppWatcher {
         return CGRect(origin: point, size: size)
     }
 
+    /// Uygulamanın en büyük görünen 2 penceresi (küçük hızlı-sohbet panellerini atlar).
     private static func windows(of app: AXUIElement) -> [AXUIElement] {
-        if let main = value(app, kAXMainWindowAttribute) {
-            return [main as! AXUIElement]
+        var all: [AXUIElement] = []
+        if let main = value(app, kAXMainWindowAttribute) { all.append(main as! AXUIElement) }
+        if let focused = value(app, kAXFocusedWindowAttribute) { all.append(focused as! AXUIElement) }
+        all += (value(app, kAXWindowsAttribute) as? [AXUIElement] ?? [])
+        var unique: [(AXUIElement, CGFloat)] = []
+        for w in all where !unique.contains(where: { CFEqual($0.0, w) }) {
+            guard let f = frame(w), f.width >= 300, f.height >= 300 else { continue }
+            if (value(w, kAXMinimizedAttribute) as? Bool) == true { continue }
+            unique.append((w, f.width * f.height))
         }
-        if let focused = value(app, kAXFocusedWindowAttribute) {
-            return [focused as! AXUIElement]
-        }
-        return Array((value(app, kAXWindowsAttribute) as? [AXUIElement] ?? []).prefix(2))
+        return unique.sorted { $0.1 > $1.1 }.prefix(2).map { $0.0 }
     }
 
     private static func label(of element: AXUIElement) -> String {
