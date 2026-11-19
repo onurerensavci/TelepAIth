@@ -27,27 +27,14 @@ Menü çubuğunda bir sihirli değnek ikonu çıkar, ekranın altında da turunc
 
 Depo **herkese açık (public)** olmalı; güncelleme denetimi GitHub API'sine anahtarsız bakıyor.
 
-**İlk yükleme** (bir kere):
-
-```bash
-cd TelepAIth
-git init -b main
-git add . && git commit -m "TelepAIth 0.1.0"
-gh repo create TelepAIth --public --source=. --push
-```
-
-`gh` yoksa github.com/new'de boş bir `TelepAIth` deposu aç, sonra:
-`git remote add origin https://github.com/KULLANICI_ADIN/TelepAIth.git && git push -u origin main`
-
-Her push'ta GitHub Actions kodu macOS'ta derler (Actions sekmesinde yeşil tik = derleniyor).
+Depo: https://github.com/onurerensavci/telepaith — her push'ta GitHub Actions kodu macOS'ta derler (Actions sekmesinde yeşil tik = derleniyor).
 
 **Sürüm yayınlama:**
 
-```bash
-scripts/release.sh 0.1.0
-```
+1. Bir değişiklik bitince `VERSION` dosyasındaki numarayı artır (ör. `0.2.0`) ve main'e gönder.
+2. GitHub'da **Actions → Release → Run workflow → Run workflow**. Sürüm kutusunu boş bırakırsan `VERSION` dosyasındaki numara kullanılır.
 
-VERSION dosyasını günceller, `v0.1.0` etiketini atar ve gönderir. Actions uygulamayı derleyip Releases'a `TelepAIth-v0.1.0.zip` olarak koyar.
+Actions uygulamayı derler, `v0.2.0` etiketini atar ve Releases'a `TelepAIth-v0.2.0.zip` olarak koyar. Bilgisayarında depo klonu varsa `scripts/release.sh 0.2.0` de aynı işi yapar.
 
 **Kullanıcı tarafı:** İlk sürümü Releases'tan indirip Uygulamalar'a koy. İnternetten indirilen imzasız uygulama ilk açılışta engellenir: sağ tık → Aç, ya da `xattr -dr com.apple.quarantine /Applications/TelepAIth.app`. Sonraki sürümlerde uygulama açılıştan 15 saniye sonra ve 6 saatte bir GitHub'a bakar; yeni sürüm varsa bildirim gelir, menüde **⬆︎ Güncelle** çıkar. Tıklayınca indirir, eski sürümün yerine koyar ve yeniden açılır (sorun olursa eskiyi geri koyar). Menüdeki **Güncellemeleri denetle…** ile elle de bakabilirsin.
 

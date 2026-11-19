@@ -1,6 +1,15 @@
 name: Release
 
+# İki yoldan çalışır:
+#  1. GitHub'da Actions → Release → Run workflow (sürüm boşsa VERSION dosyası kullanılır)
+#  2. Bilgisayardan v1.2.3 etiketi gönderince (scripts/release.sh)
 on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Sürüm numarası (ör. 0.2.0). Boş bırakırsan VERSION dosyasındaki kullanılır.'
+        required: false
+        default: ''
   push:
     tags: ['v*']
 
@@ -13,20 +22,44 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Sürümü belirle
+        id: v
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            V="${INPUT_VERSION:-$(cat VERSION)}"
+          else
+            V="${GITHUB_REF_NAME#v}"
+          fi
+          V="${V#v}"
+          if ! printf '%s' "$V" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "Geçersiz sürüm: $V (1.2.3 biçiminde olmalı)" >&2
+            exit 1
+          fi
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          echo "tag=v$V" >> "$GITHUB_OUTPUT"
+
       - name: Uygulamayı derle
+        env:
+          VERSION: ${{ steps.v.outputs.version }}
         run: |
           chmod +x scripts/*.sh
-          VERSION="${GITHUB_REF_NAME#v}" scripts/build-app.sh
+          scripts/build-app.sh
 
       - name: Zip'le
+        env:
+          TAG: ${{ steps.v.outputs.tag }}
         run: |
           cd build
-          ditto -c -k --keepParent TelepAIth.app "TelepAIth-${GITHUB_REF_NAME}.zip"
+          ditto -c -k --keepParent TelepAIth.app "TelepAIth-${TAG}.zip"
 
       - name: Sürümü yayınla
         env:
           GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.v.outputs.tag }}
         run: |
-          gh release create "$GITHUB_REF_NAME" "build/TelepAIth-${GITHUB_REF_NAME}.zip" \
-            --title "TelepAIth ${GITHUB_REF_NAME}" \
+          gh release create "$TAG" "build/TelepAIth-${TAG}.zip" \
+            --target "$GITHUB_SHA" \
+            --title "TelepAIth ${TAG}" \
             --generate-notes
