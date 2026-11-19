@@ -124,11 +124,11 @@ final class RobotWindowController: NSObject {
 
     private func showMenu(_ event: NSEvent) {
         let menu = NSMenu()
-        let history = NSMenuItem(title: "Son olayları göster", action: #selector(historyAction), keyEquivalent: "")
+        let history = NSMenuItem(title: loc("Son olayları göster", "Show recent events"), action: #selector(historyAction), keyEquivalent: "")
         history.target = self
         menu.addItem(history)
         menu.addItem(.separator())
-        let hide = NSMenuItem(title: "Bu robotu gizle", action: #selector(hideAction), keyEquivalent: "")
+        let hide = NSMenuItem(title: loc("Bu robotu gizle", "Hide this robot"), action: #selector(hideAction), keyEquivalent: "")
         hide.target = self
         menu.addItem(hide)
         NSMenu.popUpContextMenu(menu, with: event, for: host)

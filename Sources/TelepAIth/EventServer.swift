@@ -30,7 +30,7 @@ final class EventServer {
         params.allowLocalEndpointReuse = true
         guard let nwPort = NWEndpoint.Port(rawValue: port),
               let newListener = try? NWListener(using: params, on: nwPort) else {
-            retry(port: port, attemptsLeft: attemptsLeft, reason: "Port \(port) açılamadı")
+            retry(port: port, attemptsLeft: attemptsLeft, reason: loc("Port \(port) açılamadı", "Couldn't open port \(port)"))
             return
         }
         newListener.newConnectionHandler = { [weak self] connection in
@@ -108,7 +108,7 @@ final class EventServer {
                 }
                 guard request.method == "POST" else {
                     let ok = request.method == "GET"
-                    self.respond(connection, status: ok ? "200 OK" : "405 Method Not Allowed", body: "\(AppInfo.name) çalışıyor")
+                    self.respond(connection, status: ok ? "200 OK" : "405 Method Not Allowed", body: "\(AppInfo.name) is running")
                     return
                 }
                 self.respond(connection, status: "200 OK")

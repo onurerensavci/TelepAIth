@@ -20,8 +20,42 @@ enum Layout {
     static let robotSize = CGSize(width: 90, height: 124)
 }
 
+enum Language: String, CaseIterable {
+    case tr, en
+
+    var displayName: String {
+        switch self {
+        case .tr: return "Türkçe"
+        case .en: return "English"
+        }
+    }
+
+    /// Kullanıcı seçmediyse sistem dili: Türkçe ise Türkçe, değilse İngilizce.
+    static var current: Language {
+        if let raw = UserDefaults.standard.string(forKey: "language"), let lang = Language(rawValue: raw) {
+            return lang
+        }
+        return (Locale.preferredLanguages.first ?? "en").lowercased().hasPrefix("tr") ? .tr : .en
+    }
+
+    static func set(_ lang: Language) {
+        UserDefaults.standard.set(lang.rawValue, forKey: "language")
+    }
+}
+
+/// İki dilli metin: loc("Bitti!", "Done!")
+func loc(_ tr: String, _ en: String) -> String {
+    Language.current == .tr ? tr : en
+}
+
 enum Preferences {
     private static let defaults = UserDefaults.standard
+
+    /// Balonda ve bildirimlerde eyleme göre emoji.
+    static var emojiEnabled: Bool {
+        get { defaults.object(forKey: "emojiEnabled") as? Bool ?? true }
+        set { defaults.set(newValue, forKey: "emojiEnabled") }
+    }
 
     static var notificationsEnabled: Bool {
         get { defaults.object(forKey: "notificationsEnabled") as? Bool ?? true }
@@ -140,16 +174,25 @@ func clip(_ s: String, _ max: Int) -> String {
     return String(flat.prefix(Swift.max(1, max - 1))) + "…"
 }
 
-/// 75 → "1 dk 15 sn"
+/// 75 → "1 dk 15 sn" / "1 min 15 s"
 func formatDuration(_ seconds: TimeInterval) -> String {
+    let s = loc("sn", "s")
+    let m = loc("dk", "min")
+    let h = loc("sa", "h")
     let total = Int(seconds.rounded())
-    if total < 60 { return "\(total) sn" }
+    if total < 60 { return "\(total) \(s)" }
     let minutes = total / 60
     if minutes < 60 {
         let sec = total % 60
-        return sec == 0 ? "\(minutes) dk" : "\(minutes) dk \(sec) sn"
+        return sec == 0 ? "\(minutes) \(m)" : "\(minutes) \(m) \(sec) \(s)"
     }
     let hours = minutes / 60
     let rest = minutes % 60
-    return rest == 0 ? "\(hours) sa" : "\(hours) sa \(rest) dk"
+    return rest == 0 ? "\(hours) \(h)" : "\(hours) \(h) \(rest) \(m)"
+}
+
+/// Emoji açıksa metnin başına ekler.
+func withEmoji(_ emoji: String?, _ text: String) -> String {
+    guard Preferences.emojiEnabled, let emoji = emoji, !emoji.isEmpty else { return text }
+    return "\(emoji) \(text)"
 }

@@ -54,7 +54,8 @@ enum HookError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidJSON(let url):
-            return "\(url.path) geçerli bir JSON değil. Dosyayı düzeltip tekrar dene."
+            return loc("\(url.path) geçerli bir JSON değil. Dosyayı düzeltip tekrar dene.",
+                       "\(url.path) isn't valid JSON. Fix the file and try again.")
         }
     }
 }

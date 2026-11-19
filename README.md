@@ -7,6 +7,8 @@ Ekranında gezinen küçük bir robot-büyücü. Claude Code ya da Codex (GPT) o
 - **Etkileşim:** robota tıkla → son 5 olay; sürükle → taşı (havada bırakırsan düşer); sağ tık → gizle
 - **Bildirim:** 20 saniyeden uzun süren iş bitince, AI senden onay/cevap beklerken ve hata olunca
 - **Kota:** ClaudeBar kuruluysa, kota azalınca ilgili robot uyarır
+- **Dil:** Türkçe veya İngilizce (menü → Dil). İlk açılışta sistem dilini kullanır.
+- **Emojiler:** robot eyleme göre emojiyle konuşur: düşünürken 🔮, okurken 📖, test çalıştırırken 🧪, paket kurarken 📦, `git push`'ta 🚀, bitince 🎉/✨/✅, seni beklerken ✋. Menü → Emojiler ile kapatılabilir.
 
 ## Kurulum
 
@@ -77,6 +79,7 @@ curl -s -H 'Content-Type: application/json' \
 | `project` | Balonda küçük başlık (isteğe bağlı) |
 | `session` | Aynı AI'da birden fazla oturum varsa ayırmak için (isteğe bağlı) |
 | `notify` | `true` ise `done` olayında süre beklemeden bildirim atar |
+| `emoji` | Balonda metnin önüne konacak emoji (isteğe bağlı; yoksa duruma göre seçilir) |
 
 Claude Code/Codex formatında (`hook_event_name` içeren) JSON da kabul edilir. Örnek: `scripts/send-test.sh gemini done "Hepsi geçti"`.
 

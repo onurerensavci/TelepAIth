@@ -70,8 +70,8 @@ final class AppController: NSObject {
     private var serverLine: String {
         let version = Updater.shared.currentVersion
         if server.port > 0 { return "\(AppInfo.name) \(version) · 127.0.0.1:\(server.port)" }
-        if let error = serverError { return "Sunucu açılamadı: \(clip(error, 40))" }
-        return "\(AppInfo.name) · başlatılıyor…"
+        if let error = serverError { return loc("Sunucu açılamadı: ", "Server failed: ") + clip(error, 40) }
+        return "\(AppInfo.name) · " + loc("başlatılıyor…", "starting…")
     }
 
     private func updateIcon() {
@@ -92,8 +92,9 @@ final class AppController: NSObject {
         menu.addItem(header)
 
         if let release = Updater.shared.available {
-            let update = actionItem("Güncelle: \(release.version) hazır", #selector(installUpdate))
-            update.attributedTitle = NSAttributedString(string: "⬆︎ Güncelle: \(release.version) hazır",
+            let title = "⬆︎ " + loc("Güncelle: \(release.version) hazır", "Update: \(release.version) is ready")
+            let update = actionItem(title, #selector(installUpdate))
+            update.attributedTitle = NSAttributedString(string: title,
                                                         attributes: [.font: NSFont.boldSystemFont(ofSize: 13)])
             update.isEnabled = !Updater.shared.isBusy
             menu.addItem(update)
@@ -111,11 +112,23 @@ final class AppController: NSObject {
         }
 
         menu.addItem(.separator())
-        menu.addItem(toggleItem("Robotları göster", on: manager.visible, action: #selector(toggleRobots)))
-        menu.addItem(toggleItem("Bildirimler", on: Preferences.notificationsEnabled, action: #selector(toggleNotifications)))
+        menu.addItem(toggleItem(loc("Robotları göster", "Show robots"), on: manager.visible, action: #selector(toggleRobots)))
+        menu.addItem(toggleItem(loc("Bildirimler", "Notifications"), on: Preferences.notificationsEnabled,
+                                action: #selector(toggleNotifications)))
+        menu.addItem(toggleItem(loc("Emojiler", "Emojis"), on: Preferences.emojiEnabled, action: #selector(toggleEmoji)))
+
+        let language = NSMenuItem(title: loc("Dil", "Language"), action: nil, keyEquivalent: "")
+        let languageMenu = NSMenu()
+        for lang in Language.allCases {
+            let item = toggleItem(lang.displayName, on: Language.current == lang, action: #selector(selectLanguage(_:)))
+            item.representedObject = lang.rawValue
+            languageMenu.addItem(item)
+        }
+        language.submenu = languageMenu
+        menu.addItem(language)
 
         menu.addItem(.separator())
-        let connections = NSMenuItem(title: "Bağlantılar", action: nil, keyEquivalent: "")
+        let connections = NSMenuItem(title: loc("Bağlantılar", "Connections"), action: nil, keyEquivalent: "")
         connections.isEnabled = false
         menu.addItem(connections)
         for target in HookTarget.allCases {
@@ -124,27 +137,29 @@ final class AppController: NSObject {
             item.indentationLevel = 1
             menu.addItem(item)
         }
-        let claudeBar = actionItem("ClaudeBar kota uyarıları…", #selector(showClaudeBarHelp))
+        let claudeBar = actionItem(loc("ClaudeBar kota uyarıları…", "ClaudeBar quota alerts…"), #selector(showClaudeBarHelp))
         claudeBar.indentationLevel = 1
         menu.addItem(claudeBar)
 
         menu.addItem(.separator())
-        let demo = NSMenuItem(title: "Dene", action: nil, keyEquivalent: "")
+        let demo = NSMenuItem(title: loc("Dene", "Try it"), action: nil, keyEquivalent: "")
         let demoMenu = NSMenu()
-        demoMenu.addItem(actionItem("Claude: kısa bir görev", #selector(demoClaude)))
-        demoMenu.addItem(actionItem("GPT: onay beklesin", #selector(demoGPTWaiting)))
-        demoMenu.addItem(actionItem("Claude: kota uyarısı", #selector(demoQuota)))
+        demoMenu.addItem(actionItem(loc("Claude: kısa bir görev", "Claude: a short task"), #selector(demoClaude)))
+        demoMenu.addItem(actionItem(loc("GPT: onay beklesin", "GPT: wait for approval"), #selector(demoGPTWaiting)))
+        demoMenu.addItem(actionItem(loc("Claude: kota uyarısı", "Claude: quota alert"), #selector(demoQuota)))
         demo.submenu = demoMenu
         menu.addItem(demo)
-        menu.addItem(actionItem("Ayar klasörünü aç", #selector(openSupportDir)))
-        menu.addItem(actionItem("Renkleri ve kostümleri yeniden yükle", #selector(reloadAppearance)))
-        let checkTitle = Updater.shared.isBusy ? "Güncelleme indiriliyor…" : "Güncellemeleri denetle…"
+        menu.addItem(actionItem(loc("Ayar klasörünü aç", "Open settings folder"), #selector(openSupportDir)))
+        menu.addItem(actionItem(loc("Renkleri ve kostümleri yeniden yükle", "Reload colors and skins"), #selector(reloadAppearance)))
+        let checkTitle = Updater.shared.isBusy
+            ? loc("Güncelleme indiriliyor…", "Downloading update…")
+            : loc("Güncellemeleri denetle…", "Check for updates…")
         let check = actionItem(checkTitle, #selector(checkForUpdates))
         check.isEnabled = !Updater.shared.isBusy
         menu.addItem(check)
 
         menu.addItem(.separator())
-        menu.addItem(actionItem("Çıkış", #selector(quit), key: "q"))
+        menu.addItem(actionItem(loc("Çıkış", "Quit"), #selector(quit), key: "q"))
 
         statusItem?.menu = menu
     }
@@ -178,6 +193,17 @@ final class AppController: NSObject {
         rebuildMenu()
     }
 
+    @objc private func toggleEmoji() {
+        Preferences.emojiEnabled.toggle()
+        rebuildMenu()
+    }
+
+    @objc private func selectLanguage(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String, let lang = Language(rawValue: raw) else { return }
+        Language.set(lang)
+        rebuildMenu()
+    }
+
     @objc private func toggleHook(_ sender: NSMenuItem) {
         guard let raw = sender.representedObject as? String, let target = HookTarget(rawValue: raw) else { return }
         do {
@@ -189,14 +215,16 @@ final class AppController: NSObject {
                 let info: String
                 switch target {
                 case .claude:
-                    info = "Yeni açacağın Claude Code oturumları robota haber verecek. Açık oturumlar yeniden başlatılınca bağlanır.\n\nAyarların yedeği: ~/.claude/settings.json.telepaith-backup"
+                    info = loc("Yeni açacağın Claude Code oturumları robota haber verecek. Açık oturumlar yeniden başlatılınca bağlanır.\n\nAyarların yedeği: ~/.claude/settings.json.telepaith-backup",
+                               "New Claude Code sessions will report to the robot. Open sessions connect after a restart.\n\nBackup of your settings: ~/.claude/settings.json.telepaith-backup")
                 case .codex:
-                    info = "Codex yeni hook'lar için onay istiyor: Codex'i bir sonraki açışında /hooks yazıp TelepAIth hook'larını onayla. Sonra yeni oturumlar robota haber verecek."
+                    info = loc("Codex yeni hook'lar için onay istiyor: Codex'i bir sonraki açışında /hooks yazıp TelepAIth hook'larını onayla. Sonra yeni oturumlar robota haber verecek.",
+                               "Codex asks you to approve new hooks: next time you open Codex, type /hooks and approve the TelepAIth hooks. New sessions will then report to the robot.")
                 }
-                showAlert(title: "\(target.displayName) bağlandı", text: info)
+                showAlert(title: target.displayName + loc(" bağlandı", " connected"), text: info)
             }
         } catch {
-            showAlert(title: "Bağlanamadı", text: error.localizedDescription)
+            showAlert(title: loc("Bağlanamadı", "Couldn't connect"), text: error.localizedDescription)
         }
         rebuildMenu()
     }
@@ -205,8 +233,8 @@ final class AppController: NSObject {
         let url = "http://localhost:\(server.port > 0 ? server.port : AppInfo.defaultPort)/claudebar"
         NSApp.activate(ignoringOtherApps: true)
         let alert = NSAlert()
-        alert.messageText = "ClaudeBar kota uyarılarını robota bağla"
-        alert.informativeText = """
+        alert.messageText = loc("ClaudeBar kota uyarılarını robota bağla", "Send ClaudeBar quota alerts to the robot")
+        alert.informativeText = loc("""
         ClaudeBar → Settings → Sync & Alerts → Webhooks → Add Webhook:
 
         URL: \(url)
@@ -214,9 +242,17 @@ final class AppController: NSObject {
         Sends: Quota alerts ve Status alerts
 
         Sonra "Send a test" ile dene. Kota azalınca ilgili robot uyarır.
-        """
-        alert.addButton(withTitle: "URL'yi kopyala")
-        alert.addButton(withTitle: "Tamam")
+        """, """
+        ClaudeBar → Settings → Sync & Alerts → Webhooks → Add Webhook:
+
+        URL: \(url)
+        Channel: JSON
+        Sends: Quota alerts and Status alerts
+
+        Then press "Send a test". The matching robot warns you when quota runs low.
+        """)
+        alert.addButton(withTitle: loc("URL'yi kopyala", "Copy URL"))
+        alert.addButton(withTitle: loc("Tamam", "OK"))
         if alert.runModal() == .alertFirstButtonReturn {
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(url, forType: .string)
@@ -225,32 +261,44 @@ final class AppController: NSObject {
 
     @objc private func demoClaude() {
         let s = "demo-\(Int.random(in: 1000...9999))"
+        let p = "demo-app"
         play([
-            (0, AgentEvent(source: "claude", sessionID: s, kind: .prompt, state: .thinking, text: "Düşünüyor…", project: "demo-proje")),
-            (2, AgentEvent(source: "claude", sessionID: s, kind: .tool, state: .reading, text: "Okuyor: App.swift", project: "demo-proje")),
-            (5, AgentEvent(source: "claude", sessionID: s, kind: .tool, state: .editing, text: "Düzenliyor: App.swift", project: "demo-proje")),
-            (8, AgentEvent(source: "claude", sessionID: s, kind: .tool, state: .running, text: "Komut: swift test", project: "demo-proje")),
-            (12, AgentEvent(source: "claude", sessionID: s, kind: .stop, state: .done, project: "demo-proje",
-                            lastMessage: "Testler geçti, değişiklik hazır.", forceNotify: true)),
+            (0, AgentEvent(source: "claude", sessionID: s, kind: .prompt, state: .thinking,
+                           text: loc("Düşünüyor…", "Thinking…"), project: p, emoji: "🔮")),
+            (2, AgentEvent(source: "claude", sessionID: s, kind: .tool, state: .reading,
+                           text: loc("Okuyor: ", "Reading ") + "App.swift", project: p, emoji: "📖")),
+            (5, AgentEvent(source: "claude", sessionID: s, kind: .tool, state: .editing,
+                           text: loc("Düzenliyor: ", "Editing ") + "App.swift", project: p, emoji: "✍️")),
+            (8, AgentEvent(source: "claude", sessionID: s, kind: .tool, state: .running,
+                           text: loc("Komut: ", "Command: ") + "swift test", project: p, emoji: "🧪")),
+            (12, AgentEvent(source: "claude", sessionID: s, kind: .stop, state: .done, project: p,
+                            lastMessage: loc("Testler geçti, değişiklik hazır.", "Tests pass, the change is ready."),
+                            forceNotify: true)),
         ])
     }
 
     @objc private func demoGPTWaiting() {
         let s = "demo-\(Int.random(in: 1000...9999))"
+        let p = "web-app"
         play([
-            (0, AgentEvent(source: "gpt", sessionID: s, kind: .prompt, state: .thinking, text: "Düşünüyor…", project: "web-app")),
-            (2, AgentEvent(source: "gpt", sessionID: s, kind: .tool, state: .searching, text: "Arıyor: useEffect", project: "web-app")),
+            (0, AgentEvent(source: "gpt", sessionID: s, kind: .prompt, state: .thinking,
+                           text: loc("Düşünüyor…", "Thinking…"), project: p, emoji: "🔮")),
+            (2, AgentEvent(source: "gpt", sessionID: s, kind: .tool, state: .searching,
+                           text: loc("Arıyor: ", "Searching for ") + "useEffect", project: p, emoji: "🔍")),
             (5, AgentEvent(source: "gpt", sessionID: s, kind: .waiting, state: .waiting,
-                           text: "Onayını bekliyor: Bash — npm install", project: "web-app")),
+                           text: loc("Onayını bekliyor: ", "Needs your approval: ") + "Bash — npm install",
+                           project: p, emoji: "✋")),
             (11, AgentEvent(source: "gpt", sessionID: s, kind: .toolDone)),
-            (12, AgentEvent(source: "gpt", sessionID: s, kind: .tool, state: .running, text: "Komut: npm install", project: "web-app")),
-            (15, AgentEvent(source: "gpt", sessionID: s, kind: .stop, state: .done, project: "web-app")),
+            (12, AgentEvent(source: "gpt", sessionID: s, kind: .tool, state: .running,
+                            text: loc("Komut: ", "Command: ") + "npm install", project: p, emoji: "📦")),
+            (15, AgentEvent(source: "gpt", sessionID: s, kind: .stop, state: .done, project: p)),
         ])
     }
 
     @objc private func demoQuota() {
         manager.handle(AgentEvent(source: "claude", sessionID: "claudebar", kind: .quota,
-                                  text: "Kalan kota: %18 (demo)", forceNotify: true))
+                                  text: loc("Kalan kota: %18 (demo)", "Quota left: 18% (demo)"),
+                                  forceNotify: true, emoji: "🔋"))
     }
 
     private func play(_ steps: [(TimeInterval, AgentEvent)]) {

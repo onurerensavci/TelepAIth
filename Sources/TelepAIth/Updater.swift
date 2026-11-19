@@ -51,8 +51,9 @@ final class Updater {
     func check(userInitiated: Bool) {
         guard let repo = repo, let url = URL(string: "https://api.github.com/repos/\(repo)/releases/latest") else {
             if userInitiated {
-                alert("Güncelleme kaynağı yok",
-                      "Bu kopya bir GitHub deposuna bağlı değil. GitHub Releases'tan indirilen sürümü kullan ya da uygulamayı git deposunun içinden scripts/build-app.sh ile derle.")
+                alert(loc("Güncelleme kaynağı yok", "No update source"),
+                      loc("Bu kopya bir GitHub deposuna bağlı değil. GitHub Releases'tan indirilen sürümü kullan ya da uygulamayı git deposunun içinden scripts/build-app.sh ile derle.",
+                          "This copy isn't linked to a GitHub repository. Use the version from GitHub Releases, or build the app inside the git repository with scripts/build-app.sh."))
             }
             return
         }
@@ -78,13 +79,13 @@ final class Updater {
             if userInitiated {
                 let reason: String
                 if status == 404 {
-                    reason = "Depoda henüz yayınlanmış bir sürüm yok ya da depo gizli (private)."
+                    reason = loc("Depoda henüz yayınlanmış bir sürüm yok ya da depo gizli (private).", "The repository has no published release yet, or it is private.")
                 } else if let error = error {
                     reason = error.localizedDescription
                 } else {
-                    reason = "GitHub'a ulaşılamadı (HTTP \(status))."
+                    reason = loc("GitHub'a ulaşılamadı (HTTP \(status)).", "Couldn't reach GitHub (HTTP \(status)).")
                 }
-                alert("Güncelleme denetlenemedi", reason)
+                alert(loc("Güncelleme denetlenemedi", "Couldn't check for updates"), reason)
             }
             return
         }
@@ -93,7 +94,7 @@ final class Updater {
         guard Updater.isNewer(version, than: currentVersion) else {
             available = nil
             onChange?()
-            if userInitiated { alert("Güncelsin", "\(AppInfo.name) \(currentVersion) en son sürüm.") }
+            if userInitiated { alert(loc("Güncelsin", "You're up to date"), loc("\(AppInfo.name) \(currentVersion) en son sürüm.", "\(AppInfo.name) \(currentVersion) is the latest version.")) }
             return
         }
 
@@ -103,7 +104,9 @@ final class Updater {
 
         guard let urlString = zip?["browser_download_url"] as? String, let assetURL = URL(string: urlString) else {
             if userInitiated {
-                alert("Güncelleme hazır değil", "\(version) sürümü yayınlanmış ama .zip dosyası henüz yüklenmemiş. Birkaç dakika sonra tekrar dene.")
+                alert(loc("Güncelleme hazır değil", "Update not ready"),
+                      loc("\(version) sürümü yayınlanmış ama .zip dosyası henüz yüklenmemiş. Birkaç dakika sonra tekrar dene.",
+                          "Version \(version) is published but its .zip isn't uploaded yet. Try again in a few minutes."))
             }
             return
         }
@@ -117,8 +120,8 @@ final class Updater {
         if userInitiated {
             promptInstall()
         } else if isNew {
-            Notifier.shared.notify(title: "\(AppInfo.name) \(version) hazır",
-                                   body: "Menü çubuğundaki ikondan güncelleyebilirsin.")
+            Notifier.shared.notify(title: withEmoji("⬆️", loc("\(AppInfo.name) \(version) hazır", "\(AppInfo.name) \(version) is ready")),
+                                   body: loc("Menü çubuğundaki ikondan güncelleyebilirsin.", "Update it from the menu bar icon."))
         }
     }
 
@@ -143,15 +146,15 @@ final class Updater {
         guard let release = available else { return }
         NSApp.activate(ignoringOtherApps: true)
         let alert = NSAlert()
-        alert.messageText = "\(AppInfo.name) \(release.version) hazır"
-        var info = "Şu anki sürüm: \(currentVersion)"
+        alert.messageText = loc("\(AppInfo.name) \(release.version) hazır", "\(AppInfo.name) \(release.version) is ready")
+        var info = loc("Şu anki sürüm: ", "Current version: ") + currentVersion
         if !release.notes.isEmpty {
             info += "\n\n" + String(release.notes.prefix(700))
         }
         alert.informativeText = info
-        alert.addButton(withTitle: "Güncelle ve yeniden başlat")
-        alert.addButton(withTitle: "Sonra")
-        if release.pageURL != nil { alert.addButton(withTitle: "Sürüm sayfası") }
+        alert.addButton(withTitle: loc("Güncelle ve yeniden başlat", "Update and restart"))
+        alert.addButton(withTitle: loc("Sonra", "Later"))
+        if release.pageURL != nil { alert.addButton(withTitle: loc("Sürüm sayfası", "Release page")) }
 
         let response = alert.runModal()
         if response == .alertFirstButtonReturn {
@@ -164,12 +167,14 @@ final class Updater {
     private func install(_ release: Release) {
         let appURL = Bundle.main.bundleURL
         guard appURL.pathExtension == "app" else {
-            alert("Güncellenemedi", "Uygulama .app olarak çalışmıyor (swift run ile mi açtın?).")
+            alert(loc("Güncellenemedi", "Update failed"), loc("Uygulama .app olarak çalışmıyor (swift run ile mi açtın?).", "The app isn't running as an .app bundle (did you start it with swift run?)."))
             return
         }
         let parent = appURL.deletingLastPathComponent().path
         guard FileManager.default.isWritableFile(atPath: parent) else {
-            alert("Güncellenemedi", "\(parent) klasörüne yazma izni yok. Yeni sürümü sürüm sayfasından elle indir.")
+            alert(loc("Güncellenemedi", "Update failed"),
+                  loc("\(parent) klasörüne yazma izni yok. Yeni sürümü sürüm sayfasından elle indir.",
+                      "No write permission for \(parent). Download the new version from the release page."))
             if let page = release.pageURL { NSWorkspace.shared.open(page) }
             return
         }
@@ -194,7 +199,7 @@ final class Updater {
         isBusy = false
         onChange?()
         guard let zip = zip, error == nil else {
-            alert("İndirilemedi", error?.localizedDescription ?? "Dosya indirilemedi.")
+            alert(loc("İndirilemedi", "Download failed"), error?.localizedDescription ?? loc("Dosya indirilemedi.", "The file couldn't be downloaded."))
             return
         }
         let work = FileManager.default.temporaryDirectory
@@ -204,7 +209,7 @@ final class Updater {
             try Updater.run("/usr/bin/ditto", ["-x", "-k", zip.path, work.path])
             let items = try FileManager.default.contentsOfDirectory(at: work, includingPropertiesForKeys: nil)
             guard let newApp = items.first(where: { $0.pathExtension == "app" }) else {
-                throw UpdateError("Zip içinde \(AppInfo.name).app bulunamadı.")
+                throw UpdateError(loc("Zip içinde \(AppInfo.name).app bulunamadı.", "\(AppInfo.name).app wasn't found in the zip."))
             }
             let script = work.appendingPathComponent("install.sh")
             try Updater.installScript.write(to: script, atomically: true, encoding: .utf8)
@@ -215,7 +220,7 @@ final class Updater {
             try process.run()
             NSApp.terminate(nil)
         } catch {
-            alert("Güncellenemedi", error.localizedDescription)
+            alert(loc("Güncellenemedi", "Update failed"), error.localizedDescription)
         }
     }
 
@@ -226,7 +231,7 @@ final class Updater {
         try process.run()
         process.waitUntilExit()
         if process.terminationStatus != 0 {
-            throw UpdateError("\(tool) başarısız oldu (kod \(process.terminationStatus)).")
+            throw UpdateError(loc("\(tool) başarısız oldu (kod \(process.terminationStatus)).", "\(tool) failed (code \(process.terminationStatus))."))
         }
     }
 

@@ -6,6 +6,7 @@ final class RobotModel: ObservableObject {
     struct Session {
         var state: RobotState
         var text: String?
+        var emoji: String?
         var project: String?
         var updated: Date
         var turnStart: Date?
@@ -62,21 +63,32 @@ final class RobotModel: ObservableObject {
     }
 
     var statusLine: String {
-        clip(bubbleText ?? state.label, 48)
+        clip(bubbleText ?? withEmoji(state.emoji, state.label), 48)
+    }
+
+    private static func donePhrase() -> String {
+        let phrases = Language.current == .tr
+            ? ["Bitti!", "Tamamdır!", "Hallettim!", "İş bitti!"]
+            : ["Done!", "All set!", "Finished!", "Nailed it!"]
+        return phrases.randomElement() ?? phrases[0]
+    }
+
+    private static func doneEmoji() -> String {
+        ["🎉", "✨", "✅", "🪄"].randomElement() ?? "🎉"
     }
 
     // MARK: - Olaylar
 
     func apply(_ e: AgentEvent, now: Date = Date()) -> Notice? {
         lastEventAt = now
-        if let t = e.text, !t.isEmpty { remember(t, now: now) }
+        if let t = e.text, !t.isEmpty { remember(withEmoji(e.emoji, t), now: now) }
         var notice: Notice?
 
         switch e.kind {
         case .quota:
-            let text = e.text ?? ""
+            let text = withEmoji(e.emoji, e.text ?? "")
             showOverride(text, for: 10, now: now)
-            if e.forceNotify { notice = Notice(title: "\(theme.displayName) kota", body: text) }
+            if e.forceNotify { notice = Notice(title: theme.displayName + loc(" kota", " quota"), body: text) }
 
         case .heartbeat:
             sessions[e.sessionID]?.updated = now
@@ -85,7 +97,8 @@ final class RobotModel: ObservableObject {
             if var s = sessions[e.sessionID] {
                 if s.state == .waiting {
                     s.state = .thinking
-                    s.text = "Devam ediyor…"
+                    s.text = loc("Devam ediyor…", "Back to work…")
+                    s.emoji = "🔮"
                 }
                 s.updated = now
                 sessions[e.sessionID] = s
@@ -96,9 +109,12 @@ final class RobotModel: ObservableObject {
 
         default:
             var s = sessions[e.sessionID]
-                ?? Session(state: .idle, text: nil, project: e.project, updated: now, turnStart: nil, lastWaitNotice: nil)
+                ?? Session(state: .idle, text: nil, emoji: nil, project: e.project, updated: now, turnStart: nil, lastWaitNotice: nil)
             if let st = e.state { s.state = st }
-            if let t = e.text { s.text = t }
+            if let t = e.text {
+                s.text = t
+                s.emoji = e.emoji ?? s.state.emoji
+            }
             if let p = e.project { s.project = p }
             s.updated = now
             if e.kind == .prompt { s.turnStart = now }
@@ -108,22 +124,27 @@ final class RobotModel: ObservableObject {
             switch e.kind {
             case .stop:
                 let duration = s.turnStart.map { now.timeIntervalSince($0) } ?? 0
-                s.text = e.text ?? (duration >= 1 ? "Bitti! (\(formatDuration(duration)))" : "Bitti!")
+                let phrase = RobotModel.donePhrase()
+                s.text = e.text ?? (duration >= 1 ? "\(phrase) (\(formatDuration(duration)))" : phrase)
+                s.emoji = e.emoji ?? RobotModel.doneEmoji()
                 s.turnStart = nil
                 celebrateStart = now
+                remember(withEmoji(s.emoji, s.text ?? phrase), now: now)
                 if e.forceNotify || duration >= Preferences.longTurnSeconds {
-                    var body = (s.project ?? "Görev") + " — \(formatDuration(duration)) sürdü"
+                    var body = (s.project ?? loc("Görev", "Task")) + " — " + formatDuration(duration)
                     if let m = e.lastMessage, !m.isEmpty { body += "\n" + clip(m, 140) }
-                    notice = Notice(title: "\(theme.displayName) bitirdi", body: body)
+                    notice = Notice(title: withEmoji(s.emoji, theme.displayName + loc(" bitirdi", " is done")), body: body)
                 }
             case .waiting:
                 let canNotify = s.lastWaitNotice.map { now.timeIntervalSince($0) > 20 } ?? true
                 if canNotify {
                     s.lastWaitNotice = now
-                    notice = Notice(title: "\(theme.displayName) seni bekliyor\(place)", body: s.text ?? "Cevabını bekliyor")
+                    notice = Notice(title: withEmoji(s.emoji, theme.displayName + loc(" seni bekliyor", " needs you") + place),
+                                    body: s.text ?? loc("Cevabını bekliyor", "Waiting for your reply"))
                 }
             case .failure:
-                notice = Notice(title: "\(theme.displayName) hata verdi\(place)", body: s.text ?? "")
+                notice = Notice(title: withEmoji(s.emoji, theme.displayName + loc(" hata verdi", " hit an error") + place),
+                                body: s.text ?? "")
             case .interrupt:
                 s.turnStart = nil
             default:
@@ -138,7 +159,8 @@ final class RobotModel: ObservableObject {
 
     func showHistory() {
         let lines = history.suffix(5)
-        showOverride(lines.isEmpty ? "Henüz bir şey olmadı" : lines.joined(separator: "\n"), for: 6, now: Date())
+        showOverride(lines.isEmpty ? loc("Henüz bir şey olmadı", "Nothing has happened yet") : lines.joined(separator: "\n"),
+                     for: 6, now: Date())
         refresh(now: Date())
     }
 
@@ -188,7 +210,7 @@ final class RobotModel: ObservableObject {
             overrideText = nil
             overrideUntil = nil
             if let b = bestSession, newState != .idle, newState != .sleeping {
-                text = b.text ?? newState.label
+                text = b.text.map { withEmoji(b.emoji, $0) } ?? withEmoji(newState.emoji, newState.label)
                 subtitle = b.project
                 if newState == .done && now.timeIntervalSince(b.updated) > 15 {
                     text = nil

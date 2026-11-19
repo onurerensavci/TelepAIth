@@ -24,17 +24,34 @@ enum RobotState: String, CaseIterable {
 
     var label: String {
         switch self {
-        case .idle: return "Boşta"
-        case .thinking: return "Düşünüyor"
-        case .reading: return "Okuyor"
-        case .searching: return "Arıyor"
-        case .editing: return "Düzenliyor"
-        case .running: return "Komut çalıştırıyor"
-        case .delegating: return "Alt ajan çalıştırıyor"
-        case .waiting: return "Seni bekliyor"
-        case .done: return "Bitti"
-        case .error: return "Hata"
-        case .sleeping: return "Uyuyor"
+        case .idle: return loc("Boşta", "Idle")
+        case .thinking: return loc("Düşünüyor", "Thinking")
+        case .reading: return loc("Okuyor", "Reading")
+        case .searching: return loc("Arıyor", "Searching")
+        case .editing: return loc("Düzenliyor", "Editing")
+        case .running: return loc("Komut çalıştırıyor", "Running a command")
+        case .delegating: return loc("Alt ajan çalıştırıyor", "Running a subagent")
+        case .waiting: return loc("Seni bekliyor", "Waiting for you")
+        case .done: return loc("Bitti", "Done")
+        case .error: return loc("Hata", "Error")
+        case .sleeping: return loc("Uyuyor", "Sleeping")
+        }
+    }
+
+    /// Olayın kendi emojisi yoksa kullanılan emoji.
+    var emoji: String {
+        switch self {
+        case .idle: return "🙂"
+        case .thinking: return "🔮"
+        case .reading: return "📖"
+        case .searching: return "🔍"
+        case .editing: return "✍️"
+        case .running: return "💻"
+        case .delegating: return "🧙"
+        case .waiting: return "✋"
+        case .done: return "🎉"
+        case .error: return "💥"
+        case .sleeping: return "😴"
         }
     }
 
@@ -68,6 +85,7 @@ struct AgentEvent {
     var project: String? = nil
     var lastMessage: String? = nil
     var forceNotify = false
+    var emoji: String? = nil
 }
 
 /// Gelen HTTP isteğini robotun anlayacağı olaya çevirir.
@@ -93,29 +111,35 @@ enum EventParser {
         case "SessionStart":
             e.kind = .sessionStart
             e.state = .idle
-            e.text = "Yeni oturum" + (project.map { ": \($0)" } ?? "")
+            e.emoji = "👋"
+            e.text = loc("Yeni oturum", "New session") + (project.map { ": \($0)" } ?? "")
         case "UserPromptSubmit":
             e.kind = .prompt
             e.state = .thinking
-            e.text = "Düşünüyor…"
+            e.emoji = "🔮"
+            e.text = loc("Düşünüyor…", "Thinking…")
         case "PreToolUse":
             let d = ToolDescriber.describe(tool: tool, input: input)
             e.kind = d.state == .waiting ? .waiting : .tool
             e.state = d.state
             e.text = d.text
+            e.emoji = d.emoji
         case "PostToolUse", "PostToolUseFailure":
             e.kind = .toolDone
         case "PermissionRequest":
             e.kind = .waiting
             e.state = .waiting
+            e.emoji = "✋"
             let detail = (input["description"] as? String).map { " — " + clip($0, 60) }
                 ?? ToolDescriber.commandString(input).map { " — " + clip($0, 60) }
                 ?? ""
-            e.text = "Onayını bekliyor: " + ToolDescriber.shortName(tool) + detail
+            e.text = loc("Onayını bekliyor: ", "Needs your approval: ") + ToolDescriber.shortName(tool) + detail
         case "Notification":
             e.kind = .waiting
             e.state = .waiting
-            e.text = translateNotification(j["message"] as? String)
+            let n = translateNotification(j["message"] as? String)
+            e.text = n.text
+            e.emoji = n.emoji
         case "Stop":
             e.kind = .stop
             e.state = .done
@@ -123,37 +147,47 @@ enum EventParser {
         case "StopFailure":
             e.kind = .failure
             e.state = .error
-            e.text = "Bir hatayla durdu" + ((j["error"] as? String).map { ": " + clip($0, 60) } ?? "")
+            e.emoji = "💥"
+            e.text = loc("Bir hatayla durdu", "Stopped with an error")
+                + ((j["error"] as? String).map { ": " + clip($0, 60) } ?? "")
         case "SubagentStart":
             e.kind = .tool
             e.state = .delegating
-            e.text = "Alt ajan: " + ((j["agent_type"] as? String) ?? "başladı")
+            e.emoji = "🧙"
+            e.text = loc("Alt ajan: ", "Subagent: ") + ((j["agent_type"] as? String) ?? loc("başladı", "started"))
         case "PreCompact":
             e.kind = .tool
             e.state = .thinking
-            e.text = "Hafızasını toparlıyor"
+            e.emoji = "🧠"
+            e.text = loc("Hafızasını toparlıyor", "Tidying up its memory")
         case "Interrupt":
             e.kind = .interrupt
             e.state = .idle
-            e.text = "Durduruldu"
+            e.emoji = "⏹️"
+            e.text = loc("Durduruldu", "Interrupted")
         case "SessionEnd":
             e.kind = .sessionEnd
-            e.text = "Oturum kapandı"
+            e.emoji = "👋"
+            e.text = loc("Oturum kapandı", "Session ended")
         default:
             e.kind = .heartbeat
         }
         return e
     }
 
-    private static func translateNotification(_ message: String?) -> String {
-        guard let msg = message, !msg.isEmpty else { return "Seni bekliyor" }
+    private static func translateNotification(_ message: String?) -> (text: String, emoji: String) {
+        guard let msg = message, !msg.isEmpty else { return (loc("Seni bekliyor", "Waiting for you"), "👀") }
         let lower = msg.lowercased()
         if lower.contains("permission") {
-            if let r = msg.range(of: "to use ") { return "Onayını bekliyor: " + String(msg[r.upperBound...]) }
-            return "Onayını bekliyor"
+            if let r = msg.range(of: "to use ") {
+                return (loc("Onayını bekliyor: ", "Needs your approval: ") + String(msg[r.upperBound...]), "✋")
+            }
+            return (loc("Onayını bekliyor", "Needs your approval"), "✋")
         }
-        if lower.contains("waiting for your input") { return "Cevabını bekliyor" }
-        return clip(msg, 90)
+        if lower.contains("waiting for your input") {
+            return (loc("Cevabını bekliyor", "Waiting for your reply"), "👀")
+        }
+        return (clip(msg, 90), "🔔")
     }
 
     // MARK: ClaudeBar webhook'u (JSON kanalı)
@@ -163,34 +197,44 @@ enum EventParser {
         let type = j["type"] as? String ?? "test"
         var state: RobotState? = nil
         var text: String
+        var emoji = "⚠️"
         switch type {
         case "quota":
+            emoji = "🔋"
             if let left = (j["left"] as? NSNumber)?.intValue {
-                text = "Kalan kota: %\(left)"
+                text = loc("Kalan kota: %\(left)", "Quota left: \(left)%")
             } else {
-                text = "Kota azalıyor"
+                text = loc("Kota azalıyor", "Quota is running low")
             }
         case "status":
             switch (j["status"] as? String) ?? "" {
-            case "critical": text = "Kota kritik seviyede!"
+            case "critical":
+                text = loc("Kota kritik seviyede!", "Quota is critical!")
+                emoji = "🪫"
             case "depleted":
-                text = "Kota bitti!"
+                text = loc("Kota bitti!", "Quota is used up!")
+                emoji = "🪫"
                 state = .error
-            default: text = "Kota uyarısı"
+            default:
+                text = loc("Kota uyarısı", "Quota warning")
             }
         case "signedOut":
-            text = "Oturumu kapanmış, tekrar giriş yap"
+            text = loc("Oturumu kapanmış, tekrar giriş yap", "Signed out, please log in again")
+            emoji = "🔑"
         case "recap":
-            text = "Haftalık özet geldi"
+            text = loc("Haftalık özet geldi", "Your weekly recap is here")
+            emoji = "📊"
         default:
-            text = "ClaudeBar bağlantısı çalışıyor"
+            text = loc("ClaudeBar bağlantısı çalışıyor", "ClaudeBar connection works")
+            emoji = "🔗"
         }
         if let login = j["login"] as? String, !login.isEmpty { text += " (\(login))" }
-        return AgentEvent(source: source, sessionID: "claudebar", kind: .quota, state: state, text: text, forceNotify: type != "recap")
+        return AgentEvent(source: source, sessionID: "claudebar", kind: .quota, state: state, text: text,
+                          forceNotify: type != "recap", emoji: emoji)
     }
 
     // MARK: Genel format — başka bir AI'ı bağlamak için
-    // POST /event?source=gemini  {"state": "running", "text": "Testler çalışıyor", "session": "1", "project": "app"}
+    // POST /event?source=gemini  {"state": "running", "text": "Testler çalışıyor", "emoji": "🧪"}
 
     private static func generic(_ j: [String: Any], source: String) -> AgentEvent? {
         let synonyms: [String: RobotState] = [
@@ -213,13 +257,14 @@ enum EventParser {
                           text: text,
                           project: j["project"] as? String,
                           lastMessage: nil,
-                          forceNotify: (j["notify"] as? Bool) ?? false)
+                          forceNotify: (j["notify"] as? Bool) ?? false,
+                          emoji: (j["emoji"] as? String) ?? state?.emoji)
     }
 }
 
-/// Araç çağrısını Türkçe kısa bir cümleye çevirir.
+/// Araç çağrısını kısa bir cümleye ve emojiye çevirir.
 enum ToolDescriber {
-    static func describe(tool: String, input: [String: Any]) -> (state: RobotState, text: String) {
+    static func describe(tool: String, input: [String: Any]) -> (state: RobotState, text: String, emoji: String) {
         let t = tool.lowercased()
 
         func str(_ keys: String...) -> String? {
@@ -232,52 +277,76 @@ enum ToolDescriber {
             if let p = str("file_path", "path", "notebook_path", "filePath") {
                 return URL(fileURLWithPath: p).lastPathComponent
             }
-            return "dosya"
+            return loc("dosya", "a file")
         }
 
         switch t {
         case "bash", "shell", "exec_command", "local_shell", "unified_exec", "container.exec":
-            return (.running, "Komut: " + clip(commandString(input) ?? "…", 70))
+            let cmd = commandString(input) ?? "…"
+            return (.running, loc("Komut: ", "Command: ") + clip(cmd, 70), commandEmoji(cmd))
         case "read", "read_file", "view_image", "notebookread":
-            return (.reading, "Okuyor: " + fileName())
+            return (.reading, loc("Okuyor: ", "Reading ") + fileName(), "📖")
         case "edit", "multiedit", "notebookedit", "str_replace_based_edit_tool":
-            return (.editing, "Düzenliyor: " + fileName())
+            return (.editing, loc("Düzenliyor: ", "Editing ") + fileName(), "✍️")
         case "write", "create_file":
-            return (.editing, "Yazıyor: " + fileName())
+            return (.editing, loc("Yazıyor: ", "Writing ") + fileName(), "📝")
         case "apply_patch":
-            if let f = patchFile(input) { return (.editing, "Düzenliyor: " + f) }
-            return (.editing, "Kod düzenliyor")
+            if let f = patchFile(input) { return (.editing, loc("Düzenliyor: ", "Editing ") + f, "✍️") }
+            return (.editing, loc("Kod düzenliyor", "Editing code"), "✍️")
         case "grep", "search", "rg":
-            return (.searching, "Arıyor: " + clip(str("pattern", "query") ?? "…", 40))
+            return (.searching, loc("Arıyor: ", "Searching for ") + clip(str("pattern", "query") ?? "…", 40), "🔍")
         case "glob", "ls", "list_dir", "list_files":
-            return (.searching, "Dosyalara bakıyor" + (str("pattern", "path").map { ": " + clip($0, 40) } ?? ""))
+            return (.searching, loc("Dosyalara bakıyor", "Looking through files")
+                    + (str("pattern", "path").map { ": " + clip($0, 40) } ?? ""), "🗂️")
         case "websearch", "web_search", "web_search_preview":
-            return (.searching, "Web'de arıyor" + (str("query").map { ": " + clip($0, 50) } ?? ""))
+            return (.searching, loc("Web'de arıyor", "Searching the web")
+                    + (str("query").map { ": " + clip($0, 50) } ?? ""), "🌐")
         case "webfetch":
             let host = str("url").flatMap { URL(string: $0)?.host } ?? "web"
-            return (.reading, "Sayfa okuyor: " + host)
+            return (.reading, loc("Sayfa okuyor: ", "Reading page: ") + host, "🌍")
         case "task", "agent":
-            return (.delegating, "Alt ajan: " + clip(str("description", "subagent_type") ?? "çalışıyor", 50))
+            return (.delegating, loc("Alt ajan: ", "Subagent: ")
+                    + clip(str("description", "subagent_type") ?? loc("çalışıyor", "working"), 50), "🧙")
         case "todowrite", "update_plan":
-            return (.thinking, "Plan yapıyor")
+            return (.thinking, loc("Plan yapıyor", "Making a plan"), "🗺️")
         case "askuserquestion", "request_user_input":
-            return (.waiting, "Sana bir soru soruyor")
+            return (.waiting, loc("Sana bir soru soruyor", "Has a question for you"), "❓")
         case "exitplanmode":
-            return (.waiting, "Planını onaylamanı bekliyor")
+            return (.waiting, loc("Planını onaylamanı bekliyor", "Wants you to approve the plan"), "📋")
         default:
-            if t.hasPrefix("mcp__") {
-                return (.running, "Araç: " + shortName(tool))
-            }
-            if t.contains("search") || t.contains("find") { return (.searching, "Araç: \(tool)") }
-            if t.contains("read") || t.contains("get") || t.contains("fetch") { return (.reading, "Araç: \(tool)") }
-            if t.contains("write") || t.contains("edit") || t.contains("patch") { return (.editing, "Araç: \(tool)") }
-            return (.running, "Araç: \(tool)")
+            let label = loc("Araç: ", "Tool: ")
+            if t.hasPrefix("mcp__") { return (.running, label + shortName(tool), "🔌") }
+            if t.contains("search") || t.contains("find") { return (.searching, label + tool, "🔍") }
+            if t.contains("read") || t.contains("get") || t.contains("fetch") { return (.reading, label + tool, "📖") }
+            if t.contains("write") || t.contains("edit") || t.contains("patch") { return (.editing, label + tool, "✍️") }
+            return (.running, label + tool, "🛠️")
         }
+    }
+
+    /// Komutun ne yaptığına göre emoji: test 🧪, paket 📦, git push 🚀…
+    static func commandEmoji(_ command: String) -> String {
+        let c = " " + command.lowercased() + " "
+        func has(_ words: String...) -> Bool { words.contains { c.contains($0) } }
+
+        if has(" git push") { return "🚀" }
+        if has(" git commit") { return "💾" }
+        if has(" git ") { return "🌿" }
+        if has(" npm install", " npm i ", " yarn add", " pnpm add", " pnpm install", " yarn install",
+               " pip install", " pip3 install", " brew install", " cargo add", " pod install", " bun add", " bun install") { return "📦" }
+        if has(" test", "test ", "test:", " jest", " vitest", " pytest", " rspec") { return "🧪" }
+        if has(" build", " make ", " xcodebuild", " tsc", " webpack", " vite build", " gradle") { return "🔨" }
+        if has(" lint", " eslint", " swiftlint", " prettier", " ruff", " black ") { return "🧹" }
+        if has(" docker") { return "🐳" }
+        if has(" curl ", " wget ") { return "🌐" }
+        if has(" rm ", " rmdir ") { return "🗑️" }
+        if has(" npm run dev", " npm start", " yarn dev", " pnpm dev", " serve ", " uvicorn", " flask run") { return "🏃" }
+        if has(" ls ", " cat ", " grep ", " rg ", " find ", " head ", " tail ") { return "👀" }
+        return "💻"
     }
 
     /// mcp__github__create_issue → "create_issue (github)"
     static func shortName(_ tool: String) -> String {
-        guard tool.hasPrefix("mcp__") else { return tool.isEmpty ? "araç" : tool }
+        guard tool.hasPrefix("mcp__") else { return tool.isEmpty ? loc("araç", "tool") : tool }
         let parts = tool.components(separatedBy: "__")
         guard parts.count >= 3 else { return tool }
         return parts[2...].joined(separator: "__") + " (\(parts[1]))"
