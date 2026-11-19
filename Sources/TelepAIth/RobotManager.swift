@@ -1,10 +1,26 @@
 import AppKit
 import QuartzCore
 
-/// Kaynak başına bir robot: oluşturur, olayları dağıtır, saniyede 30 kez hareket ettirir.
+/// Uygulama → AI eşlemesi: öndeki uygulama Claude ise turuncu, Codex/ChatGPT ise mavi robot.
+enum AppMatcher {
+    static func source(for app: NSRunningApplication) -> String? {
+        let bundleID = (app.bundleIdentifier ?? "").lowercased()
+        let name = (app.localizedName ?? "").lowercased()
+        if let custom = Themes.shared.appSource(bundleID: bundleID) { return custom }
+        if bundleID.hasPrefix("com.anthropic.") || name == "claude" { return "claude" }
+        if bundleID.hasPrefix("com.openai.") || name.contains("codex") || name.contains("chatgpt") { return "gpt" }
+        if bundleID.contains("gemini") || name.contains("gemini") { return "gemini" }
+        return nil
+    }
+}
+
+/// AI başına durum modeli tutar, ekrandaki tek robotun hangisini göstereceğine karar verir.
 final class RobotManager {
-    private var controllers: [String: RobotWindowController] = [:]
+    private var models: [String: RobotModel] = [:]
     private var order: [String] = []
+    private var avatar: RobotAvatar?
+    private var window: AvatarWindowController?
+    private var pinnedSource: String?
     private var timer: Timer?
     private var lastTick = CACurrentMediaTime()
 
@@ -13,20 +29,32 @@ final class RobotManager {
     var visible: Bool = Preferences.robotsVisible {
         didSet {
             Preferences.robotsVisible = visible
-            for c in controllers.values {
-                if visible { c.show() } else { c.hide() }
-            }
+            if visible { window?.show() } else { window?.hide() }
         }
     }
 
-    var models: [RobotModel] {
-        order.compactMap { controllers[$0]?.model }
+    /// Menüde listelenen tüm AI'lar
+    var allModels: [RobotModel] {
+        order.compactMap { models[$0] }
     }
 
     func start() {
-        for source in Preferences.knownSources {
-            controller(for: source)
+        let sources = Preferences.knownSources.isEmpty ? ["claude"] : Preferences.knownSources
+        for source in sources { model(for: source) }
+
+        let first = models[sources[0]] ?? model(for: "claude")
+        let avatar = RobotAvatar(model: first)
+        avatar.setScreen(screenFrame())
+        avatar.restorePosition()
+        self.avatar = avatar
+
+        let window = AvatarWindowController(avatar: avatar)
+        window.onHide = { [weak self] in
+            self?.visible = false
+            self?.onChange?()
         }
+        self.window = window
+
         let t = Timer(timeInterval: 1.0 / 30.0, repeats: true) { [weak self] _ in
             self?.tick()
         }
@@ -35,71 +63,96 @@ final class RobotManager {
 
         NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification,
                                                object: nil, queue: .main) { [weak self] _ in
-            self?.layoutBounds()
+            guard let self = self else { return }
+            self.avatar?.setScreen(self.screenFrame())
         }
+
+        // Öndeki uygulama değişince robot o AI'a dönüşsün
+        NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didActivateApplicationNotification,
+                                                          object: nil, queue: .main) { [weak self] note in
+            let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+            self?.frontmostChanged(app)
+        }
+        frontmostChanged(NSWorkspace.shared.frontmostApplication)
+
+        if visible { window.show() }
     }
 
     func handle(_ event: AgentEvent) {
-        let c = controller(for: event.source)
-        if let notice = c.model.apply(event) {
+        let m = model(for: event.source)
+        if let notice = m.apply(event) {
             Notifier.shared.notify(title: notice.title, body: notice.body)
         }
+        chooseDisplay()
         onChange?()
     }
 
     func reloadAppearance() {
         SkinStore.shared.reload()
-        for c in controllers.values { c.model.reloadTheme() }
+        for m in models.values { m.reloadTheme() }
     }
 
     func showHistory(source: String) {
-        controllers[source]?.model.showHistory()
+        guard let m = models[source] else { return }
+        avatar?.show(m)
+        m.showHistory()
     }
 
     @discardableResult
-    func controller(for source: String) -> RobotWindowController {
-        if let existing = controllers[source] { return existing }
-
-        let model = RobotModel(source: source)
-        let c = RobotWindowController(model: model)
-        c.onHide = { [weak self] in self?.remove(source) }
-        model.onStateChange = { [weak self] in self?.onChange?() }
-        controllers[source] = c
+    func model(for source: String) -> RobotModel {
+        if let existing = models[source] { return existing }
+        let m = RobotModel(source: source)
+        m.onStateChange = { [weak self] in
+            self?.chooseDisplay()
+            self?.onChange?()
+        }
+        models[source] = m
         order.append(source)
         if !Preferences.knownSources.contains(source) {
             Preferences.knownSources.append(source)
         }
-
-        layoutBounds()
-        let frame = screenFrame()
-        let slot = CGFloat(order.count - 1)
-        model.x = frame.midX - Layout.windowSize.width / 2 - 130 + slot * 260
-        model.setBounds(minX: model.minX, maxX: model.maxX, groundY: model.groundY) // konumu sınırla
-        model.y = model.groundY
-
-        if visible { c.show() }
-        return c
+        return m
     }
 
-    private func remove(_ source: String) {
-        controllers[source]?.hide()
-        controllers[source] = nil
-        order.removeAll { $0 == source }
-        Preferences.knownSources.removeAll { $0 == source }
-        onChange?()
+    // MARK: - Hangi AI gösterilsin?
+
+    private func frontmostChanged(_ app: NSRunningApplication?) {
+        guard let app = app, app.bundleIdentifier != Bundle.main.bundleIdentifier else { return }
+        pinnedSource = AppMatcher.source(for: app)
+        if let source = pinnedSource { model(for: source) }
+        chooseDisplay()
     }
+
+    /// Öndeki uygulama bir AI'sa onu göster. Değilse en acil olanı (seni bekleyen > çalışan),
+    /// eşitlikte en son hareket edeni. Hepsi boştaysa olduğu gibi kalsın.
+    private func chooseDisplay() {
+        guard let avatar = avatar else { return }
+        if let pinned = pinnedSource, let m = models[pinned] {
+            avatar.show(m)
+            return
+        }
+        let current = avatar.current
+        var best: RobotModel?
+        for m in allModels {
+            guard let last = m.lastRealEvent else { continue }
+            if let b = best, let bLast = b.lastRealEvent {
+                if (m.state.priority, last) > (b.state.priority, bLast) { best = m }
+            } else {
+                best = m
+            }
+        }
+        guard let candidate = best, candidate !== current else { return }
+        let higher = candidate.state.priority > current.state.priority
+        let sameButNewer = candidate.state.priority == current.state.priority
+            && candidate.state.priority >= RobotState.thinking.priority
+            && (candidate.lastRealEvent ?? .distantPast) > (current.lastRealEvent ?? .distantPast)
+        if higher || sameButNewer { avatar.show(candidate) }
+    }
+
+    // MARK: - Döngü
 
     private func screenFrame() -> NSRect {
         (NSScreen.main ?? NSScreen.screens.first)?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
-    }
-
-    private func layoutBounds() {
-        let f = screenFrame()
-        for c in controllers.values {
-            c.model.setBounds(minX: f.minX - 40,
-                              maxX: f.maxX - Layout.windowSize.width + 40,
-                              groundY: f.minY)
-        }
     }
 
     private func tick() {
@@ -107,9 +160,7 @@ final class RobotManager {
         let dt = CGFloat(Swift.min(0.1, now - lastTick))
         lastTick = now
         let date = Date()
-        for c in controllers.values {
-            c.model.tick(dt: dt, now: date)
-            if visible { c.syncFrame() }
-        }
+        for m in models.values { m.refresh(now: date) }
+        if visible { window?.tick(dt: dt) }
     }
 }

@@ -16,8 +16,10 @@ enum AppInfo {
 }
 
 enum Layout {
-    static let windowSize = CGSize(width: 240, height: 260)
-    static let robotSize = CGSize(width: 90, height: 124)
+    static let windowSize = CGSize(width: 280, height: 250)
+    static let headSize = CGSize(width: 100, height: 110)
+    static let margin: CGFloat = 16      // pencere kenarı ile kafa arası
+    static let edgeInset: CGFloat = 14   // ekran köşesi ile kafa arası
 }
 
 enum Language: String, CaseIterable {
@@ -50,6 +52,12 @@ func loc(_ tr: String, _ en: String) -> String {
 
 enum Preferences {
     private static let defaults = UserDefaults.standard
+
+    /// Boştayken ara sıra laf atsın.
+    static var idleChatter: Bool {
+        get { defaults.object(forKey: "idleChatter") as? Bool ?? true }
+        set { defaults.set(newValue, forKey: "idleChatter") }
+    }
 
     /// Balonda ve bildirimlerde eyleme göre emoji.
     static var emojiEnabled: Bool {
@@ -103,6 +111,12 @@ final class Themes {
     ]
 
     private var custom: [String: (name: String?, hex: String?)] = [:]
+    private var appSources: [String: String] = [:]   // bundle id (küçük harf) → kaynak
+
+    /// config.json'daki "apps" eşlemesi: {"com.todesktop.230313mzl4w4u92": "claude"}
+    func appSource(bundleID: String) -> String? {
+        appSources[bundleID.lowercased()]
+    }
 
     static func canonical(_ raw: String) -> String {
         let key = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -120,10 +134,16 @@ final class Themes {
 
     func reload() {
         custom = [:]
+        appSources = [:]
         guard let data = try? Data(contentsOf: AppInfo.configFile),
               let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { return }
         if let seconds = (root["longTurnSeconds"] as? NSNumber)?.doubleValue {
             Preferences.longTurnSeconds = seconds
+        }
+        if let apps = root["apps"] as? [String: String] {
+            for (bundleID, source) in apps {
+                appSources[bundleID.lowercased()] = Themes.canonical(source)
+            }
         }
         guard let sources = root["sources"] as? [String: Any] else { return }
         for (key, value) in sources {

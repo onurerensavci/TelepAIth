@@ -75,7 +75,7 @@ final class AppController: NSObject {
     }
 
     private func updateIcon() {
-        let waiting = manager.models.contains { $0.state == .waiting }
+        let waiting = manager.allModels.contains { $0.state == .waiting }
         if waiting {
             let image = NSImage(systemSymbolName: "exclamationmark.bubble", accessibilityDescription: AppInfo.name)
             image?.isTemplate = true
@@ -103,7 +103,7 @@ final class AppController: NSObject {
             menu.addItem(update)
         }
 
-        for model in manager.models {
+        for model in manager.allModels {
             let item = NSMenuItem(title: "", action: #selector(showRobotHistory(_:)), keyEquivalent: "")
             item.target = self
             item.representedObject = model.source
@@ -115,10 +115,11 @@ final class AppController: NSObject {
         }
 
         menu.addItem(.separator())
-        menu.addItem(toggleItem(loc("Robotları göster", "Show robots"), on: manager.visible, action: #selector(toggleRobots)))
+        menu.addItem(toggleItem(loc("Robotu göster", "Show robot"), on: manager.visible, action: #selector(toggleRobots)))
         menu.addItem(toggleItem(loc("Bildirimler", "Notifications"), on: Preferences.notificationsEnabled,
                                 action: #selector(toggleNotifications)))
         menu.addItem(toggleItem(loc("Emojiler", "Emojis"), on: Preferences.emojiEnabled, action: #selector(toggleEmoji)))
+        menu.addItem(toggleItem(loc("Boştayken laf atsın", "Idle chatter"), on: Preferences.idleChatter, action: #selector(toggleChatter)))
 
         let language = NSMenuItem(title: loc("Dil", "Language"), action: nil, keyEquivalent: "")
         let languageMenu = NSMenu()
@@ -196,6 +197,11 @@ final class AppController: NSObject {
         rebuildMenu()
     }
 
+    @objc private func toggleChatter() {
+        Preferences.idleChatter.toggle()
+        rebuildMenu()
+    }
+
     @objc private func toggleEmoji() {
         Preferences.emojiEnabled.toggle()
         rebuildMenu()
@@ -214,7 +220,7 @@ final class AppController: NSObject {
                 try HookInstaller.uninstall(target)
             } else {
                 try HookInstaller.install(target)
-                manager.controller(for: target.source)
+                manager.model(for: target.source)
                 let info: String
                 switch target {
                 case .claude:

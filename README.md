@@ -2,11 +2,12 @@
 
 <h1 align="center">TelepAIth</h1>
 
-Ekranında gezinen küçük bir robot-büyücü. Claude Code ya da Codex (GPT) o an ne yapıyorsa okur, balonla söyler, iş bitince ya da seni beklerken bildirim atar. Her AI'ın kendi robotu ve rengi var: Claude turuncu, GPT mavi. İstediğin başka bir AI'ı da bağlayabilirsin.
+Ekranının köşesinde süzülen küçük bir robot-büyücü kafası. Claude Code ya da Codex (GPT) o an ne yapıyorsa okur, başının üstündeki balonla söyler, iş bitince ya da seni beklerken bildirim atar. Claude'a geçince turuncu, Codex'e geçince maviye döner. İstediğin başka bir AI'ı da bağlayabilirsin.
 
 - **Durumlar:** düşünüyor, okuyor, arıyor, düzenliyor, komut çalıştırıyor, alt ajan çalıştırıyor, seni bekliyor, bitti, hata, uyuyor
-- **Robot:** Dock'un üstünde yürür, iş yoğunlaşınca koşar, düşünürken başından telepati halkaları çıkar, bitince zıplar, 10 dakika olay gelmezse uyur
-- **Etkileşim:** robota tıkla → son 5 olay; sürükle → taşı (havada bırakırsan düşer); sağ tık → gizle
+- **Robot:** gövdesiz, şapkalı bir kafa. Havada süzülür; düşünürken başından telepati halkaları yayılır, şapkasının ucundaki küre durumuna göre renk değiştirir, bitince zıplar, hata olunca sarsılır, 10 dakika olay gelmezse uyur. Boştayken ara sıra laf atar (menüden kapatılabilir).
+- **Hangi AI:** öndeki uygulama Claude ise turuncu, Codex ya da ChatGPT ise mavi robot olur. Başka bir uygulamadaysan (Terminal gibi) seni bekleyen ya da o an çalışan AI'ı gösterir. Kendi eşlemen için config.json'a `"apps": {"uygulama.bundle.id": "claude"}` ekleyebilirsin.
+- **Etkileşim:** robota tıkla → son 5 olay; sürükle → taşı, bir köşeye yaklaştırıp bırakınca oraya yapışır; sağ tık → gizle
 - **Bildirim:** 20 saniyeden uzun süren iş bitince, AI senden onay/cevap beklerken ve hata olunca
 - **Kota:** ClaudeBar kuruluysa, kota azalınca ilgili robot uyarır
 - **Dil:** Türkçe veya İngilizce (menü → Dil). İlk açılışta sistem dilini kullanır.
@@ -108,7 +109,7 @@ Değiştirdikten sonra menü → **Renkleri ve kostümleri yeniden yükle**.
 
 Robot normalde kodla çizilir. GPT'ye çizdirdiğin karakteri koymak için:
 
-1. `docs/GORSEL-PROMPT.md`'deki prompt ile 5×2'lik karakter tablosunu ürettir (şeffaf arka plan).
+1. `docs/GORSEL-PROMPT.md`'deki prompt ile 5×2'lik kafa tablosunu ürettir (şeffaf arka plan).
 2. Turuncu sürümü `~/.telepaith/skins/claude/sheet.png`, mavi sürümü `~/.telepaith/skins/gpt/sheet.png` olarak kaydet.
 3. Menü → **Renkleri ve kostümleri yeniden yükle**.
 

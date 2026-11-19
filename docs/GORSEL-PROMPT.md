@@ -5,29 +5,29 @@ Promptlar İngilizce, çünkü görsel modeller İngilizcede daha tutarlı. Önc
 ## 1. Karakter tablosu (turuncu, Claude)
 
 ```
-Create a character sprite sheet for a cute mascot named TelepAIth: a small robot-wizard hybrid.
+Create a character sprite sheet for a cute mascot named TelepAIth: a floating robot head wearing a wizard hat. No body, no arms, no legs: only the head and the hat.
 
-Character design: chibi proportions. A rounded, boxy robot head with a dark glass visor and two glowing pale-cyan pill-shaped eyes. A tall pointed wizard hat that bends slightly to the right, with a small glowing orb at the tip and a tiny star emblem on the front. A short flowing wizard robe with a thin off-white trim at the hem. A small dark chest screen on the robe. Small mitten-like robot hands, little round feet peeking out under the robe. Small metal bolts on the sides of the head.
+Character design: a rounded, boxy off-white robot head with a dark glass visor and two glowing pale-cyan pill-shaped eyes, small lavender bolts on both sides. A tall pointed wizard hat with a wide brim, bending slightly to the right, with a small glowing orb at the tip and a tiny star emblem on the front. The head floats in the air with a soft shadow below.
 
-Colors: hat and robe in warm terracotta orange (#D97757), hands, feet and hat brim in a darker shade of the same orange, off-white trim, dark charcoal visor.
+Colors: hat in warm terracotta orange (#D97757), hat brim in a darker shade of the same orange, off-white head, dark charcoal visor.
 
 Style: soft 3D clay / vinyl toy render, smooth matte surfaces, gentle studio lighting, subtle soft shadows on the character itself, no outlines, friendly and charming. The character must look identical in every cell.
 
-Layout: ONE image containing a strict grid of 5 columns × 2 rows with equal-sized cells. Transparent background. No grid lines, no borders, no text, no labels, no floor. Each cell shows the same character, full body, centered in its cell, same scale, feet on the same baseline, 3/4 view facing right, with some empty margin around the character.
+Layout: ONE image containing a strict grid of 5 columns × 2 rows with equal-sized cells. Transparent background. No grid lines, no borders, no text, no labels, no floor. Each cell shows the same floating head with its hat, centered in its cell, same scale, front view, with some empty margin around it.
 
 Row 1, left to right:
-1. idle: standing relaxed, slight smile, orb glowing soft white
-2. thinking: looking up, one hand near the chin, faint concentric telepathic rings around the head, orb glowing yellow
-3. reading: holding a small open glowing spellbook, eyes looking down at it
-4. searching: peering through a small magnifying glass
-5. editing: typing glowing runes in the air with both hands
+1. idle: calm, gentle eyes, orb glowing soft yellow
+2. thinking: eyes looking up, faint concentric telepathic rings around the head, orb glowing yellow
+3. reading: eyes looking down at a small floating glowing spellbook
+4. searching: a small magnifying glass floating in front of one eye
+5. editing: glowing runes floating around the head
 
 Row 2, left to right:
-6. running: mid-stride, robe flowing behind, a small magic spark from one hand, orb glowing green
-7. waiting: waving one hand high, attentive wide eyes, orb glowing red
-8. done: jumping happily with both arms up, happy arc-shaped eyes, small sparkles around
-9. error: slumped shoulders, X-shaped eyes, a small puff of smoke from the hat, orb red
-10. sleeping: sitting down, eyes closed as thin lines, hat drooping, small "z" shapes floating
+6. running: focused narrow eyes, small motion lines, orb glowing green
+7. waiting: big attentive eyes, a small exclamation sparkle, orb glowing red
+8. done: happy arc-shaped eyes, hat tilted joyfully, sparkles around
+9. error: X-shaped eyes, a small puff of smoke from the hat, orb red
+10. sleeping: eyes closed as thin lines, hat drooping over one side, small "z" shapes floating
 
 Wide canvas, high resolution (about 2560 × 1024).
 ```
@@ -37,7 +37,7 @@ Wide canvas, high resolution (about 2560 × 1024).
 Aynı sohbette:
 
 ```
-Make the exact same sprite sheet with the exact same character, poses, layout and transparent background, but change the main color of the hat and robe to bright blue (#3B82F6) and the darker parts to a deeper navy blue. Keep everything else identical.
+Make the exact same sprite sheet with the exact same character, poses, layout and transparent background, but change the hat to bright blue (#3B82F6) and the brim to a deeper navy blue. Keep everything else identical.
 ```
 
 ## 3. Uygulama ikonu

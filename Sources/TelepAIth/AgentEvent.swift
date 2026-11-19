@@ -118,6 +118,9 @@ enum EventParser {
             e.state = .thinking
             e.emoji = "🔮"
             e.text = loc("Düşünüyor…", "Thinking…")
+            if let prompt = j["prompt"] as? String, !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                e.text = loc("Düşünüyor…", "Thinking…") + "\n«" + clip(prompt, 60) + "»"
+            }
         case "PreToolUse":
             let d = ToolDescriber.describe(tool: tool, input: input)
             e.kind = d.state == .waiting ? .waiting : .tool
