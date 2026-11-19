@@ -12,6 +12,10 @@ final class RobotModel: ObservableObject {
         var updated: Date
         var turnStart: Date?
         var lastWaitNotice: Date?
+        var tools = 0
+        var edits = 0
+        var errors = 0
+        var errorRun = 0
     }
 
     struct Notice {
@@ -26,6 +30,8 @@ final class RobotModel: ObservableObject {
     @Published private(set) var bubbleSubtitle: String?
     @Published private(set) var celebrateStart: Date?
     @Published private(set) var errorStart: Date?
+    @Published private(set) var mood: Mood?
+    private var moodUntil: Date?
 
     var onStateChange: (() -> Void)?
 
@@ -71,6 +77,16 @@ final class RobotModel: ObservableObject {
         ["🎉", "✨", "✅", "🪄"].randomElement() ?? "🎉"
     }
 
+    private func setMood(_ mood: Mood, for seconds: Double, now: Date) {
+        self.mood = mood
+        moodUntil = now.addingTimeInterval(seconds)
+    }
+
+    private static func play(_ name: String) {
+        guard Preferences.sounds else { return }
+        NSSound(named: NSSound.Name(name))?.play()
+    }
+
     private static func idleThought() -> String {
         let thoughts: [(String, String, String)] = [
             ("🪄", "Bir büyü yapalım mı?", "Shall we cast a spell?"),
@@ -91,6 +107,7 @@ final class RobotModel: ObservableObject {
         lastEventAt = now
         if e.kind != .heartbeat && e.kind != .toolDone { lastRealEvent = now }
         if let t = e.text, !t.isEmpty { remember(withEmoji(e.emoji, t), now: now) }
+        if let m = e.mood { setMood(m, for: e.moodSeconds, now: now) }
         var notice: Notice?
 
         switch e.kind {
@@ -110,8 +127,23 @@ final class RobotModel: ObservableObject {
                     s.text = loc("Devam ediyor…", "Back to work…")
                     s.emoji = "🔮"
                 }
+                if e.state == .error {
+                    s.errors += 1
+                    s.errorRun += 1
+                    if s.errorRun >= 3 {
+                        setMood(.dizzy, for: 6, now: now)
+                        showOverride(withEmoji("😵‍💫", loc("Üst üste \(s.errorRun) hata", "\(s.errorRun) errors in a row")), for: 5, now: now)
+                        RobotModel.play("Basso")
+                    }
+                } else {
+                    s.errorRun = 0
+                }
                 s.updated = now
                 sessions[e.sessionID] = s
+            }
+            if let t = e.text, !(e.state == .error && (sessions[e.sessionID]?.errorRun ?? 0) >= 3) {
+                showOverride(withEmoji(e.emoji, t), for: 4, now: now)
+                if e.mood == .party { RobotModel.play("Hero") }
             }
 
         case .sessionEnd:
@@ -127,20 +159,43 @@ final class RobotModel: ObservableObject {
             }
             if let p = e.project { s.project = p }
             s.updated = now
-            if e.kind == .prompt { s.turnStart = now }
+            if e.kind == .prompt {
+                s.turnStart = now
+                s.tools = 0
+                s.edits = 0
+                s.errors = 0
+                s.errorRun = 0
+            }
             if s.state.isWorking && s.turnStart == nil { s.turnStart = now }
+            if e.kind == .tool {
+                s.tools += 1
+                if s.state == .editing { s.edits += 1 }
+            }
             let place = s.project.map { " · \($0)" } ?? ""
 
             switch e.kind {
             case .stop:
                 let duration = s.turnStart.map { now.timeIntervalSince($0) } ?? 0
-                let phrase = RobotModel.donePhrase()
-                var text = e.text ?? (duration >= 1 ? "\(phrase) (\(formatDuration(duration)))" : phrase)
+                // Mochi gibi tur özeti: süre, araç ve düzenleme sayısı
+                var parts = [RobotModel.donePhrase()]
+                if duration >= 1 { parts.append(formatDuration(duration)) }
+                if s.tools > 0 { parts.append(loc("\(s.tools) araç", "\(s.tools) tools")) }
+                if s.edits > 0 { parts.append(loc("\(s.edits) düzenleme", "\(s.edits) edits")) }
+                var text = e.text ?? parts.joined(separator: " · ")
                 if let m = e.lastMessage, !m.isEmpty { text += "\n" + clip(m, 110) }
                 s.text = text
-                s.emoji = e.emoji ?? RobotModel.doneEmoji()
+                if duration > 180 || s.tools > 25 {
+                    s.emoji = e.emoji ?? "😮‍💨"
+                    setMood(.tired, for: 6, now: now)
+                } else if s.edits > 0 && s.errors == 0 {
+                    s.emoji = e.emoji ?? RobotModel.doneEmoji()
+                    setMood(.proud, for: 6, now: now)
+                } else {
+                    s.emoji = e.emoji ?? RobotModel.doneEmoji()
+                }
                 s.turnStart = nil
                 celebrateStart = now
+                RobotModel.play("Glass")
                 remember(withEmoji(s.emoji, text), now: now)
                 if e.forceNotify || duration >= Preferences.longTurnSeconds {
                     var body = (s.project ?? loc("Görev", "Task")) + " — " + formatDuration(duration)
@@ -151,11 +206,13 @@ final class RobotModel: ObservableObject {
                 let canNotify = s.lastWaitNotice.map { now.timeIntervalSince($0) > 20 } ?? true
                 if canNotify {
                     s.lastWaitNotice = now
+                    RobotModel.play("Ping")
                     notice = Notice(title: withEmoji(s.emoji, theme.displayName + loc(" seni bekliyor", " needs you") + place),
                                     body: s.text ?? loc("Cevabını bekliyor", "Waiting for your reply"))
                 }
             case .failure:
                 errorStart = now
+                RobotModel.play("Basso")
                 notice = Notice(title: withEmoji(s.emoji, theme.displayName + loc(" hata verdi", " hit an error") + place),
                                 body: s.text ?? "")
             case .interrupt:
@@ -192,6 +249,10 @@ final class RobotModel: ObservableObject {
     // MARK: - Durum hesaplama (saniyede 30 kez çağrılır)
 
     func refresh(now: Date) {
+        if let until = moodUntil, until <= now {
+            moodUntil = nil
+            mood = nil
+        }
         if now.timeIntervalSince(lastCleanup) > 5 {
             lastCleanup = now
             sessions = sessions.filter { now.timeIntervalSince($0.value.updated) < 3600 }

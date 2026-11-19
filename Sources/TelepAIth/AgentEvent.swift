@@ -72,6 +72,11 @@ enum RobotState: String, CaseIterable {
     }
 }
 
+/// Kısa süreli ruh hâli (mochi gibi): gözlerin desenini ve emojiyi değiştirir.
+enum Mood: String {
+    case pleased, shocked, nervous, scared, proud, party, tired, dizzy, denied
+}
+
 enum EventKind {
     case sessionStart, prompt, tool, toolDone, waiting, stop, failure, interrupt, sessionEnd, quota, generic, heartbeat
 }
@@ -86,6 +91,10 @@ struct AgentEvent {
     var lastMessage: String? = nil
     var forceNotify = false
     var emoji: String? = nil
+    var mood: Mood? = nil
+    var moodSeconds: Double = 3
+    /// Bu süreç öndeyken bildirim gösterme (kullanıcı zaten bakıyor)
+    var quietIfFrontmostPID: Int32? = nil
 }
 
 /// Gelen HTTP isteğini robotun anlayacağı olaya çevirir.
@@ -120,6 +129,11 @@ enum EventParser {
             e.text = loc("Düşünüyor…", "Thinking…")
             if let prompt = j["prompt"] as? String, !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 e.text = loc("Düşünüyor…", "Thinking…") + "\n«" + clip(prompt, 60) + "»"
+                if let reaction = Reactions.onPrompt(prompt) {
+                    e.mood = reaction.mood
+                    e.moodSeconds = reaction.seconds
+                    e.emoji = reaction.emoji
+                }
             }
         case "PreToolUse":
             let d = ToolDescriber.describe(tool: tool, input: input)
@@ -127,8 +141,57 @@ enum EventParser {
             e.state = d.state
             e.text = d.text
             e.emoji = d.emoji
+            if d.state == .running, let cmd = ToolDescriber.commandString(input) {
+                if Reactions.isScary(cmd) {
+                    e.mood = .scared
+                    e.moodSeconds = 5
+                    e.emoji = "😱"
+                    e.text = loc("Dikkat! ", "Careful! ") + clip(cmd, 60)
+                } else if Reactions.isTest(cmd) {
+                    e.mood = .nervous
+                    e.moodSeconds = 4
+                }
+            }
         case "PostToolUse", "PostToolUseFailure":
             e.kind = .toolDone
+            let failed = name == "PostToolUseFailure" || Reactions.looksFailed(j["tool_response"])
+            let cmd = ToolDescriber.commandString(input) ?? ""
+            if failed {
+                e.state = .error   // sadece sayaç için; oturumun durumu değişmez
+                if Reactions.isTest(cmd) {
+                    e.text = loc("Testler kırıldı", "Tests failed")
+                    e.emoji = "😵"
+                    e.mood = .dizzy
+                    e.moodSeconds = 6
+                } else if Reactions.wasRefused(j["tool_response"]) {
+                    e.text = loc("İzin verilmedi: ", "Not allowed: ") + ToolDescriber.shortName(tool)
+                    e.emoji = "🙅"
+                    e.mood = .denied
+                    e.moodSeconds = 4
+                } else {
+                    e.text = loc("Hata: ", "Error: ") + ToolDescriber.shortName(tool)
+                    e.emoji = "😬"
+                    e.mood = .nervous
+                    e.moodSeconds = 4
+                }
+            } else if !cmd.isEmpty {
+                if Reactions.isTest(cmd) {
+                    e.text = loc("Testler geçti!", "Tests passed!")
+                    e.emoji = "🎉"
+                    e.mood = .party
+                    e.moodSeconds = 5
+                } else if Reactions.isPush(cmd) {
+                    e.text = loc("Gönderildi!", "Pushed!")
+                    e.emoji = "🚀"
+                    e.mood = .party
+                    e.moodSeconds = 5
+                } else if Reactions.isCommit(cmd) {
+                    e.text = loc("Commit atıldı", "Committed")
+                    e.emoji = "💾"
+                    e.mood = .proud
+                    e.moodSeconds = 4
+                }
+            }
         case "PermissionRequest":
             e.kind = .waiting
             e.state = .waiting
@@ -168,6 +231,8 @@ enum EventParser {
             e.state = .idle
             e.emoji = "⏹️"
             e.text = loc("Durduruldu", "Interrupted")
+            e.mood = .shocked
+            e.moodSeconds = 3
         case "SessionEnd":
             e.kind = .sessionEnd
             e.emoji = "👋"
@@ -380,5 +445,81 @@ enum ToolDescriber {
             }
         }
         return nil
+    }
+}
+
+/// Mochi'den esinlenen tepkiler: istemin tonu, tehlikeli komutlar, test/commit/push.
+enum Reactions {
+    struct PromptReaction {
+        let mood: Mood
+        let seconds: Double
+        let emoji: String
+    }
+
+    static func onPrompt(_ text: String) -> PromptReaction? {
+        let said = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let low = said.lowercased()
+
+        let thanks = ["teşekkür", "tesekkur", "sağol", "sagol", "sağ ol", "eyvallah", "tşk", "tsk", "eline sağlık",
+                      "harika", "süper", "super", "mükemmel", "aferin", "bravo", "helal", "efsane", "şahane",
+                      "thanks", "thank you", "thx", "great job", "awesome", "perfect", "well done", "nice work", "love it"]
+        if thanks.contains(where: { low.contains($0) }) {
+            return PromptReaction(mood: .pleased, seconds: 3, emoji: "🥰")
+        }
+
+        let letters = said.filter { $0.isLetter }
+        let upper = letters.filter { $0.isUppercase }
+        if letters.count >= 8 && Double(upper.count) / Double(letters.count) > 0.7 {
+            return PromptReaction(mood: .shocked, seconds: 2.5, emoji: "😳")
+        }
+
+        let frustration = ["çalışmıyor", "calismiyor", "bozuk", "olmadı", "olmadi", "neden", "niye", "yine", "hala ",
+                           "hâlâ", "saçma", "yanlış", "??", "doesn't work", "not working", "broken", "still", "why", "again", "wtf"]
+        if frustration.contains(where: { low.contains($0) }) {
+            return PromptReaction(mood: .nervous, seconds: 3, emoji: "😬")
+        }
+        return nil
+    }
+
+    static func isScary(_ command: String) -> Bool {
+        let c = command.lowercased()
+        let patterns = [#"\brm\s+-[a-z]*r[a-z]*f"#, #"\brm\s+-[a-z]*f[a-z]*r"#, #"git\s+push\b.*(--force|\s-f\b)"#,
+                        #"git\s+reset\s+--hard"#, #"git\s+clean\s+-[a-z]*f"#, #"\bdrop\s+(table|database)\b"#,
+                        #"\bmkfs\b"#, #"\bdd\s+if="#, #"chmod\s+-r\s+777"#, #"sudo\s+rm\b"#]
+        return patterns.contains { c.range(of: $0, options: .regularExpression) != nil }
+    }
+
+    static func isTest(_ command: String) -> Bool {
+        let c = (" " + command.lowercased() + " ").replacingOccurrences(of: "latest", with: "")
+        return [" test", "test ", "test:", " jest", " vitest", " pytest", " rspec", "go test", "swift test", "cargo test"]
+            .contains { c.contains($0) }
+    }
+
+    static func isCommit(_ command: String) -> Bool {
+        command.range(of: #"git\s+commit\b"#, options: [.regularExpression, .caseInsensitive]) != nil
+    }
+
+    static func isPush(_ command: String) -> Bool {
+        command.range(of: #"git\s+push\b"#, options: [.regularExpression, .caseInsensitive]) != nil
+    }
+
+    /// Aracın cevabı hata gibi mi? (Claude Code ve Codex farklı alanlar kullanıyor)
+    static func looksFailed(_ response: Any?) -> Bool {
+        guard let r = response as? [String: Any] else { return false }
+        if (r["is_error"] as? Bool) == true || (r["isError"] as? Bool) == true { return true }
+        if let code = (r["exit_code"] as? NSNumber) ?? (r["exitCode"] as? NSNumber) { return code.intValue != 0 }
+        if (r["success"] as? Bool) == false { return true }
+        return false
+    }
+
+    static func wasRefused(_ response: Any?) -> Bool {
+        let text: String
+        if let r = response as? [String: Any] {
+            text = r.values.compactMap { $0 as? String }.joined(separator: " ")
+        } else {
+            text = (response as? String) ?? ""
+        }
+        return text.range(of: #"doesn't want to proceed|user (rejected|denied|declined)|permission.*denied|was rejected"#,
+                          options: [.regularExpression, .caseInsensitive]) != nil
     }
 }

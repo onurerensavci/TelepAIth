@@ -2,12 +2,13 @@
 
 <h1 align="center">TelepAIth</h1>
 
-Ekranının köşesinde süzülen küçük bir robot-büyücü kafası. Claude Code ya da Codex (GPT) o an ne yapıyorsa okur, başının üstündeki balonla söyler, iş bitince ya da seni beklerken bildirim atar. Claude'a geçince gözleri turuncu, Codex'e geçince mavi parlar. İstediğin başka bir AI'ı da bağlayabilirsin.
+Ekranının köşesinde süzülen, LED nokta gözlü küçük bir robot kafası. Claude ve GPT o an ne yapıyorsa okur (Claude Code, Codex ve Claude/ChatGPT masaüstü uygulamaları), başının üstündeki balonla söyler, iş bitince ya da seni beklerken bildirim atar. Claude'a geçince gözleri turuncu, GPT'ye geçince mavi yanar. İstediğin başka bir AI'ı da bağlayabilirsin.
 
 - **Durumlar:** düşünüyor, okuyor, arıyor, düzenliyor, komut çalıştırıyor, alt ajan çalıştırıyor, seni bekliyor, bitti, hata, uyuyor
-- **Robot:** gövdesiz, şapkalı bir kafa. Havada süzülür; düşünürken başından telepati halkaları yayılır, şapkasının ucundaki küre durumuna göre renk değiştirir, bitince zıplar, hata olunca sarsılır, 10 dakika olay gelmezse uyur. Boştayken ara sıra laf atar (menüden kapatılabilir).
-- **Hangi AI:** gözlerinin renginden anlarsın: öndeki uygulama Claude ise turuncu, Codex ya da ChatGPT ise mavi. Şapka hep büyücü moru. Başka bir uygulamadaysan (Terminal gibi) seni bekleyen ya da o an çalışan AI'ı gösterir. Kendi eşlemen için config.json'a `"apps": {"uygulama.bundle.id": "claude"}` ekleyebilirsin.
-- **Pencereye uçma:** Claude'a, ChatGPT'ye ya da Codex'e geçince robot o pencerenin sağ-alt köşesine uçar, pencereyi taşırsan peşinden gelir; başka bir uygulamaya geçince kendi yerine döner (menü → AI penceresine gitsin).
+- **Robot:** gövdesiz bir kafa; gözleri minik LED noktalarından oluşur ve duruma göre desen değiştirir (düşünürken yukarı bakar, okurken sağa sola tarar, bitince ^^ olur, hata olunca X). Alnındaki LED durum ışığıdır. Düşünürken başından telepati halkaları yayılır, bitince zıplar, hata olunca sarsılır, 10 dakika olay gelmezse uyur. Boştayken ara sıra laf atar (menüden kapatılabilir).
+- **Ruh hâlleri (mochi gibi):** teşekkür edince gözleri kalp olur, "çalışmıyor/neden" deyince gerilir, BÜYÜK HARFLE yazınca şaşırır; `rm -rf` gibi tehlikeli komutta korkar; testler geçince parti yapar, kırılınca başı döner; commit'te gururlanır, push'ta sevinir; üst üste 3 hatada sersemler. İş bitince tur özeti verir: süre · araç sayısı · düzenleme sayısı. İstersen kısa sesler de çalar (menü → Sesler).
+- **Hangi AI:** gözlerinin renginden anlarsın: öndeki uygulama Claude ise turuncu, Codex ya da ChatGPT ise mavi. Başka bir uygulamadaysan (Terminal gibi) seni bekleyen ya da o an çalışan AI'ı gösterir. Kendi eşlemen için config.json'a `"apps": {"uygulama.bundle.id": "claude"}` ekleyebilirsin.
+- **Pencereye uçma:** Claude'a, ChatGPT'ye ya da Codex'e geçince robot o pencerenin sağ-alt köşesine uçar, pencereyi taşırsan peşinden gelir; başka uygulamalara geçince olduğu yerde kalır (menü → AI penceresine gitsin).
 - **Etkileşim:** robota tıkla → son 5 olay; sürükle → taşı (başka monitöre de), bir köşeye yaklaştırıp bırakınca o ekranın köşesine yapışır; sağ tık → gizle
 - **Bildirim:** 20 saniyeden uzun süren iş bitince, AI senden onay/cevap beklerken ve hata olunca
 - **Kota:** ClaudeBar kuruluysa, kota azalınca ilgili robot uyarır
@@ -49,6 +50,8 @@ Yerelde `scripts/build-app.sh` ile derlenen kopya da, `origin` GitHub deposuysa 
 ## Bağlantılar
 
 Menü → **Bağlantılar**:
+
+- **Claude ve ChatGPT uygulamaları:** Claude, ChatGPT ve Codex masaüstü uygulamalarında AI'ın çalıştığını, onay beklediğini ve bitirdiğini ekrandaki düğmelerden ("Durdur", "İzin ver") anlar. macOS'un **Erişilebilirlik** iznini ister: Sistem Ayarları → Gizlilik ve Güvenlik → Erişilebilirlik → TelepAIth. Uygulama imzasız olduğu için her güncellemeden sonra bu izni kapatıp açman gerekebilir; menüde ⚠︎ uyarısı çıkarsa bundandır. Bu uygulamalarda hangi aracın çalıştığını göremez, sadece çalışıyor/bekliyor/bitti bilgisini görür.
 
 - **Claude Code:** `~/.claude/settings.json`'a hook ekler. Yeni açılan oturumlar robota haber verir. İlk değişiklikten önce dosyanın yedeği `settings.json.telepaith-backup` olarak alınır.
 - **Codex (GPT):** `~/.codex/hooks.json`'a hook ekler. Codex yeni hook'lar için onay istiyor: Codex'i açınca `/hooks` yazıp TelepAIth hook'larını onayla.

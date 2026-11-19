@@ -25,6 +25,9 @@ final class RobotManager {
     private var lastDockCheck = CACurrentMediaTime()
     private var timer: Timer?
     private var lastTick = CACurrentMediaTime()
+    private let watcher = AppWatcher()
+    private var lastTrustCheck = CACurrentMediaTime()
+    private var wasTrusted = AppWatcher.isTrusted
 
     var onChange: (() -> Void)?
 
@@ -77,13 +80,31 @@ final class RobotManager {
         }
         frontmostChanged(NSWorkspace.shared.frontmostApplication)
 
+        watcher.onEvent = { [weak self] event in self?.handle(event) }
+        if Preferences.watchApps { watcher.start() }
+
         if visible { window.show() }
+    }
+
+    /// Claude/ChatGPT/Codex masaüstü uygulamalarını izlemeyi aç/kapat.
+    func setWatchApps(_ on: Bool) {
+        Preferences.watchApps = on
+        if on {
+            if !AppWatcher.isTrusted { AppWatcher.requestTrust() }
+            watcher.start()
+        } else {
+            watcher.stop()
+        }
     }
 
     func handle(_ event: AgentEvent) {
         let m = model(for: event.source)
         if let notice = m.apply(event) {
-            Notifier.shared.notify(title: notice.title, body: notice.body)
+            let lookingAtIt = event.quietIfFrontmostPID != nil
+                && NSWorkspace.shared.frontmostApplication?.processIdentifier == event.quietIfFrontmostPID
+            if !lookingAtIt {
+                Notifier.shared.notify(title: notice.title, body: notice.body)
+            }
         }
         chooseDisplay()
         onChange?()
@@ -124,13 +145,13 @@ final class RobotManager {
         if let source = pinnedSource { model(for: source) }
         chooseDisplay()
 
-        // AI uygulamasına geçince robot o pencerenin sağ-alt köşesine uçsun, başka yere geçince evine dönsün
+        // Sadece AI uygulamasına geçince robot o pencerenin sağ-alt köşesine uçsun.
+        // Başka bir uygulamaya geçince olduğu yerde kalsın (pencereyi takip etmeyi bırakır).
         if pinnedSource != nil && Preferences.followAppWindow {
             dockPID = app.processIdentifier
             refreshDock()
         } else {
             dockPID = nil
-            avatar?.goHome()
         }
     }
 
@@ -207,6 +228,20 @@ final class RobotManager {
         if dockPID != nil && now - lastDockCheck > 0.2 {
             lastDockCheck = now
             refreshDock()
+        }
+        // Erişilebilirlik izni verildi/alındı mı? (menüdeki uyarıyı güncelle)
+        if Preferences.watchApps && now - lastTrustCheck > 2 {
+            lastTrustCheck = now
+            let trusted = AppWatcher.isTrusted
+            if trusted != wasTrusted {
+                wasTrusted = trusted
+                if trusted {
+                    Notifier.shared.notify(title: withEmoji("👀", AppInfo.name),
+                                           body: loc("Artık Claude ve ChatGPT uygulamalarını da görebiliyorum.",
+                                                     "I can now see the Claude and ChatGPT apps too."))
+                }
+                onChange?()
+            }
         }
         if visible { window?.tick(dt: dt) }
     }

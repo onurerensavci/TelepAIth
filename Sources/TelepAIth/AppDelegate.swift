@@ -133,10 +133,22 @@ final class AppController: NSObject {
         language.submenu = languageMenu
         menu.addItem(language)
 
+        menu.addItem(toggleItem(loc("Sesler", "Sounds"), on: Preferences.sounds, action: #selector(toggleSounds)))
+
         menu.addItem(.separator())
         let connections = NSMenuItem(title: loc("Bağlantılar", "Connections"), action: nil, keyEquivalent: "")
         connections.isEnabled = false
         menu.addItem(connections)
+        let watch = toggleItem(loc("Claude ve ChatGPT uygulamaları", "Claude & ChatGPT apps"), on: Preferences.watchApps,
+                               action: #selector(toggleWatchApps))
+        watch.indentationLevel = 1
+        menu.addItem(watch)
+        if Preferences.watchApps && !AppWatcher.isTrusted {
+            let warn = actionItem("⚠︎ " + loc("Erişilebilirlik izni gerekli…", "Accessibility permission needed…"),
+                                  #selector(openAccessibility))
+            warn.indentationLevel = 2
+            menu.addItem(warn)
+        }
         for target in HookTarget.allCases {
             let item = toggleItem(target.displayName, on: HookInstaller.isInstalled(target), action: #selector(toggleHook(_:)))
             item.representedObject = target.rawValue
@@ -197,6 +209,27 @@ final class AppController: NSObject {
     @objc private func toggleNotifications() {
         Preferences.notificationsEnabled.toggle()
         rebuildMenu()
+    }
+
+    @objc private func toggleSounds() {
+        Preferences.sounds.toggle()
+        rebuildMenu()
+    }
+
+    @objc private func toggleWatchApps() {
+        let on = !Preferences.watchApps
+        manager.setWatchApps(on)
+        if on && !AppWatcher.isTrusted {
+            showAlert(title: loc("Erişilebilirlik izni", "Accessibility permission"),
+                      text: loc("Claude ve ChatGPT masaüstü uygulamalarının ne zaman çalıştığını görebilmem için Sistem Ayarları → Gizlilik ve Güvenlik → Erişilebilirlik'te TelepAIth'i aç.\n\nNot: uygulama her güncellendiğinde bu izni kapatıp yeniden açman gerekebilir.",
+                                "To see when the Claude and ChatGPT desktop apps are working, turn on TelepAIth in System Settings → Privacy & Security → Accessibility.\n\nNote: after each update you may need to turn this permission off and on again."))
+            AppWatcher.openAccessibilitySettings()
+        }
+        rebuildMenu()
+    }
+
+    @objc private func openAccessibility() {
+        AppWatcher.openAccessibilitySettings()
     }
 
     @objc private func toggleFollow() {

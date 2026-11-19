@@ -17,7 +17,7 @@ enum AppInfo {
 
 enum Layout {
     static let windowSize = CGSize(width: 280, height: 250)
-    static let headSize = CGSize(width: 100, height: 110)
+    static let headSize = CGSize(width: 100, height: 100)
     static let margin: CGFloat = 16      // pencere kenarı ile kafa arası
     static let edgeInset: CGFloat = 14   // ekran köşesi ile kafa arası
 }
@@ -52,6 +52,18 @@ func loc(_ tr: String, _ en: String) -> String {
 
 enum Preferences {
     private static let defaults = UserDefaults.standard
+
+    /// Bitti, bekliyor, hata gibi anlarda kısa sesler.
+    static var sounds: Bool {
+        get { defaults.object(forKey: "sounds") as? Bool ?? false }
+        set { defaults.set(newValue, forKey: "sounds") }
+    }
+
+    /// Claude, ChatGPT ve Codex masaüstü uygulamalarını Erişilebilirlik ile izle.
+    static var watchApps: Bool {
+        get { defaults.object(forKey: "watchApps") as? Bool ?? false }
+        set { defaults.set(newValue, forKey: "watchApps") }
+    }
 
     /// Claude/ChatGPT/Codex'e geçince robot o pencerenin köşesine gitsin.
     static var followAppWindow: Bool {
