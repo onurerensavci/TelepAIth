@@ -82,6 +82,14 @@ final class RobotManager {
             let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
             self?.frontmostChanged(app)
         }
+        // Masaüstü (Space) değişince: öndeki uygulama Claude/GPT ise robot o masaüstüne gelsin,
+        // değilse olduğu masaüstünde kalsın.
+        NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.activeSpaceDidChangeNotification,
+                                                          object: nil, queue: .main) { [weak self] _ in
+            guard let self = self, self.pinnedSource != nil, self.visible else { return }
+            self.window?.bringToActiveSpace()
+        }
+
         frontmostChanged(NSWorkspace.shared.frontmostApplication)
 
         watcher.onEvent = { [weak self] event in self?.handle(event) }
@@ -120,6 +128,12 @@ final class RobotManager {
         }
         chooseDisplay()
         onChange?()
+    }
+
+    /// Menüden: robotu şu anki masaüstüne getir.
+    func bringRobotHere() {
+        if !visible { visible = true }
+        window?.bringToActiveSpace()
     }
 
     func reloadAppearance() {
@@ -196,6 +210,13 @@ final class RobotManager {
             refreshDock()
         } else {
             dockPID = nil
+        }
+        // Claude/GPT başka bir masaüstündeyse robot da oraya geçsin (masaüstü geçiş animasyonundan sonra)
+        if pinnedSource != nil && visible {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { [weak self] in
+                guard let self = self, self.pinnedSource != nil else { return }
+                self.window?.bringToActiveSpace()
+            }
         }
     }
 

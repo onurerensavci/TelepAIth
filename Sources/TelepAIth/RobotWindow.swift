@@ -285,7 +285,9 @@ final class AvatarWindowController: NSObject {
         panel.backgroundColor = .clear
         panel.hasShadow = false
         panel.level = .statusBar
-        panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary, .ignoresCycle]
+        // Her masaüstünde değil: Claude/GPT hangi masaüstündeyse orada kalır.
+        // Öne getirildiğinde o anki masaüstüne taşınır (moveToActiveSpace).
+        panel.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary, .ignoresCycle]
         panel.hidesOnDeactivate = false
         panel.isReleasedWhenClosed = false
         panel.ignoresMouseEvents = true
@@ -319,6 +321,11 @@ final class AvatarWindowController: NSObject {
 
     func hide() {
         panel.orderOut(nil)
+    }
+
+    /// Robotu şu an açık olan masaüstüne taşır.
+    func bringToActiveSpace() {
+        panel.orderFrontRegardless()
     }
 
     func tick(dt: CGFloat) {
