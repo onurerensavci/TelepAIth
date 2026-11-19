@@ -7,9 +7,9 @@ Promptlar İngilizce, çünkü görsel modeller İngilizcede daha tutarlı. Önc
 ```
 Create a character sprite sheet for a cute mascot named TelepAIth: a floating robot head wearing a wizard hat. No body, no arms, no legs: only the head and the hat.
 
-Character design: a rounded, boxy off-white robot head with a dark glass visor and two glowing pale-cyan pill-shaped eyes, small lavender bolts on both sides. A tall pointed wizard hat with a wide brim, bending slightly to the right, with a small glowing orb at the tip and a tiny star emblem on the front. The head floats in the air with a soft shadow below.
+Character design: a rounded, boxy off-white robot head with a dark glass visor and two glowing pill-shaped eyes, small lavender bolts on both sides. A tall pointed wizard hat with a wide brim, bending slightly to the right, with a small glowing orb at the tip and a tiny star emblem on the front. The head floats in the air with a soft shadow below.
 
-Colors: hat in warm terracotta orange (#D97757), hat brim in a darker shade of the same orange, off-white head, dark charcoal visor.
+Colors: wizard hat in purple (#6D5BD0) with a darker purple brim (#4A3CA8) and a golden star, off-white head, dark charcoal visor, eyes glowing warm terracotta orange (#D97757).
 
 Style: soft 3D clay / vinyl toy render, smooth matte surfaces, gentle studio lighting, subtle soft shadows on the character itself, no outlines, friendly and charming. The character must look identical in every cell.
 
@@ -37,7 +37,7 @@ Wide canvas, high resolution (about 2560 × 1024).
 Aynı sohbette:
 
 ```
-Make the exact same sprite sheet with the exact same character, poses, layout and transparent background, but change the hat to bright blue (#3B82F6) and the brim to a deeper navy blue. Keep everything else identical.
+Make the exact same sprite sheet with the exact same character, poses, layout and transparent background, but change only the eye glow color to bright blue (#3B82F6). The hat stays purple. Keep everything else identical.
 ```
 
 ## 3. Uygulama ikonu

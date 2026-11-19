@@ -143,8 +143,7 @@ struct HeadFigure: View {
     var body: some View {
         let state = model.state
         let base = model.theme.color
-        let hatColor = Color(nsColor: base)
-        let brimColor = Color(nsColor: base.mix(.black, 0.22))
+        let eyeColor = Color(nsColor: base.mix(.white, 0.22))   // gözler uygulamanın renginde
         let accent = Color(nsColor: base.mix(.white, 0.55))
         let hop = hopHeight
         let float = floatOffset(state)
@@ -168,8 +167,8 @@ struct HeadFigure: View {
                         .position(x: 50, y: 52)
                 } else {
                     ZStack {
-                        FaceView(state: state, time: time, look: look)
-                        HatView(state: state, time: time, color: hatColor, brim: brimColor, accent: accent)
+                        FaceView(state: state, time: time, look: look, eyeColor: eyeColor)
+                        HatView(state: state, time: time)
                             .rotationEffect(.degrees(hatTilt(state)), anchor: UnitPoint(x: 0.5, y: 0.42))
                     }
                 }
@@ -270,12 +269,14 @@ struct HappyEyeShape: Shape {
     }
 }
 
+/// Şapka her AI'da aynı: büyücü moru. Hangi AI olduğunu gözlerin rengi söyler.
 struct HatView: View {
     let state: RobotState
     let time: TimeInterval
-    let color: Color
-    let brim: Color
-    let accent: Color
+
+    private let color = Color(red: 0.43, green: 0.36, blue: 0.82)    // #6D5BD0
+    private let brim = Color(red: 0.29, green: 0.24, blue: 0.66)     // #4A3CA8
+    private let accent = Color(red: 1.0, green: 0.88, blue: 0.48)    // #FFE07A
 
     var body: some View {
         ZStack {
@@ -331,6 +332,7 @@ struct FaceView: View {
     let state: RobotState
     let time: TimeInterval
     let look: CGFloat
+    let eyeColor: Color
 
     var body: some View {
         ZStack {
@@ -346,7 +348,7 @@ struct FaceView: View {
                 .fill(Color(red: 0.09, green: 0.08, blue: 0.16))
                 .frame(width: 62, height: 32)
                 .position(x: 50, y: 77)
-            EyesView(state: state, look: look, time: time)
+            EyesView(state: state, look: look, time: time, color: eyeColor)
         }
     }
 }
@@ -355,14 +357,13 @@ struct EyesView: View {
     let state: RobotState
     let look: CGFloat
     let time: TimeInterval
+    let color: Color
 
     var body: some View {
-        let color = state == .error
-            ? Color(red: 1, green: 0.55, blue: 0.55)
-            : Color(red: 0.56, green: 0.96, blue: 1)
+        let tint = state == .error ? Color(red: 1, green: 0.42, blue: 0.42) : color
         return ZStack {
-            eye(x: 40, color: color)
-            eye(x: 60, color: color)
+            eye(x: 40, color: tint)
+            eye(x: 60, color: tint)
         }
     }
 
@@ -386,7 +387,7 @@ struct EyesView: View {
         } else {
             ZStack {
                 Capsule()
-                    .fill(color.opacity(0.18))
+                    .fill(color.opacity(0.3))
                     .frame(width: eyeWidth + 6, height: (blinking ? 2 : eyeHeight) + 6)
                     .position(x: x + look + eyeDX, y: 77 + eyeDY)
                 Capsule()

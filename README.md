@@ -2,11 +2,11 @@
 
 <h1 align="center">TelepAIth</h1>
 
-Ekranının köşesinde süzülen küçük bir robot-büyücü kafası. Claude Code ya da Codex (GPT) o an ne yapıyorsa okur, başının üstündeki balonla söyler, iş bitince ya da seni beklerken bildirim atar. Claude'a geçince turuncu, Codex'e geçince maviye döner. İstediğin başka bir AI'ı da bağlayabilirsin.
+Ekranının köşesinde süzülen küçük bir robot-büyücü kafası. Claude Code ya da Codex (GPT) o an ne yapıyorsa okur, başının üstündeki balonla söyler, iş bitince ya da seni beklerken bildirim atar. Claude'a geçince gözleri turuncu, Codex'e geçince mavi parlar. İstediğin başka bir AI'ı da bağlayabilirsin.
 
 - **Durumlar:** düşünüyor, okuyor, arıyor, düzenliyor, komut çalıştırıyor, alt ajan çalıştırıyor, seni bekliyor, bitti, hata, uyuyor
 - **Robot:** gövdesiz, şapkalı bir kafa. Havada süzülür; düşünürken başından telepati halkaları yayılır, şapkasının ucundaki küre durumuna göre renk değiştirir, bitince zıplar, hata olunca sarsılır, 10 dakika olay gelmezse uyur. Boştayken ara sıra laf atar (menüden kapatılabilir).
-- **Hangi AI:** öndeki uygulama Claude ise turuncu, Codex ya da ChatGPT ise mavi robot olur. Başka bir uygulamadaysan (Terminal gibi) seni bekleyen ya da o an çalışan AI'ı gösterir. Kendi eşlemen için config.json'a `"apps": {"uygulama.bundle.id": "claude"}` ekleyebilirsin.
+- **Hangi AI:** gözlerinin renginden anlarsın: öndeki uygulama Claude ise turuncu, Codex ya da ChatGPT ise mavi. Şapka hep büyücü moru. Başka bir uygulamadaysan (Terminal gibi) seni bekleyen ya da o an çalışan AI'ı gösterir. Kendi eşlemen için config.json'a `"apps": {"uygulama.bundle.id": "claude"}` ekleyebilirsin.
 - **Etkileşim:** robota tıkla → son 5 olay; sürükle → taşı, bir köşeye yaklaştırıp bırakınca oraya yapışır; sağ tık → gizle
 - **Bildirim:** 20 saniyeden uzun süren iş bitince, AI senden onay/cevap beklerken ve hata olunca
 - **Kota:** ClaudeBar kuruluysa, kota azalınca ilgili robot uyarır
