@@ -12,5 +12,9 @@ jobs:
       - uses: actions/checkout@v4
       - name: Swift sürümü
         run: swift --version
-      - name: Derle
-        run: swift build -c release
+      - name: Uygulamayı derle (ikon ve imza dahil)
+        run: |
+          chmod +x scripts/*.sh
+          scripts/build-app.sh
+          test -f build/TelepAIth.app/Contents/Resources/AppIcon.icns
+          /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" build/TelepAIth.app/Contents/Info.plist

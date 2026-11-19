@@ -28,8 +28,19 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN_DIR/$APP_NAME" "$APP/Contents/MacOS/$APP_NAME"
 
+# Uygulama ikonu: hazır .icns varsa onu, yoksa assets/AppIcon.png'den üret
 if [ -f "assets/AppIcon.icns" ]; then
   cp "assets/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
+elif [ -f "assets/AppIcon.png" ]; then
+  SET="build/AppIcon.iconset"
+  rm -rf "$SET"
+  mkdir -p "$SET"
+  for size in 16 32 128 256 512; do
+    sips -z $size $size "assets/AppIcon.png" --out "$SET/icon_${size}x${size}.png" >/dev/null
+    double=$((size * 2))
+    sips -z $double $double "assets/AppIcon.png" --out "$SET/icon_${size}x${size}@2x.png" >/dev/null
+  done
+  iconutil -c icns "$SET" -o "$APP/Contents/Resources/AppIcon.icns"
 fi
 
 cat > "$APP/Contents/Info.plist" <<EOF

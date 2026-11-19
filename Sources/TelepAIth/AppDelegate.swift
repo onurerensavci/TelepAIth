@@ -76,10 +76,13 @@ final class AppController: NSObject {
 
     private func updateIcon() {
         let waiting = manager.models.contains { $0.state == .waiting }
-        let image = NSImage(systemSymbolName: waiting ? "exclamationmark.bubble" : "wand.and.stars",
-                            accessibilityDescription: AppInfo.name)
-        image?.isTemplate = true
-        statusItem?.button?.image = image
+        if waiting {
+            let image = NSImage(systemSymbolName: "exclamationmark.bubble", accessibilityDescription: AppInfo.name)
+            image?.isTemplate = true
+            statusItem?.button?.image = image
+        } else {
+            statusItem?.button?.image = BrandIcon.menuBar
+        }
     }
 
     private func rebuildMenu() {

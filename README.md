@@ -1,4 +1,6 @@
-# TelepAIth
+<p align="center"><img src="assets/logo.svg" width="160" alt="TelepAIth"></p>
+
+<h1 align="center">TelepAIth</h1>
 
 Ekranında gezinen küçük bir robot-büyücü. Claude Code ya da Codex (GPT) o an ne yapıyorsa okur, balonla söyler, iş bitince ya da seni beklerken bildirim atar. Her AI'ın kendi robotu ve rengi var: Claude turuncu, GPT mavi. İstediğin başka bir AI'ı da bağlayabilirsin.
 
@@ -112,7 +114,7 @@ Robot normalde kodla çizilir. GPT'ye çizdirdiğin karakteri koymak için:
 
 Tablo sırası: 1. satır `idle, thinking, reading, searching, editing`; 2. satır `running, waiting, done, error, sleeping`. Tablo yerine tek tek `idle.png`, `waiting.png` gibi dosyalar da koyabilirsin; tek dosyalar tablodakini ezer. Kaynağa özel klasör yoksa `skins/default/` kullanılır.
 
-Uygulama ikonu için: `scripts/make-icon.sh ikon.png` → `assets/AppIcon.icns`, sonra yeniden `scripts/build-app.sh`.
+Uygulama ikonu `assets/AppIcon.png` (kaynağı `assets/logo.svg`). Değiştirmek için bu PNG'yi 1024×1024 yeni bir görselle değiştir; derleme sırasında .icns otomatik üretilir.
 
 ## Sorun giderme
 
