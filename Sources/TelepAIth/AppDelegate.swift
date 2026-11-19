@@ -120,6 +120,8 @@ final class AppController: NSObject {
                                 action: #selector(toggleNotifications)))
         menu.addItem(toggleItem(loc("Emojiler", "Emojis"), on: Preferences.emojiEnabled, action: #selector(toggleEmoji)))
         menu.addItem(toggleItem(loc("Boştayken laf atsın", "Idle chatter"), on: Preferences.idleChatter, action: #selector(toggleChatter)))
+        menu.addItem(toggleItem(loc("AI penceresine gitsin", "Follow the AI window"), on: Preferences.followAppWindow,
+                                action: #selector(toggleFollow)))
 
         let language = NSMenuItem(title: loc("Dil", "Language"), action: nil, keyEquivalent: "")
         let languageMenu = NSMenu()
@@ -194,6 +196,12 @@ final class AppController: NSObject {
 
     @objc private func toggleNotifications() {
         Preferences.notificationsEnabled.toggle()
+        rebuildMenu()
+    }
+
+    @objc private func toggleFollow() {
+        Preferences.followAppWindow.toggle()
+        manager.followSettingChanged()
         rebuildMenu()
     }
 

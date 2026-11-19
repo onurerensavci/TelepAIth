@@ -5,20 +5,26 @@ enum Corner: String, CaseIterable {
     case bottomLeft, bottomRight, topLeft, topRight
 }
 
-/// Ekrandaki tek robot: hangi AI'ı gösterdiği, nerede durduğu, köşelere yapışma.
+/// Ekrandaki tek robot: hangi AI'ı gösterdiği, nerede durduğu, köşelere yapışma,
+/// AI uygulamasının penceresine uçma.
 final class RobotAvatar: ObservableObject {
     @Published private(set) var current: RobotModel
     @Published private(set) var alignLeft = false     // kafa pencerenin solunda, balon sağa uzar
     @Published private(set) var bubbleBelow = false   // ekranın üst yarısında: balon kafanın altında
 
-    /// Kafanın merkezi (ekran koordinatı, sol-alt köken)
+    /// Kafanın merkezi (ekran koordinatı, ana ekranın sol-alt köşesi köken)
     private(set) var head: CGPoint = .zero
     private(set) var isDragging = false
     private var dragStartHead: CGPoint = .zero
     private var target: CGPoint?
-    private var screen = NSRect(x: 0, y: 0, width: 1440, height: 900)
+
+    /// Kullanıcı robotu elle taşıyınca (pencere takibini bırakmak için)
+    var onUserMoved: (() -> Void)?
 
     private static let snapDistance: CGFloat = 260
+    /// AI penceresinin sağ-alt köşesinden kafa merkezine uzaklık
+    private static let dockOffset = CGPoint(x: 95, y: 100)
+    private static let fallbackFrame = NSRect(x: 0, y: 0, width: 1440, height: 900)
 
     init(model: RobotModel) {
         current = model
@@ -32,58 +38,99 @@ final class RobotAvatar: ObservableObject {
         }
     }
 
-    // MARK: Konum
+    // MARK: Ekranlar
 
-    func setScreen(_ frame: NSRect) {
-        screen = frame
-        if let raw = UserDefaults.standard.string(forKey: "avatarCorner"), let corner = Corner(rawValue: raw) {
-            head = point(for: corner)
-        } else {
-            head = clamp(head)
+    private static func screen(containing p: CGPoint) -> NSScreen? {
+        let screens = NSScreen.screens
+        if let s = screens.first(where: { $0.frame.contains(p) }) { return s }
+        return screens.min { distance(p, $0.frame) < distance(p, $1.frame) }
+    }
+
+    private static func distance(_ p: CGPoint, _ r: NSRect) -> CGFloat {
+        let dx = Swift.max(r.minX - p.x, 0, p.x - r.maxX)
+        let dy = Swift.max(r.minY - p.y, 0, p.y - r.maxY)
+        return hypot(dx, dy)
+    }
+
+    private static func displayID(of screen: NSScreen) -> Int {
+        (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.intValue ?? 0
+    }
+
+    private static func screen(withID id: Int) -> NSScreen? {
+        NSScreen.screens.first { displayID(of: $0) == id }
+    }
+
+    private static func cornerPoint(_ corner: Corner, in frame: NSRect) -> CGPoint {
+        let hw = Layout.headSize.width / 2 + Layout.edgeInset
+        let hh = Layout.headSize.height / 2 + Layout.edgeInset
+        switch corner {
+        case .bottomLeft: return CGPoint(x: frame.minX + hw, y: frame.minY + hh)
+        case .bottomRight: return CGPoint(x: frame.maxX - hw, y: frame.minY + hh)
+        case .topLeft: return CGPoint(x: frame.minX + hw, y: frame.maxY - hh)
+        case .topRight: return CGPoint(x: frame.maxX - hw, y: frame.maxY - hh)
         }
+    }
+
+    private static func clamp(_ p: CGPoint, to frame: NSRect) -> CGPoint {
+        let hw = Layout.headSize.width / 2 + Layout.edgeInset
+        let hh = Layout.headSize.height / 2 + Layout.edgeInset
+        let x = Swift.min(Swift.max(p.x, frame.minX + hw), frame.maxX - hw)
+        let y = Swift.min(Swift.max(p.y, frame.minY + hh), frame.maxY - hh)
+        return CGPoint(x: x, y: y)
+    }
+
+    // MARK: Ev konumu (kullanıcının bıraktığı köşe ya da nokta, hangi ekranda olursa)
+
+    private var homePoint: CGPoint {
+        let defaults = UserDefaults.standard
+        if let raw = defaults.string(forKey: "avatarCorner"), let corner = Corner(rawValue: raw) {
+            let screen = RobotAvatar.screen(withID: defaults.integer(forKey: "avatarScreen")) ?? NSScreen.main ?? NSScreen.screens.first
+            return RobotAvatar.cornerPoint(corner, in: screen?.visibleFrame ?? RobotAvatar.fallbackFrame)
+        }
+        if let x = defaults.object(forKey: "avatarX") as? Double, let y = defaults.object(forKey: "avatarY") as? Double {
+            let p = CGPoint(x: x, y: y)
+            return RobotAvatar.clamp(p, to: RobotAvatar.screen(containing: p)?.visibleFrame ?? RobotAvatar.fallbackFrame)
+        }
+        let frame = (NSScreen.main ?? NSScreen.screens.first)?.visibleFrame ?? RobotAvatar.fallbackFrame
+        return RobotAvatar.cornerPoint(.bottomRight, in: frame)
+    }
+
+    func restorePosition() {
+        head = homePoint
         target = nil
         updateSides(for: head)
     }
 
-    func restorePosition() {
-        let defaults = UserDefaults.standard
-        if let raw = defaults.string(forKey: "avatarCorner"), let corner = Corner(rawValue: raw) {
-            head = point(for: corner)
-        } else if let x = defaults.object(forKey: "avatarX") as? Double, let y = defaults.object(forKey: "avatarY") as? Double {
-            head = clamp(CGPoint(x: x, y: y))
-        } else {
-            head = point(for: .bottomRight)
-        }
-        updateSides(for: head)
+    func goHome() {
+        guard !isDragging else { return }
+        moveTo(homePoint)
     }
 
-    private func point(for corner: Corner) -> CGPoint {
-        let hw = Layout.headSize.width / 2 + Layout.edgeInset
-        let hh = Layout.headSize.height / 2 + Layout.edgeInset
-        switch corner {
-        case .bottomLeft: return CGPoint(x: screen.minX + hw, y: screen.minY + hh)
-        case .bottomRight: return CGPoint(x: screen.maxX - hw, y: screen.minY + hh)
-        case .topLeft: return CGPoint(x: screen.minX + hw, y: screen.maxY - hh)
-        case .topRight: return CGPoint(x: screen.maxX - hw, y: screen.maxY - hh)
-        }
+    /// AI uygulamasının penceresinin sağ-alt köşesine uç (pencere taşınırsa tekrar çağrılır).
+    func dock(to window: NSRect) {
+        guard !isDragging else { return }
+        var p = CGPoint(x: window.maxX - RobotAvatar.dockOffset.x, y: window.minY + RobotAvatar.dockOffset.y)
+        p.x = Swift.max(p.x, window.minX + Layout.headSize.width / 2)
+        p.y = Swift.min(p.y, window.maxY - Layout.headSize.height / 2)
+        let reference = target ?? head
+        if hypot(reference.x - p.x, reference.y - p.y) < 1 { return }
+        moveTo(p)
     }
 
-    private func clamp(_ p: CGPoint) -> CGPoint {
-        let hw = Layout.headSize.width / 2 + Layout.edgeInset
-        let hh = Layout.headSize.height / 2 + Layout.edgeInset
-        let x = Swift.min(Swift.max(p.x, screen.minX + hw), screen.maxX - hw)
-        let y = Swift.min(Swift.max(p.y, screen.minY + hh), screen.maxY - hh)
-        return CGPoint(x: x, y: y)
+    private func moveTo(_ p: CGPoint) {
+        target = p
+        updateSides(for: p)
     }
 
     private func updateSides(for p: CGPoint) {
-        let left = p.x < screen.midX
-        let below = p.y > screen.midY
+        let frame = RobotAvatar.screen(containing: p)?.frame ?? RobotAvatar.fallbackFrame
+        let left = p.x < frame.midX
+        let below = p.y > frame.midY
         if alignLeft != left { alignLeft = left }
         if bubbleBelow != below { bubbleBelow = below }
     }
 
-    // MARK: Sürükleme
+    // MARK: Sürükleme (ekrandan ekrana serbest)
 
     func beginDrag() {
         isDragging = true
@@ -95,34 +142,36 @@ final class RobotAvatar: ObservableObject {
         head = CGPoint(x: dragStartHead.x + dx, y: dragStartHead.y + dy)
     }
 
-    /// Bırakınca en yakın köşeye yapışır; köşeden uzaksa olduğu yerde kalır.
+    /// Bırakıldığı ekranda en yakın köşeye yapışır; köşeden uzaksa olduğu yerde kalır.
     func endDrag() {
         isDragging = false
         let defaults = UserDefaults.standard
+        let screen = RobotAvatar.screen(containing: head)
+        let frame = screen?.visibleFrame ?? RobotAvatar.fallbackFrame
+
         var nearest: (corner: Corner, distance: CGFloat)?
         for corner in Corner.allCases {
-            let p = point(for: corner)
+            let p = RobotAvatar.cornerPoint(corner, in: frame)
             let d = hypot(p.x - head.x, p.y - head.y)
             if nearest == nil || d < nearest!.distance { nearest = (corner: corner, distance: d) }
         }
-        let destination: CGPoint
         if let n = nearest, n.distance < RobotAvatar.snapDistance {
-            destination = point(for: n.corner)
             defaults.set(n.corner.rawValue, forKey: "avatarCorner")
+            defaults.set(screen.map { RobotAvatar.displayID(of: $0) } ?? 0, forKey: "avatarScreen")
         } else {
-            destination = clamp(head)
+            let p = RobotAvatar.clamp(head, to: frame)
             defaults.removeObject(forKey: "avatarCorner")
-            defaults.set(Double(destination.x), forKey: "avatarX")
-            defaults.set(Double(destination.y), forKey: "avatarY")
+            defaults.set(Double(p.x), forKey: "avatarX")
+            defaults.set(Double(p.y), forKey: "avatarY")
         }
-        target = destination
-        updateSides(for: destination)
+        moveTo(homePoint)
+        onUserMoved?()
     }
 
-    /// Yapışma animasyonu (saniyede 30 kez).
+    /// Yapışma ve uçma animasyonu (saniyede 30 kez).
     func step(dt: CGFloat) {
         guard !isDragging, let t = target else { return }
-        let k = Swift.min(1, dt * 14)
+        let k = Swift.min(1, dt * 9)
         head = CGPoint(x: head.x + (t.x - head.x) * k, y: head.y + (t.y - head.y) * k)
         if hypot(t.x - head.x, t.y - head.y) < 0.5 {
             head = t

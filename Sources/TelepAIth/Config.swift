@@ -53,6 +53,12 @@ func loc(_ tr: String, _ en: String) -> String {
 enum Preferences {
     private static let defaults = UserDefaults.standard
 
+    /// Claude/ChatGPT/Codex'e geçince robot o pencerenin köşesine gitsin.
+    static var followAppWindow: Bool {
+        get { defaults.object(forKey: "followAppWindow") as? Bool ?? true }
+        set { defaults.set(newValue, forKey: "followAppWindow") }
+    }
+
     /// Boştayken ara sıra laf atsın.
     static var idleChatter: Bool {
         get { defaults.object(forKey: "idleChatter") as? Bool ?? true }

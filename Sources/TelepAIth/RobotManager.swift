@@ -21,6 +21,8 @@ final class RobotManager {
     private var avatar: RobotAvatar?
     private var window: AvatarWindowController?
     private var pinnedSource: String?
+    private var dockPID: pid_t?            // robotun peşinden gittiği AI uygulaması
+    private var lastDockCheck = CACurrentMediaTime()
     private var timer: Timer?
     private var lastTick = CACurrentMediaTime()
 
@@ -44,8 +46,8 @@ final class RobotManager {
 
         let first = models[sources[0]] ?? model(for: "claude")
         let avatar = RobotAvatar(model: first)
-        avatar.setScreen(screenFrame())
         avatar.restorePosition()
+        avatar.onUserMoved = { [weak self] in self?.dockPID = nil }
         self.avatar = avatar
 
         let window = AvatarWindowController(avatar: avatar)
@@ -64,7 +66,7 @@ final class RobotManager {
         NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification,
                                                object: nil, queue: .main) { [weak self] _ in
             guard let self = self else { return }
-            self.avatar?.setScreen(self.screenFrame())
+            if self.dockPID != nil { self.refreshDock() } else { self.avatar?.goHome() }
         }
 
         // Öndeki uygulama değişince robot o AI'a dönüşsün
@@ -121,6 +123,50 @@ final class RobotManager {
         pinnedSource = AppMatcher.source(for: app)
         if let source = pinnedSource { model(for: source) }
         chooseDisplay()
+
+        // AI uygulamasına geçince robot o pencerenin sağ-alt köşesine uçsun, başka yere geçince evine dönsün
+        if pinnedSource != nil && Preferences.followAppWindow {
+            dockPID = app.processIdentifier
+            refreshDock()
+        } else {
+            dockPID = nil
+            avatar?.goHome()
+        }
+    }
+
+    func followSettingChanged() {
+        if Preferences.followAppWindow {
+            frontmostChanged(NSWorkspace.shared.frontmostApplication)
+        } else {
+            dockPID = nil
+            avatar?.goHome()
+        }
+    }
+
+    private func refreshDock() {
+        guard let pid = dockPID, let avatar = avatar else { return }
+        if let frame = RobotManager.frontWindowFrame(pid: pid) {
+            avatar.dock(to: frame)
+        } else {
+            avatar.goHome()   // pencere küçültülmüş ya da kapalı
+        }
+    }
+
+    /// Uygulamanın en öndeki normal penceresi (Cocoa koordinatında). İzin gerektirmez.
+    private static func frontWindowFrame(pid: pid_t) -> NSRect? {
+        guard let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID)
+                as? [[String: Any]] else { return nil }
+        let primaryHeight = NSScreen.screens.first?.frame.height ?? 0
+        for info in list {   // önden arkaya sıralı
+            guard let owner = info[kCGWindowOwnerPID as String] as? Int32, owner == pid,
+                  let layer = info[kCGWindowLayer as String] as? Int, layer == 0,
+                  let boundsDict = info[kCGWindowBounds as String] as? NSDictionary,
+                  let bounds = CGRect(dictionaryRepresentation: boundsDict as CFDictionary) else { continue }
+            if bounds.width < 320 || bounds.height < 240 { continue }   // küçük açılır pencereleri atla
+            if let alpha = info[kCGWindowAlpha as String] as? Double, alpha < 0.1 { continue }
+            return NSRect(x: bounds.minX, y: primaryHeight - bounds.maxY, width: bounds.width, height: bounds.height)
+        }
+        return nil
     }
 
     /// Öndeki uygulama bir AI'sa onu göster. Değilse en acil olanı (seni bekleyen > çalışan),
@@ -151,16 +197,17 @@ final class RobotManager {
 
     // MARK: - Döngü
 
-    private func screenFrame() -> NSRect {
-        (NSScreen.main ?? NSScreen.screens.first)?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
-    }
-
     private func tick() {
         let now = CACurrentMediaTime()
         let dt = CGFloat(Swift.min(0.1, now - lastTick))
         lastTick = now
         let date = Date()
         for m in models.values { m.refresh(now: date) }
+        // Takip edilen pencere taşındı mı? (saniyede 5 kez bak)
+        if dockPID != nil && now - lastDockCheck > 0.2 {
+            lastDockCheck = now
+            refreshDock()
+        }
         if visible { window?.tick(dt: dt) }
     }
 }
