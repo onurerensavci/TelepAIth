@@ -61,7 +61,7 @@ enum Preferences {
 
     /// Claude, ChatGPT ve Codex masaüstü uygulamalarını Erişilebilirlik ile izle.
     static var watchApps: Bool {
-        get { defaults.object(forKey: "watchApps") as? Bool ?? false }
+        get { defaults.object(forKey: "watchApps") as? Bool ?? true }
         set { defaults.set(newValue, forKey: "watchApps") }
     }
 

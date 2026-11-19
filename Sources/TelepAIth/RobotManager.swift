@@ -26,6 +26,8 @@ final class RobotManager {
     private var timer: Timer?
     private var lastTick = CACurrentMediaTime()
     private let watcher = AppWatcher()
+    /// Menü için: izlenen masaüstü uygulamalarında ne görüyorum
+    private(set) var watcherStatus: [String: String] = [:]
     private var lastTrustCheck = CACurrentMediaTime()
     private var wasTrusted = AppWatcher.isTrusted
     private var lastUpdateAnnounce: CFTimeInterval = 0
@@ -83,7 +85,15 @@ final class RobotManager {
         frontmostChanged(NSWorkspace.shared.frontmostApplication)
 
         watcher.onEvent = { [weak self] event in self?.handle(event) }
-        if Preferences.watchApps { watcher.start() }
+        watcher.onStatus = { [weak self] status in
+            guard let self = self, self.watcherStatus != status else { return }
+            self.watcherStatus = status
+            self.onChange?()
+        }
+        if Preferences.watchApps {
+            if !AppWatcher.isTrusted { AppWatcher.requestTrust() }
+            watcher.start()
+        }
 
         if visible { window.show() }
     }
@@ -165,6 +175,7 @@ final class RobotManager {
             Updater.shared.promptInstall()
         case .broken(let reason):
             avatar.current.say(withEmoji("🔴", reason), for: 8)
+            if Preferences.watchApps && !AppWatcher.isTrusted { AppWatcher.openAccessibilitySettings() }
         case .ok:
             avatar.current.showHistory()
         }

@@ -95,7 +95,7 @@ final class RobotModel: ObservableObject {
             ("🙂", "Buradayım.", "I'm right here."),
             ("📚", "Yeni bir şey öğrenmek isterdim.", "I'd love to learn something new."),
             ("☕️", "Kahve molası mı?", "Coffee break?"),
-            ("🧙", "Şapkam yerinde mi?", "Is my hat on straight?"),
+            ("👀", "Noktalarım parlıyor mu?", "Are my dots glowing?"),
         ]
         let pick = thoughts.randomElement() ?? thoughts[0]
         return withEmoji(pick.0, loc(pick.1, pick.2))

@@ -91,8 +91,8 @@ final class AppController: NSObject {
             return .broken(loc("Sunucu açılamadı: ", "Server failed: ") + clip(error, 40))
         }
         if Preferences.watchApps && !AppWatcher.isTrusted {
-            return .broken(loc("Erişilebilirlik izni yok. Menü → Bağlantılar'dan izin ver.",
-                               "No Accessibility permission. Grant it from the menu → Connections."))
+            return .broken(loc("Claude'u göremiyorum: Erişilebilirlik izni yok ya da güncellemeyle düştü. Bana tıkla, Ayarlar'da TelepAIth'i aç (açıksa kapatıp yeniden aç).",
+                               "I can't see Claude: Accessibility permission is missing or was reset by an update. Click me and turn TelepAIth on in Settings (toggle it off and on if it's already on)."))
         }
         let anyHook = HookTarget.allCases.contains { HookInstaller.isInstalled($0) }
         if !anyHook && !Preferences.watchApps {
@@ -192,6 +192,18 @@ final class AppController: NSObject {
                                   #selector(openAccessibility))
             warn.indentationLevel = 2
             menu.addItem(warn)
+        } else if Preferences.watchApps {
+            for (name, status) in manager.watcherStatus.sorted(by: { $0.key < $1.key }) {
+                let line = NSMenuItem(title: "\(name): \(status)", action: nil, keyEquivalent: "")
+                line.isEnabled = false
+                line.indentationLevel = 2
+                menu.addItem(line)
+            }
+            if FileManager.default.fileExists(atPath: AppWatcher.debugFile.path) {
+                let debug = actionItem(loc("Algılama günlüğünü aç", "Open detection log"), #selector(openDebugLog))
+                debug.indentationLevel = 2
+                menu.addItem(debug)
+            }
         }
         for target in HookTarget.allCases {
             let item = toggleItem(target.displayName, on: HookInstaller.isInstalled(target), action: #selector(toggleHook(_:)))
@@ -274,6 +286,10 @@ final class AppController: NSObject {
 
     @objc private func openAccessibility() {
         AppWatcher.openAccessibilitySettings()
+    }
+
+    @objc private func openDebugLog() {
+        NSWorkspace.shared.open(AppWatcher.debugFile)
     }
 
     @objc private func toggleFollow() {

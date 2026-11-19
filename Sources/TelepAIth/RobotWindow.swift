@@ -126,7 +126,12 @@ final class RobotAvatar: ObservableObject {
         p.y = Swift.min(p.y, window.maxY - Layout.headSize.height / 2)
         let reference = target ?? head
         if hypot(reference.x - p.x, reference.y - p.y) < 1 { return }
-        moveTo(p)
+        target = p
+        // Balon pencerenin içine doğru açılsın (sağ-alt köşede: yukarı ve sola)
+        let left = p.x < window.midX
+        let below = p.y > window.midY
+        if alignLeft != left { alignLeft = left }
+        if bubbleBelow != below { bubbleBelow = below }
     }
 
     private func moveTo(_ p: CGPoint) {
