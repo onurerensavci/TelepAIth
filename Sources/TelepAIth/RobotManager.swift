@@ -175,7 +175,7 @@ final class RobotManager {
             Updater.shared.promptInstall()
         case .broken(let reason):
             avatar.current.say(withEmoji("🔴", reason), for: 8)
-            if Preferences.watchApps && !AppWatcher.isTrusted { AppWatcher.openAccessibilitySettings() }
+            if Preferences.watchApps && !AppWatcher.isTrusted { AppWatcher.resetAndRequestTrust() }
         case .ok:
             avatar.current.showHistory()
         }

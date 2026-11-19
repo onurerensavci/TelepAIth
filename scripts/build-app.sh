@@ -64,8 +64,16 @@ cat > "$APP/Contents/Info.plist" <<EOF
 </plist>
 EOF
 
-# Yerel imza (bildirim izni için gerekli)
-codesign --force --deep --sign - "$APP"
+# İmza: GitHub'daki sertifika varsa onunla (izinler güncellemelerde korunur), yoksa yerel (ad-hoc)
+IDENTITY="${CODESIGN_IDENTITY:-}"
+if [ -n "$IDENTITY" ]; then
+  echo "→ \"$IDENTITY\" ile imzalanıyor"
+  codesign --force --deep --sign "$IDENTITY" "$APP"
+else
+  codesign --force --deep --sign - "$APP"
+fi
+codesign --verify --verbose=1 "$APP" || true
+codesign -d -r- "$APP" 2>&1 | tail -1 || true
 
 echo "✓ Hazır: $APP"
 echo "  Çalıştır: open \"$APP\""

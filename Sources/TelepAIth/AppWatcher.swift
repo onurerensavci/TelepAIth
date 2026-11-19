@@ -57,6 +57,20 @@ final class AppWatcher {
         _ = AXIsProcessTrustedWithOptions([key: true] as CFDictionary)
     }
 
+    /// Eski (başka imzalı sürüme ait) izin kaydını silip yeniden ister.
+    /// Ayarlar'da açık görünüp çalışmayan izni düzeltir.
+    static func resetAndRequestTrust() {
+        if let bundleID = Bundle.main.bundleIdentifier {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/tccutil")
+            process.arguments = ["reset", "Accessibility", bundleID]
+            try? process.run()
+            process.waitUntilExit()
+        }
+        requestTrust()
+        openAccessibilitySettings()
+    }
+
     static func openAccessibilitySettings() {
         if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
             NSWorkspace.shared.open(url)

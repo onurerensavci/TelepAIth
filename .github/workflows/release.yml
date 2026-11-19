@@ -40,9 +40,35 @@ jobs:
           echo "version=$V" >> "$GITHUB_OUTPUT"
           echo "tag=v$V" >> "$GITHUB_OUTPUT"
 
+      - name: İmza sertifikasını hazırla
+        id: sign
+        env:
+          CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+          CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+        run: |
+          if [ -z "$CERT_P12" ]; then
+            echo "Sertifika yok: yerel (ad-hoc) imza kullanılacak"
+            echo "identity=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          KC="$RUNNER_TEMP/telepaith.keychain-db"
+          KCPASS="$(openssl rand -hex 12)"
+          security create-keychain -p "$KCPASS" "$KC"
+          security set-keychain-settings -lut 21600 "$KC"
+          security unlock-keychain -p "$KCPASS" "$KC"
+          printf '%s' "$CERT_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$KC" -P "$CERT_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KCPASS" "$KC" >/dev/null
+          security list-keychains -d user -s "$KC" $(security list-keychains -d user | tr -d '"')
+          security find-certificate -c "TelepAIth Self Signed" -p "$KC" > "$RUNNER_TEMP/cert.pem"
+          sudo security add-trusted-cert -d -r trustRoot -p codeSign -k /Library/Keychains/System.keychain "$RUNNER_TEMP/cert.pem"
+          security find-identity -p codesigning "$KC"
+          echo "identity=TelepAIth Self Signed" >> "$GITHUB_OUTPUT"
+
       - name: Uygulamayı derle
         env:
           VERSION: ${{ steps.v.outputs.version }}
+          CODESIGN_IDENTITY: ${{ steps.sign.outputs.identity }}
         run: |
           chmod +x scripts/*.sh
           scripts/build-app.sh

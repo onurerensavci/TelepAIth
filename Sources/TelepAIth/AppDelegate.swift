@@ -192,6 +192,10 @@ final class AppController: NSObject {
                                   #selector(openAccessibility))
             warn.indentationLevel = 2
             menu.addItem(warn)
+            let reset = actionItem(loc("İzni sıfırla ve yeniden iste", "Reset and request permission again"),
+                                   #selector(resetAccessibility))
+            reset.indentationLevel = 2
+            menu.addItem(reset)
         } else if Preferences.watchApps {
             for (name, status) in manager.watcherStatus.sorted(by: { $0.key < $1.key }) {
                 let line = NSMenuItem(title: "\(name): \(status)", action: nil, keyEquivalent: "")
@@ -277,7 +281,7 @@ final class AppController: NSObject {
         manager.setWatchApps(on)
         if on && !AppWatcher.isTrusted {
             showAlert(title: loc("Erişilebilirlik izni", "Accessibility permission"),
-                      text: loc("Claude ve ChatGPT masaüstü uygulamalarının ne zaman çalıştığını görebilmem için Sistem Ayarları → Gizlilik ve Güvenlik → Erişilebilirlik'te TelepAIth'i aç.\n\nNot: uygulama her güncellendiğinde bu izni kapatıp yeniden açman gerekebilir.",
+                      text: loc("Claude ve ChatGPT masaüstü uygulamalarının ne zaman çalıştığını görebilmem için Sistem Ayarları → Gizlilik ve Güvenlik → Erişilebilirlik'te TelepAIth'i aç.\n\nAçık görünüp yine de çalışmıyorsa menüden \"İzni sıfırla ve yeniden iste\"yi kullan.",
                                 "To see when the Claude and ChatGPT desktop apps are working, turn on TelepAIth in System Settings → Privacy & Security → Accessibility.\n\nNote: after each update you may need to turn this permission off and on again."))
             AppWatcher.openAccessibilitySettings()
         }
@@ -286,6 +290,10 @@ final class AppController: NSObject {
 
     @objc private func openAccessibility() {
         AppWatcher.openAccessibilitySettings()
+    }
+
+    @objc private func resetAccessibility() {
+        AppWatcher.resetAndRequestTrust()
     }
 
     @objc private func openDebugLog() {
