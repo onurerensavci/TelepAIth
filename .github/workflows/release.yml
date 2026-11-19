@@ -1,0 +1,32 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Uygulamayı derle
+        run: |
+          chmod +x scripts/*.sh
+          VERSION="${GITHUB_REF_NAME#v}" scripts/build-app.sh
+
+      - name: Zip'le
+        run: |
+          cd build
+          ditto -c -k --keepParent TelepAIth.app "TelepAIth-${GITHUB_REF_NAME}.zip"
+
+      - name: Sürümü yayınla
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" "build/TelepAIth-${GITHUB_REF_NAME}.zip" \
+            --title "TelepAIth ${GITHUB_REF_NAME}" \
+            --generate-notes
