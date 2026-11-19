@@ -120,6 +120,9 @@ final class RobotModel: ObservableObject {
         case .heartbeat:
             sessions[e.sessionID]?.updated = now
 
+        case .say:
+            showOverride(withEmoji(e.emoji, e.text ?? ""), for: 4, now: now)
+
         case .toolDone:
             if var s = sessions[e.sessionID] {
                 if s.state == .waiting {

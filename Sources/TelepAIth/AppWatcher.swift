@@ -26,6 +26,12 @@ final class AppWatcher {
         var phase: WorkPhase?
         var lastPhaseAt: TimeInterval = 0
         var startedAt: TimeInterval = 0
+        var lastTail: String?         // en alttaki mesaj metni (akış algılama için)
+        var growthPolls = 0
+        var stablePolls = 0
+        var chatKey: String?          // hangi sohbet açık (sayfa adresi ya da pencere başlığı)
+        var chatCounter = 0
+        func session(_ pid: pid_t) -> String { "app-\(pid)-\(chatCounter)" }
         var lastFullScan: TimeInterval = 0
         var lastDebugDump: TimeInterval = 0
         var enabledElectronAX = false
@@ -106,6 +112,7 @@ final class AppWatcher {
         var approve = false
         var texts: [(String, CGRect)] = []
         var buttonLabels: [String] = []
+        var urls: [String] = []
         var composerTop: CGFloat? { [stop, send].compactMap { $0?.minY }.min() }
     }
 
@@ -199,7 +206,9 @@ final class AppWatcher {
             }
 
             var found = Found()
+            var windowTitle: String?
             for window in AppWatcher.windows(of: app) {
+                if windowTitle == nil { windowTitle = AppWatcher.string(window, kAXTitleAttribute) }
                 guard let windowFrame = AppWatcher.frame(window), windowFrame.height > 100 else { continue }
                 // Sadece pencerenin alt %50'si: yazı kutusu, son mesaj, izin düğmeleri burada.
                 let zone = CGRect(x: windowFrame.minX, y: windowFrame.minY + windowFrame.height * 0.5,
@@ -219,8 +228,48 @@ final class AppWatcher {
             }
 
             if found.stop != nil || found.send != nil { st.sawComposer = true }
-            let generatingNow = found.stop != nil
-            update(&st, pid: target.pid, found: found, generatingNow: generatingNow, now: now)
+
+            // Başka sohbete geçildi mi? Geçildiyse eski sohbet için "bitti" deme, tıklanan sohbete geç.
+            let chatKey = found.urls.first(where: { $0.contains("/chat") }) ?? found.urls.last ?? windowTitle
+            if let key = chatKey, !key.isEmpty {
+                if let old = st.chatKey, old != key {
+                    if st.generating || st.approving {
+                        emitMain(AgentEvent(source: st.source, sessionID: st.session(target.pid), kind: .sessionEnd))
+                    }
+                    st.generating = false
+                    st.approving = false
+                    st.quietPolls = 0
+                    st.phase = nil
+                    st.chatCounter += 1
+                    var text = loc("Bu sohbete geçtim", "Switched to this chat")
+                    if let title = windowTitle?.trimmingCharacters(in: .whitespacesAndNewlines),
+                       !title.isEmpty, title.lowercased() != target.name.lowercased() {
+                        text += ": " + clip(title, 40)
+                    }
+                    emitMain(AgentEvent(source: st.source, sessionID: st.session(target.pid), kind: .say, text: text, emoji: "💬"))
+                }
+                st.chatKey = key
+            }
+
+            // İkinci yol: son mesaj büyümeye devam ediyorsa cevap akıyordur (düğme adı bilinmese de çalışır)
+            let tail = AppWatcher.tailText(found)
+            if let t = tail, let prev = st.lastTail, t != prev {
+                if t.count > prev.count && t.hasPrefix(String(prev.prefix(12))) {
+                    st.growthPolls += 1
+                    st.stablePolls = 0
+                } else {
+                    st.growthPolls = 0      // başka bir mesaj ya da kaydırma
+                    st.stablePolls = 0
+                }
+            } else if tail != nil && tail == st.lastTail {
+                st.stablePolls += 1
+                if st.stablePolls >= 3 { st.growthPolls = 0 }
+            }
+            st.lastTail = tail
+            let streaming = st.growthPolls >= 2
+
+            let generatingNow = found.stop != nil || streaming
+            update(&st, pid: target.pid, found: found, generatingNow: generatingNow, streaming: streaming, now: now)
 
             if !st.sawComposer {
                 status[target.name] = loc("yazı kutusu bulunamadı", "can't find the input box")
@@ -236,8 +285,8 @@ final class AppWatcher {
         return status
     }
 
-    private func update(_ st: inout AppState, pid: pid_t, found: Found, generatingNow: Bool, now: TimeInterval) {
-        let session = "app-\(pid)"
+    private func update(_ st: inout AppState, pid: pid_t, found: Found, generatingNow: Bool, streaming: Bool, now: TimeInterval) {
+        let session = st.session(pid)
         if generatingNow {
             st.quietPolls = 0
             if !st.generating {
@@ -255,7 +304,7 @@ final class AppWatcher {
             }
             // Ne yaptığını kısa Türkçe bir aşamayla söyle (bakıyor, inceliyor, yazıyor, düzeltiyor…)
             if !found.approve {
-                let p = AppWatcher.phase(found, elapsed: now - st.startedAt)
+                let p = AppWatcher.phase(found, elapsed: now - st.startedAt, streaming: streaming)
                 if p != st.phase && now - st.lastPhaseAt > 1.5 {
                     st.phase = p
                     st.lastPhaseAt = now
@@ -265,10 +314,15 @@ final class AppWatcher {
             }
         } else if st.generating {
             st.quietPolls += 1
-            if st.quietPolls >= 2 {   // ~1.6 sn boyunca "Durdur" yoksa bitti say
+            if st.quietPolls >= 2 {   // ~1.6 sn boyunca "Durdur" yoksa (ve metin akmıyorsa) bitti say
                 st.generating = false
                 st.approving = false
-                emit(stop: pid, state: st)
+                if now - st.startedAt >= 4 {
+                    emit(stop: pid, state: st)
+                } else {
+                    // Çok kısa sürdüyse (kaydırma vb. yanlış alarm) sessizce kapat
+                    emitMain(AgentEvent(source: st.source, sessionID: st.session(pid), kind: .sessionEnd))
+                }
             }
         }
 
@@ -289,7 +343,7 @@ final class AppWatcher {
     /// Ekrandaki kısa durum satırlarından (ör. "Searching the web", "Ran 3 commands") ne yaptığını çıkarır.
     /// Uzun metinler (cevabın kendisi) ve ekran okuyucu ipuçları yok sayılır. Hiçbiri tutmazsa geçen süreye
     /// göre ilerler: anlıyor → düşünüyor → çözüyor.
-    private static func phase(_ found: Found, elapsed: TimeInterval) -> WorkPhase {
+    private static func phase(_ found: Found, elapsed: TimeInterval, streaming: Bool) -> WorkPhase {
         if let top = found.composerTop {
             let hints = ["press tab", "escape", "focus", "keyboard", "screen reader", "available to open",
                          "double-tap", "shortcut", "can make mistakes", "reply", "message claude", "ask anything"]
@@ -303,13 +357,27 @@ final class AppWatcher {
                 if let p = WorkPhase.match(line) { return p }
             }
         }
+        if streaming { return .writing }
         if elapsed < 8 { return .understanding }
         if elapsed < 30 { return .thinking }
         return .solving
     }
 
+    /// En alttaki (en yeni) mesaj metni: yazı kutusunun üstünde, ipucu olmayan, en alttaki metin.
+    private static func tailText(_ found: Found) -> String? {
+        let limit = found.composerTop ?? .greatestFiniteMagnitude
+        let hints = ["press tab", "escape", "focus", "keyboard", "screen reader", "available to open",
+                     "can make mistakes", "reply", "message claude", "ask anything"]
+        let candidates = found.texts.filter { item in
+            let low = item.0.lowercased()
+            // Kısa arayüz yazılarını (model adı, düğmeler) değil, mesaj gövdesini izle
+            return item.1.maxY <= limit - 2 && item.0.count >= 25 && !hints.contains { low.contains($0) }
+        }
+        return candidates.max(by: { $0.1.maxY < $1.1.maxY })?.0
+    }
+
     private func emit(stop pid: pid_t, state st: AppState) {
-        var e = AgentEvent(source: st.source, sessionID: "app-\(pid)", kind: .stop, state: .done)
+        var e = AgentEvent(source: st.source, sessionID: st.session(pid), kind: .stop, state: .done)
         e.quietIfFrontmostPID = pid
         emitMain(e)
     }
@@ -350,6 +418,9 @@ final class AppWatcher {
                 continue
             }
             if role == kAXImageRole { continue }
+            if role == "AXWebArea", let url = AppWatcher.value(element, "AXURL") as? URL {
+                found.urls.append(url.absoluteString)
+            }
             guard depth < 70, let children = AppWatcher.children(element) else { continue }
             for child in children { stack.append((child, depth + 1)) }
         }

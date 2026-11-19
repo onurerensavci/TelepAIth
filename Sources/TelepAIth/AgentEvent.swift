@@ -78,7 +78,7 @@ enum Mood: String {
 }
 
 enum EventKind {
-    case sessionStart, prompt, tool, status, toolDone, waiting, stop, failure, interrupt, sessionEnd, quota, generic, heartbeat
+    case sessionStart, prompt, tool, status, toolDone, waiting, stop, failure, interrupt, sessionEnd, quota, generic, heartbeat, say
 }
 
 struct AgentEvent {
