@@ -23,8 +23,9 @@ final class AppWatcher {
         var approving = false
         var quietPolls = 0
         var lastHeartbeat: TimeInterval = 0
-        var lastStatusText: String?
-        var lastStatusAt: TimeInterval = 0
+        var phase: WorkPhase?
+        var lastPhaseAt: TimeInterval = 0
+        var startedAt: TimeInterval = 0
         var lastFullScan: TimeInterval = 0
         var lastDebugDump: TimeInterval = 0
         var enabledElectronAX = false
@@ -33,6 +34,70 @@ final class AppWatcher {
 
     private enum ButtonKind {
         case stop, send, approve
+    }
+
+    /// AI'ın o an hangi aşamada olduğu (kısa, insanca bir cümleyle söylenir).
+    enum WorkPhase: Equatable {
+        case understanding, thinking, solving, looking, reading, writing, fixing, running, testing, finishing
+
+        var phrase: String {
+            switch self {
+            case .understanding: return loc("İşi anlamaya çalışıyor…", "Getting the gist…")
+            case .thinking: return loc("Düşünüyor…", "Thinking…")
+            case .solving: return loc("Çözüyor…", "Working it out…")
+            case .looking: return loc("Bakıyor, araştırıyor…", "Looking around…")
+            case .reading: return loc("İnceliyor…", "Reading through…")
+            case .writing: return loc("Yazıyor…", "Writing…")
+            case .fixing: return loc("Düzeltiyor…", "Fixing things…")
+            case .running: return loc("Komut çalıştırıyor…", "Running commands…")
+            case .testing: return loc("Test ediyor…", "Testing…")
+            case .finishing: return loc("Bitiriyor…", "Wrapping up…")
+            }
+        }
+
+        var emoji: String {
+            switch self {
+            case .understanding: return "🤔"
+            case .thinking: return "🧠"
+            case .solving: return "🛠️"
+            case .looking: return "🔍"
+            case .reading: return "📖"
+            case .writing: return "✍️"
+            case .fixing: return "🔧"
+            case .running: return "💻"
+            case .testing: return "🧪"
+            case .finishing: return "📦"
+            }
+        }
+
+        var robotState: RobotState {
+            switch self {
+            case .understanding, .thinking, .solving, .finishing: return .thinking
+            case .looking: return .searching
+            case .reading: return .reading
+            case .writing, .fixing: return .editing
+            case .running, .testing: return .running
+            }
+        }
+
+        /// Kısa durum satırındaki fiillerden aşamayı bul (İngilizce ve Türkçe arayüz).
+        static func match(_ line: String) -> WorkPhase? {
+            let rules: [(WorkPhase, String)] = [
+                (.testing, #"\btest"#),
+                (.running, #"\b(ran|run|running|executing|execute|command|terminal|install|compil)|komut|çalıştır"#),
+                (.fixing, #"\b(fix|debug|repair|patch)|düzelt|hata"#),
+                (.writing, #"\b(writ|edit|creat|draft|updat|implement|add|generat|compos|refactor)|yaz|oluştur|ekle"#),
+                (.reading, #"\b(read|review|analy|inspect|check|open|view|examin|load)|oku|incele"#),
+                (.looking, #"\b(search|look|find|brows|fetch|explor|scan|gather)|ara[ıy]|bak"#),
+                (.finishing, #"\b(publish|deliver|upload|final|wrap|summar|send|finish|complet)|yayınla|bitir|gönder"#),
+                (.thinking, #"\b(think|reason|ponder)|düşün"#),
+                (.solving, #"\b(plan|map|figur|consider|weigh|work|solv|design|decid)|çöz"#),
+            ]
+            for (phase, pattern) in rules where line.range(of: pattern, options: .regularExpression) != nil {
+                return phase
+            }
+            return nil
+        }
     }
 
     private struct Found {
@@ -178,19 +243,25 @@ final class AppWatcher {
             if !st.generating {
                 st.generating = true
                 st.lastHeartbeat = now
-                st.lastStatusText = nil
-                emitMain(AgentEvent(source: st.source, sessionID: session, kind: .prompt, state: .thinking,
-                                    text: loc("Çalışıyor…", "Working on it…"), emoji: "🔮"))
+                st.startedAt = now
+                st.phase = .understanding
+                st.lastPhaseAt = now
+                let p = WorkPhase.understanding
+                emitMain(AgentEvent(source: st.source, sessionID: session, kind: .prompt, state: p.robotState,
+                                    text: p.phrase, emoji: p.emoji))
             } else if now - st.lastHeartbeat > 20 {
                 st.lastHeartbeat = now
                 emitMain(AgentEvent(source: st.source, sessionID: session, kind: .heartbeat))
             }
-            // Ne yaptığını söyle: yazı kutusunun üstündeki son satır
-            if !found.approve, let line = AppWatcher.statusLine(found), line != st.lastStatusText, now - st.lastStatusAt > 1 {
-                st.lastStatusText = line
-                st.lastStatusAt = now
-                emitMain(AgentEvent(source: st.source, sessionID: session, kind: .status, state: .thinking,
-                                    text: line, emoji: AppWatcher.emoji(for: line)))
+            // Ne yaptığını kısa Türkçe bir aşamayla söyle (bakıyor, inceliyor, yazıyor, düzeltiyor…)
+            if !found.approve {
+                let p = AppWatcher.phase(found, elapsed: now - st.startedAt)
+                if p != st.phase && now - st.lastPhaseAt > 1.5 {
+                    st.phase = p
+                    st.lastPhaseAt = now
+                    emitMain(AgentEvent(source: st.source, sessionID: session, kind: .status, state: p.robotState,
+                                        text: p.phrase, emoji: p.emoji))
+                }
             }
         } else if st.generating {
             st.quietPolls += 1
@@ -215,29 +286,26 @@ final class AppWatcher {
         }
     }
 
-    /// Yazı kutusunun hemen üstündeki, en alttaki anlamlı metin satırı.
-    private static func statusLine(_ found: Found) -> String? {
-        guard let top = found.composerTop else { return nil }
-        let candidates = found.texts.filter { item in
-            let text = item.0.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard item.1.maxY <= top - 2, item.1.maxY >= top - 400, text.count >= 4 else { return false }
-            if text.range(of: #"^\d+([.,]\d+)?\s*(s|sn|sec|m|dk|min)?$"#, options: .regularExpression) != nil { return false }
-            let low = text.lowercased()
-            let ignore = ["reply", "message claude", "ask anything", "cevap", "claude is ai", "chatgpt can make mistakes"]
-            return !ignore.contains { low.hasPrefix($0) }
+    /// Ekrandaki kısa durum satırlarından (ör. "Searching the web", "Ran 3 commands") ne yaptığını çıkarır.
+    /// Uzun metinler (cevabın kendisi) ve ekran okuyucu ipuçları yok sayılır. Hiçbiri tutmazsa geçen süreye
+    /// göre ilerler: anlıyor → düşünüyor → çözüyor.
+    private static func phase(_ found: Found, elapsed: TimeInterval) -> WorkPhase {
+        if let top = found.composerTop {
+            let hints = ["press tab", "escape", "focus", "keyboard", "screen reader", "available to open",
+                         "double-tap", "shortcut", "can make mistakes", "reply", "message claude", "ask anything"]
+            let lines = found.texts
+                .filter { $0.1.maxY <= top - 2 && $0.1.maxY >= top - 500 }
+                .sorted { $0.1.maxY > $1.1.maxY }   // en alttaki (en yeni) önce
+                .map { $0.0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+                .filter { text in text.count >= 4 && text.count <= 60 && !hints.contains { text.contains($0) } }
+                .prefix(8)
+            for line in lines {
+                if let p = WorkPhase.match(line) { return p }
+            }
         }
-        guard let best = candidates.max(by: { $0.1.maxY < $1.1.maxY }) else { return nil }
-        return clip(best.0, 80)
-    }
-
-    private static func emoji(for line: String) -> String {
-        let low = line.lowercased()
-        if low.contains("search") || low.contains("arı") || low.contains("look") { return "🔍" }
-        if low.contains("read") || low.contains("oku") { return "📖" }
-        if low.contains("writ") || low.contains("edit") || low.contains("yaz") || low.contains("düzen") { return "✍️" }
-        if low.contains("run") || low.contains("command") || low.contains("komut") { return "💻" }
-        if low.contains("test") { return "🧪" }
-        return "🔮"
+        if elapsed < 8 { return .understanding }
+        if elapsed < 30 { return .thinking }
+        return .solving
     }
 
     private func emit(stop pid: pid_t, state st: AppState) {
