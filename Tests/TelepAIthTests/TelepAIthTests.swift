@@ -148,4 +148,14 @@ final class TelepAIthTests: XCTestCase {
         XCTAssertTrue(FocusMode.isMeetingApp("us.zoom.xos"))
         XCTAssertFalse(FocusMode.isMeetingApp("com.apple.Safari"))
     }
+
+    func testRobotScale() {
+        let old = Preferences.robotScale
+        Preferences.robotScale = 1.6
+        XCTAssertEqual(Layout.headSize.width, 160, accuracy: 0.01)
+        XCTAssertEqual(Layout.windowSize.width, 448, accuracy: 0.01)
+        Preferences.robotScale = 5
+        XCTAssertEqual(Preferences.robotScale, 1.8, accuracy: 0.001)
+        Preferences.robotScale = old
+    }
 }

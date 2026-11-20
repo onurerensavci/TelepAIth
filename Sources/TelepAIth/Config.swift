@@ -16,10 +16,20 @@ enum AppInfo {
 }
 
 enum Layout {
-    static let windowSize = CGSize(width: 280, height: 250)
-    static let headSize = CGSize(width: 100, height: 100)
-    static let margin: CGFloat = 16      // pencere kenarı ile kafa arası
+    // %100 boyuttaki ölçüler; robot bunlarla çizilip Preferences.robotScale kadar büyütülür/küçültülür
+    static let baseWindowSize = CGSize(width: 280, height: 250)
+    static let baseHeadSize = CGSize(width: 100, height: 100)
+    static let baseMargin: CGFloat = 16  // pencere kenarı ile kafa arası
     static let edgeInset: CGFloat = 14   // ekran köşesi ile kafa arası
+
+    static var scale: CGFloat { CGFloat(Preferences.robotScale) }
+    static var windowSize: CGSize { CGSize(width: baseWindowSize.width * scale, height: baseWindowSize.height * scale) }
+    static var headSize: CGSize { CGSize(width: baseHeadSize.width * scale, height: baseHeadSize.height * scale) }
+    static var margin: CGFloat { baseMargin * scale }
+
+    /// Ayarlardaki boyut seçenekleri
+    static let scaleOptions: [(Double, String, String)] = [(0.75, "Küçük", "Small"), (1.0, "Orta", "Medium"),
+                                                           (1.3, "Büyük", "Large"), (1.6, "Çok büyük", "Extra large")]
 }
 
 enum Language: String, CaseIterable {
@@ -163,6 +173,12 @@ enum Preferences {
     static var dailySummaryHour: Int {
         get { defaults.object(forKey: "dailySummaryHour") as? Int ?? 18 }
         set { defaults.set(newValue, forKey: "dailySummaryHour") }
+    }
+
+    /// Robotun boyutu (1 = %100)
+    static var robotScale: Double {
+        get { Swift.max(0.6, Swift.min(1.8, defaults.object(forKey: "robotScale") as? Double ?? 1.0)) }
+        set { defaults.set(newValue, forKey: "robotScale") }
     }
 
     /// İlk açılış sihirbazı tamamlandı mı?

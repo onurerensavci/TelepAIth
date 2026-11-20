@@ -655,6 +655,11 @@ extension AppController: SettingsHost {
         rebuildMenu()
     }
 
+    func setRobotScale(_ value: Double) {
+        manager.setRobotScale(value)
+        rebuildMenu()
+    }
+
     func followSettingChanged() {
         manager.followSettingChanged()
         rebuildMenu()

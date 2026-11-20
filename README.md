@@ -50,6 +50,7 @@
 - AI hangi masaüstündeyse (Spaces) orada kalır.
 - Ekran köşelerine yapışır, monitörden monitöre taşınır.
 - **🔒 Kilit** ile olduğu yerde sabitlenir, **📌 Her zaman üstte** ile pencerelerin üstünde durur.
+- **Boyut:** Ayarlar → Genel → Robot boyutu: Küçük, Orta, Büyük, Çok büyük. Büyük monitörlerde işe yarar.
 - Kendini günceller: yeni sürüm çıkınca alnındaki ışık turuncu yanar, tıklarsan kurar.
 
 <p align="center">

@@ -9,6 +9,7 @@ protocol SettingsHost: AnyObject {
     var watcherStatus: [String: String] { get }
     func setRobotLocked(_ value: Bool)
     func setAlwaysOnTop(_ value: Bool)
+    func setRobotScale(_ value: Double)
     func followSettingChanged()
     func setWatchApps(_ value: Bool)
     /// quiet: bilgi pencerelerini gösterme (sihirbazda)
@@ -89,6 +90,14 @@ struct SettingsView: View {
                     model.changed()
                 })) {
                     ForEach(Language.allCases, id: \.self) { Text($0.displayName).tag($0) }
+                }
+                Picker(loc("Robot boyutu", "Robot size"), selection: Binding(get: { Preferences.robotScale }, set: { value in
+                    model.host?.setRobotScale(value)
+                    model.changed()
+                })) {
+                    ForEach(Layout.scaleOptions, id: \.0) { option in
+                        Text(loc(option.1, option.2) + " (%\(Int(option.0 * 100)))").tag(option.0)
+                    }
                 }
                 Toggle(loc("Robotu göster", "Show the robot"), isOn: model.toggle({ model.host?.robotVisible ?? true },
                                                                                   { model.host?.robotVisible = $0 }))

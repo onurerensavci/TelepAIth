@@ -50,6 +50,7 @@
 - Stays on whichever desktop (Space) the AI is on.
 - Snaps to screen corners and moves between monitors.
 - **🔒 Lock** pins it in place, **📌 Always on top** keeps it above every window.
+- **Size:** Settings → General → Robot size: Small, Medium, Large, Extra large. Handy on big monitors.
 - Updates itself: the light on its forehead turns orange when a new version is out. Click it to install.
 
 <p align="center">

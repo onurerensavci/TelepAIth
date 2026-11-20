@@ -24,8 +24,14 @@ final class RobotAvatar: ObservableObject {
     @Published private(set) var minis: [RobotModel.MiniSession] = []
     /// Odak modu: robot soluk durur, sadece seni bekleyen şeyleri söyler
     @Published private(set) var focus = FocusMode.isActive
-    /// Balonun pencere içindeki yeri (SwiftUI, sol-üst köken). Tıklamayı yakalamak için.
+    /// Balonun pencere içindeki yeri (SwiftUI, sol-üst köken, %100 boyuttaki ölçüyle). Tıklamayı yakalamak için.
     var bubbleFrame: CGRect = .zero
+    /// Robotun boyutu (ayarlardan)
+    @Published private(set) var scale = Layout.scale
+
+    func setScale(_ value: CGFloat) {
+        if scale != value { scale = value }
+    }
 
     /// Kafanın merkezi (ekran koordinatı, ana ekranın sol-alt köşesi köken)
     private(set) var head: CGPoint = .zero
@@ -61,9 +67,10 @@ final class RobotAvatar: ObservableObject {
     var bubbleScreenRect: NSRect? {
         guard bubbleFrame.width > 0, bubbleFrame.height > 0 else { return nil }
         let origin = windowOrigin
-        return NSRect(x: origin.x + bubbleFrame.minX,
-                      y: origin.y + Layout.windowSize.height - bubbleFrame.maxY,
-                      width: bubbleFrame.width, height: bubbleFrame.height)
+        let s = Layout.scale
+        return NSRect(x: origin.x + bubbleFrame.minX * s,
+                      y: origin.y + Layout.windowSize.height - bubbleFrame.maxY * s,
+                      width: bubbleFrame.width * s, height: bubbleFrame.height * s)
     }
 
     func setLocked(_ value: Bool) {
@@ -398,6 +405,14 @@ final class AvatarWindowController: NSObject {
     func tick(dt: CGFloat) {
         avatar.step(dt: dt)
         syncFrame()
+    }
+
+    /// Ayarlardan boyut değişince: pencereyi yeni boyuta getir, kafa yerinde kalsın.
+    func applyScale() {
+        let size = Layout.windowSize
+        avatar.setScale(Layout.scale)
+        host.frame = NSRect(origin: .zero, size: size)
+        panel.setFrame(NSRect(origin: avatar.windowOrigin, size: size), display: true)
     }
 
     private func syncFrame() {

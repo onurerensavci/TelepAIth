@@ -250,6 +250,15 @@ final class RobotManager {
     var isLocked: Bool { Preferences.robotLocked }
 
     /// Menüden her zaman üstte aç/kapat
+    /// Ayarlardan robot boyutu değişti
+    func setRobotScale(_ value: Double) {
+        Preferences.robotScale = value
+        window?.applyScale()
+        // Köşeye yapışıksa yeni boyutla yine köşeye otursun
+        if let avatar = avatar, !avatar.isDragging { avatar.goHome() }
+        onChange?()
+    }
+
     func setAlwaysOnTop(_ value: Bool) {
         window?.setAlwaysOnTop(value)
         onChange?()

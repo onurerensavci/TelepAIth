@@ -16,10 +16,14 @@ struct AvatarView: View {
                 .id(avatar.current.source)
                 .transition(.scale(scale: 0.4).combined(with: .opacity))
         }
-        .padding(Layout.margin)
-        .frame(width: Layout.windowSize.width, height: Layout.windowSize.height, alignment: frameAlignment)
+        .padding(Layout.baseMargin)
+        .frame(width: Layout.baseWindowSize.width, height: Layout.baseWindowSize.height, alignment: frameAlignment)
         .coordinateSpace(name: "avatar")
         .onPreferenceChange(BubbleFrameKey.self) { frame in avatar.bubbleFrame = frame }
+        // Robot %100 boyutta çizilir, ayardaki boyuta göre ölçeklenir
+        .scaleEffect(avatar.scale, anchor: .topLeading)
+        .frame(width: Layout.baseWindowSize.width * avatar.scale, height: Layout.baseWindowSize.height * avatar.scale,
+               alignment: .topLeading)
     }
 }
 
@@ -105,7 +109,7 @@ struct AvatarStage: View {
                        look: alignLeft ? 2.5 : -2.5,
                        health: health)
         }
-        .frame(width: Layout.headSize.width, height: Layout.headSize.height)
+        .frame(width: Layout.baseHeadSize.width, height: Layout.baseHeadSize.height)
         .overlay(alignment: .topTrailing) {
             if locked {
                 Image(systemName: "lock.fill")
