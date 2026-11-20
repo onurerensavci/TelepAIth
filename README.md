@@ -10,6 +10,7 @@ Ekranının köşesinde süzülen, LED nokta gözlü küçük bir robot kafası.
 - **Hangi AI:** gözlerinin renginden anlarsın: öndeki uygulama Claude ise turuncu, Codex ya da ChatGPT ise mavi. Başka bir uygulamadaysan (Terminal gibi) seni bekleyen ya da o an çalışan AI'ı gösterir. Kendi eşlemen için config.json'a `"apps": {"uygulama.bundle.id": "claude"}` ekleyebilirsin.
 - **Pencereye uçma:** Claude'a, ChatGPT'ye ya da Codex'e geçince robot o pencerenin sağ-alt köşesine uçar, pencereyi taşırsan peşinden gelir; başka uygulamalara geçince olduğu yerde kalır (menü → AI penceresine gitsin).
 - **Masaüstleri (Spaces):** robot her masaüstünde görünmez; Claude/GPT hangi masaüstündeyse orada kalır. Başka masaüstüne geçince orada kalmaya devam eder, Claude ya da GPT'ye dönünce onunla birlikte gelir. Menü → Robotu bu masaüstüne getir ile istediğin masaüstüne çağırabilirsin.
+- **Her zaman üstte:** robota sağ tık → 📌 Her zaman üstte (varsayılan açık). Kapatınca robot normal bir pencere gibi davranır, öndeki pencereler onu örtebilir.
 - **Kilit:** robota sağ tık → 🔒 Kilitle: olduğu yerde ve olduğu masaüstünde kalır, sürüklenmez, Claude/GPT'ye tıklayınca uçmaz. Aynı menüden kilidi açılır (menü çubuğunda da var).
 - **Etkileşim:** robota tıkla → son 5 olay; sürükle → taşı (başka monitöre de), bir köşeye yaklaştırıp bırakınca o ekranın köşesine yapışır; sağ tık → gizle
 - **Bildirim:** 20 saniyeden uzun süren iş bitince, AI senden onay/cevap beklerken ve hata olunca

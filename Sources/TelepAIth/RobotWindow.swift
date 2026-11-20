@@ -290,6 +290,7 @@ final class AvatarWindowController: NSObject {
     var onClick: (() -> Void)?
     var onDoubleClick: (() -> Void)?
     var onLockChanged: ((Bool) -> Void)?
+    var onAlwaysOnTopChanged: ((Bool) -> Void)?
 
     private let panel: RobotPanel
     private let host: AvatarHostingView
@@ -304,7 +305,7 @@ final class AvatarWindowController: NSObject {
         panel.isOpaque = false
         panel.backgroundColor = .clear
         panel.hasShadow = false
-        panel.level = .statusBar
+        panel.level = Preferences.alwaysOnTop ? .statusBar : .normal
         // Her masaüstünde değil: Claude/GPT hangi masaüstündeyse orada kalır.
         // Öne getirildiğinde o anki masaüstüne taşınır (moveToActiveSpace).
         panel.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary, .ignoresCycle]
@@ -344,6 +345,13 @@ final class AvatarWindowController: NSObject {
         panel.orderOut(nil)
     }
 
+    /// Her zaman üstte açık/kapalı
+    func setAlwaysOnTop(_ value: Bool) {
+        Preferences.alwaysOnTop = value
+        panel.level = value ? .statusBar : .normal
+        if panel.isVisible { panel.orderFrontRegardless() }
+    }
+
     /// Robotu şu an açık olan masaüstüne taşır.
     func bringToActiveSpace() {
         panel.orderFrontRegardless()
@@ -372,6 +380,10 @@ final class AvatarWindowController: NSObject {
                               action: #selector(lockAction), keyEquivalent: "")
         lock.target = self
         menu.addItem(lock)
+        let onTop = NSMenuItem(title: loc("📌 Her zaman üstte", "📌 Always on top"), action: #selector(alwaysOnTopAction), keyEquivalent: "")
+        onTop.target = self
+        onTop.state = Preferences.alwaysOnTop ? .on : .off
+        menu.addItem(onTop)
         let diagnostics = NSMenuItem(title: loc("Teşhis…", "Diagnostics…"), action: #selector(diagnosticsAction), keyEquivalent: "")
         diagnostics.target = self
         menu.addItem(diagnostics)
@@ -384,6 +396,16 @@ final class AvatarWindowController: NSObject {
 
     @objc private func historyAction() {
         avatar.current.showHistory()
+    }
+
+    @objc private func alwaysOnTopAction() {
+        let value = !Preferences.alwaysOnTop
+        setAlwaysOnTop(value)
+        avatar.current.say(value
+            ? withEmoji("📌", loc("Her zaman en üstteyim.", "I'll stay on top of everything."))
+            : withEmoji("🪟", loc("Artık diğer pencerelerin arkasında kalabilirim.", "Other windows can cover me now.")),
+            for: 4)
+        onAlwaysOnTopChanged?(value)
     }
 
     @objc private func lockAction() {

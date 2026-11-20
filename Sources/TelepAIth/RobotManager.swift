@@ -63,6 +63,7 @@ final class RobotManager {
         }
         window.onClick = { [weak self] in self?.robotClicked() }
         window.onDoubleClick = { [weak self] in self?.openCurrentApp() }
+        window.onAlwaysOnTopChanged = { [weak self] _ in self?.onChange?() }
         window.onLockChanged = { [weak self] locked in
             guard let self = self else { return }
             if locked { self.dockPID = nil } else { self.frontmostChanged(NSWorkspace.shared.frontmostApplication) }
@@ -141,6 +142,12 @@ final class RobotManager {
     }
 
     var isLocked: Bool { Preferences.robotLocked }
+
+    /// Menüden her zaman üstte aç/kapat
+    func setAlwaysOnTop(_ value: Bool) {
+        window?.setAlwaysOnTop(value)
+        onChange?()
+    }
 
     /// Menüden kilitle/aç
     func setLocked(_ value: Bool) {

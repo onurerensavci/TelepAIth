@@ -77,6 +77,12 @@ enum Preferences {
         set { defaults.set(newValue, forKey: "watchApps") }
     }
 
+    /// Her zaman üstte: robot diğer pencerelerin üstünde durur. Kapalıyken normal bir pencere gibi arkada kalabilir.
+    static var alwaysOnTop: Bool {
+        get { defaults.object(forKey: "alwaysOnTop") as? Bool ?? true }
+        set { defaults.set(newValue, forKey: "alwaysOnTop") }
+    }
+
     /// Kilitli: robot olduğu yerde ve olduğu masaüstünde kalır, sürüklenmez, AI pencerelerine uçmaz.
     static var robotLocked: Bool {
         get { defaults.object(forKey: "robotLocked") as? Bool ?? false }

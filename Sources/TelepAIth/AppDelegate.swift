@@ -172,6 +172,8 @@ final class AppController: NSObject {
         menu.addItem(actionItem(loc("Robotu bu masaüstüne getir", "Bring robot to this desktop"), #selector(bringRobotHere)))
         menu.addItem(toggleItem(loc("Robotu kilitle (yerinde kalsın)", "Lock robot (stay in place)"), on: manager.isLocked,
                                 action: #selector(toggleLock)))
+        menu.addItem(toggleItem(loc("Her zaman üstte", "Always on top"), on: Preferences.alwaysOnTop,
+                                action: #selector(toggleAlwaysOnTop)))
         menu.addItem(toggleItem(loc("Bildirimler", "Notifications"), on: Preferences.notificationsEnabled,
                                 action: #selector(toggleNotifications)))
         menu.addItem(toggleItem(loc("Emojiler", "Emojis"), on: Preferences.emojiEnabled, action: #selector(toggleEmoji)))
@@ -288,6 +290,11 @@ final class AppController: NSObject {
 
     @objc private func toggleRobots() {
         manager.visible.toggle()
+        rebuildMenu()
+    }
+
+    @objc private func toggleAlwaysOnTop() {
+        manager.setAlwaysOnTop(!Preferences.alwaysOnTop)
         rebuildMenu()
     }
 
