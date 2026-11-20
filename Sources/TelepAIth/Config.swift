@@ -77,6 +77,12 @@ enum Preferences {
         set { defaults.set(newValue, forKey: "watchApps") }
     }
 
+    /// Kilitli: robot olduğu yerde ve olduğu masaüstünde kalır, sürüklenmez, AI pencerelerine uçmaz.
+    static var robotLocked: Bool {
+        get { defaults.object(forKey: "robotLocked") as? Bool ?? false }
+        set { defaults.set(newValue, forKey: "robotLocked") }
+    }
+
     /// Claude/ChatGPT/Codex'e geçince robot o pencerenin köşesine gitsin.
     static var followAppWindow: Bool {
         get { defaults.object(forKey: "followAppWindow") as? Bool ?? true }

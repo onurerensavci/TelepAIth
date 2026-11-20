@@ -19,6 +19,7 @@ final class RobotAvatar: ObservableObject {
     @Published private(set) var alignLeft = false     // kafa pencerenin solunda, balon sağa uzar
     @Published private(set) var bubbleBelow = false   // ekranın üst yarısında: balon kafanın altında
     @Published private(set) var health: Health = .ok
+    @Published private(set) var locked = Preferences.robotLocked
 
     /// Kafanın merkezi (ekran koordinatı, ana ekranın sol-alt köşesi köken)
     private(set) var head: CGPoint = .zero
@@ -40,6 +41,12 @@ final class RobotAvatar: ObservableObject {
 
     func setHealth(_ value: Health) {
         if health != value { health = value }
+    }
+
+    func setLocked(_ value: Bool) {
+        Preferences.robotLocked = value
+        if locked != value { locked = value }
+        if value { target = nil }
     }
 
     /// Gösterilen AI'ı değiştirir (küçük bir "puf" animasyonuyla).
@@ -115,12 +122,17 @@ final class RobotAvatar: ObservableObject {
 
     func goHome() {
         guard !isDragging else { return }
+        if locked {
+            // Kilitliyken yerinde kalır; sadece ekran söküldüyse görünür bir yere taşınır
+            if !NSScreen.screens.contains(where: { $0.frame.contains(head) }) { moveTo(homePoint) }
+            return
+        }
         moveTo(homePoint)
     }
 
     /// AI uygulamasının penceresinin sağ-alt köşesine uç (pencere taşınırsa tekrar çağrılır).
     func dock(to window: NSRect) {
-        guard !isDragging else { return }
+        guard !isDragging, !locked else { return }
         var p = CGPoint(x: window.maxX - RobotAvatar.dockOffset.x, y: window.minY + RobotAvatar.dockOffset.y)
         p.x = Swift.max(p.x, window.minX + Layout.headSize.width / 2)
         p.y = Swift.min(p.y, window.maxY - Layout.headSize.height / 2)
@@ -150,17 +162,20 @@ final class RobotAvatar: ObservableObject {
     // MARK: Sürükleme (ekrandan ekrana serbest)
 
     func beginDrag() {
+        guard !locked else { return }
         isDragging = true
         target = nil
         dragStartHead = head
     }
 
     func drag(dx: CGFloat, dy: CGFloat) {
+        guard isDragging else { return }
         head = CGPoint(x: dragStartHead.x + dx, y: dragStartHead.y + dy)
     }
 
     /// Bırakıldığı ekranda en yakın köşeye yapışır; köşeden uzaksa olduğu yerde kalır.
     func endDrag() {
+        guard isDragging else { return }
         isDragging = false
         let defaults = UserDefaults.standard
         let screen = RobotAvatar.screen(containing: head)
@@ -274,6 +289,7 @@ final class AvatarWindowController: NSObject {
     var onHide: (() -> Void)?
     var onClick: (() -> Void)?
     var onDoubleClick: (() -> Void)?
+    var onLockChanged: ((Bool) -> Void)?
 
     private let panel: RobotPanel
     private let host: AvatarHostingView
@@ -352,6 +368,10 @@ final class AvatarWindowController: NSObject {
         history.target = self
         menu.addItem(history)
         menu.addItem(.separator())
+        let lock = NSMenuItem(title: avatar.locked ? loc("🔓 Kilidi aç", "🔓 Unlock") : loc("🔒 Kilitle (yerinde kalsın)", "🔒 Lock (stay here)"),
+                              action: #selector(lockAction), keyEquivalent: "")
+        lock.target = self
+        menu.addItem(lock)
         let diagnostics = NSMenuItem(title: loc("Teşhis…", "Diagnostics…"), action: #selector(diagnosticsAction), keyEquivalent: "")
         diagnostics.target = self
         menu.addItem(diagnostics)
@@ -364,6 +384,16 @@ final class AvatarWindowController: NSObject {
 
     @objc private func historyAction() {
         avatar.current.showHistory()
+    }
+
+    @objc private func lockAction() {
+        let value = !avatar.locked
+        avatar.setLocked(value)
+        avatar.current.say(value
+            ? withEmoji("🔒", loc("Kilitlendim, yerimden kıpırdamıyorum.", "Locked. I'm staying right here."))
+            : withEmoji("🔓", loc("Kilidim açıldı, yine Claude ve GPT'nin peşinden gelirim.", "Unlocked. I'll follow Claude and GPT again.")),
+            for: 4)
+        onLockChanged?(value)
     }
 
     @objc private func diagnosticsAction() {

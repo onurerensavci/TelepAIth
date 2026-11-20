@@ -11,7 +11,8 @@ struct AvatarView: View {
             ? (avatar.alignLeft ? .topLeading : .topTrailing)
             : (avatar.alignLeft ? .bottomLeading : .bottomTrailing)
         return ZStack {
-            AvatarStage(model: avatar.current, alignLeft: avatar.alignLeft, bubbleBelow: avatar.bubbleBelow, health: avatar.health)
+            AvatarStage(model: avatar.current, alignLeft: avatar.alignLeft, bubbleBelow: avatar.bubbleBelow,
+                        health: avatar.health, locked: avatar.locked)
                 .id(avatar.current.source)
                 .transition(.scale(scale: 0.4).combined(with: .opacity))
         }
@@ -25,6 +26,7 @@ struct AvatarStage: View {
     let alignLeft: Bool
     let bubbleBelow: Bool
     let health: Health
+    let locked: Bool
 
     var body: some View {
         VStack(alignment: alignLeft ? .leading : .trailing, spacing: 2) {
@@ -60,6 +62,16 @@ struct AvatarStage: View {
                        health: health)
         }
         .frame(width: Layout.headSize.width, height: Layout.headSize.height)
+        .overlay(alignment: .topTrailing) {
+            if locked {
+                Image(systemName: "lock.fill")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundColor(Color(red: 0.55, green: 0.52, blue: 0.66))
+                    .padding(4)
+                    .background(Circle().fill(Color(red: 0.97, green: 0.96, blue: 0.94)))
+                    .offset(x: -2, y: 8)
+            }
+        }
     }
 }
 

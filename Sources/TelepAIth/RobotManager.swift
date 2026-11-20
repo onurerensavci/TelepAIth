@@ -63,6 +63,11 @@ final class RobotManager {
         }
         window.onClick = { [weak self] in self?.robotClicked() }
         window.onDoubleClick = { [weak self] in self?.openCurrentApp() }
+        window.onLockChanged = { [weak self] locked in
+            guard let self = self else { return }
+            if locked { self.dockPID = nil } else { self.frontmostChanged(NSWorkspace.shared.frontmostApplication) }
+            self.onChange?()
+        }
         self.window = window
 
         let t = Timer(timeInterval: 1.0 / 30.0, repeats: true) { [weak self] _ in
@@ -87,7 +92,7 @@ final class RobotManager {
         // değilse olduğu masaüstünde kalsın.
         NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.activeSpaceDidChangeNotification,
                                                           object: nil, queue: .main) { [weak self] _ in
-            guard let self = self, self.pinnedSource != nil, self.visible else { return }
+            guard let self = self, self.pinnedSource != nil, self.visible, !Preferences.robotLocked else { return }
             self.window?.bringToActiveSpace()
         }
 
@@ -132,6 +137,15 @@ final class RobotManager {
             }
         }
         chooseDisplay()
+        onChange?()
+    }
+
+    var isLocked: Bool { Preferences.robotLocked }
+
+    /// Menüden kilitle/aç
+    func setLocked(_ value: Bool) {
+        avatar?.setLocked(value)
+        if value { dockPID = nil } else { frontmostChanged(NSWorkspace.shared.frontmostApplication) }
         onChange?()
     }
 
@@ -227,14 +241,15 @@ final class RobotManager {
 
         // Sadece AI uygulamasına geçince robot o pencerenin sağ-alt köşesine uçsun.
         // Başka bir uygulamaya geçince olduğu yerde kalsın (pencereyi takip etmeyi bırakır).
-        if pinnedSource != nil && Preferences.followAppWindow {
+        // Kilitliyse hiçbir yere gitmez (ne pencereye ne başka masaüstüne)
+        if pinnedSource != nil && Preferences.followAppWindow && !Preferences.robotLocked {
             dockPID = app.processIdentifier
             refreshDock()
         } else {
             dockPID = nil
         }
         // Claude/GPT başka bir masaüstündeyse robot da oraya geçsin (masaüstü geçiş animasyonundan sonra)
-        if pinnedSource != nil && visible {
+        if pinnedSource != nil && visible && !Preferences.robotLocked {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { [weak self] in
                 guard let self = self, self.pinnedSource != nil else { return }
                 self.window?.bringToActiveSpace()
