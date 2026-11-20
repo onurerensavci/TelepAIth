@@ -1,110 +1,123 @@
-<p align="center"><img src="assets/logo.svg" width="160" alt="TelepAIth"></p>
+<p align="right"><b>Türkçe</b> · <a href="README.en.md">English</a></p>
 
-<h1 align="center">TelepAIth</h1>
+<p align="center">
+  <img src="assets/readme/hero-tr.svg" alt="TelepAIth: Claude ve GPT o an ne yapıyorsa ekranının köşesindeki robot söylesin" width="100%">
+</p>
 
-Ekranının köşesinde süzülen, LED nokta gözlü küçük bir robot kafası. Claude ve GPT o an ne yapıyorsa okur (Claude Code, Codex ve Claude/ChatGPT masaüstü uygulamaları), başının üstündeki balonla söyler, iş bitince ya da seni beklerken bildirim atar. Claude'a geçince gözleri turuncu, GPT'ye geçince mavi yanar. İstediğin başka bir AI'ı da bağlayabilirsin.
+<p align="center">
+  <a href="https://github.com/onurerensavci/TelepAIth/releases/latest"><img src="https://img.shields.io/badge/%E2%AC%87%20%C4%B0ndir-macOS%2013%2B-D97757?style=for-the-badge" alt="İndir"></a>
+</p>
 
-- **Durumlar:** düşünüyor, okuyor, arıyor, düzenliyor, komut çalıştırıyor, alt ajan çalıştırıyor, seni bekliyor, bitti, hata, uyuyor
-- **Robot:** gövdesiz bir kafa; gözleri minik LED noktalarından oluşur ve duruma göre desen değiştirir (düşünürken yukarı bakar, okurken sağa sola tarar, bitince ^^ olur, hata olunca X). Alnındaki ışık sağlık göstergesi: **yeşil** her şey yolunda, **turuncu** güncelleme var (robot balonda da söyler; tıklarsan kurar), **kırmızı** bir şey çalışmıyor (tıklarsan sebebini söyler). Düşünürken başından telepati halkaları yayılır, bitince zıplar, hata olunca sarsılır, 10 dakika olay gelmezse uyur. Boştayken ara sıra laf atar (menüden kapatılabilir).
-- **Ruh hâlleri (mochi gibi):** teşekkür edince gözleri kalp olur, "çalışmıyor/neden" deyince gerilir, BÜYÜK HARFLE yazınca şaşırır; `rm -rf` gibi tehlikeli komutta korkar; testler geçince parti yapar, kırılınca başı döner; commit'te gururlanır, push'ta sevinir; üst üste 3 hatada sersemler. İş bitince tur özeti verir: süre · araç sayısı · düzenleme sayısı. İstersen kısa sesler de çalar (menü → Sesler).
-- **Hangi AI:** gözlerinin renginden anlarsın: öndeki uygulama Claude ise turuncu, Codex ya da ChatGPT ise mavi. Başka bir uygulamadaysan (Terminal gibi) seni bekleyen ya da o an çalışan AI'ı gösterir. Kendi eşlemen için config.json'a `"apps": {"uygulama.bundle.id": "claude"}` ekleyebilirsin.
-- **Pencereye uçma:** Claude'a, ChatGPT'ye ya da Codex'e geçince robot o pencerenin sağ-alt köşesine uçar, pencereyi taşırsan peşinden gelir; başka uygulamalara geçince olduğu yerde kalır (menü → AI penceresine gitsin).
-- **Masaüstleri (Spaces):** robot her masaüstünde görünmez; Claude/GPT hangi masaüstündeyse orada kalır. Başka masaüstüne geçince orada kalmaya devam eder, Claude ya da GPT'ye dönünce onunla birlikte gelir. Menü → Robotu bu masaüstüne getir ile istediğin masaüstüne çağırabilirsin.
-- **Her zaman üstte:** robota sağ tık → 📌 Her zaman üstte (varsayılan açık). Kapatınca robot normal bir pencere gibi davranır, öndeki pencereler onu örtebilir.
-- **Kilit:** robota sağ tık → 🔒 Kilitle: olduğu yerde ve olduğu masaüstünde kalır, sürüklenmez, Claude/GPT'ye tıklayınca uçmaz. Aynı menüden kilidi açılır (menü çubuğunda da var).
-- **Etkileşim:** robota tıkla → son 5 olay; sürükle → taşı (başka monitöre de), bir köşeye yaklaştırıp bırakınca o ekranın köşesine yapışır; sağ tık → gizle
-- **Bildirim:** 20 saniyeden uzun süren iş bitince, AI senden onay/cevap beklerken ve hata olunca
-- **Kota:** ClaudeBar kuruluysa, kota azalınca ilgili robot uyarır
-- **Dil:** Türkçe veya İngilizce (menü → Dil). İlk açılışta sistem dilini kullanır.
-- **Emojiler:** robot eyleme göre emojiyle konuşur: düşünürken 🔮, okurken 📖, test çalıştırırken 🧪, paket kurarken 📦, `git push`'ta 🚀, bitince 🎉/✨/✅, seni beklerken ✋. Menü → Emojiler ile kapatılabilir.
+<p align="center">
+  <a href="https://github.com/onurerensavci/TelepAIth/releases/latest"><img src="https://img.shields.io/github/v/release/onurerensavci/TelepAIth?label=s%C3%BCr%C3%BCm&color=7C5CFF" alt="Sürüm"></a>
+  <a href="https://github.com/onurerensavci/TelepAIth/releases"><img src="https://img.shields.io/github/downloads/onurerensavci/TelepAIth/total?label=indirme&color=3B82F6" alt="İndirme"></a>
+  <img src="https://img.shields.io/badge/macOS-13%2B-111?logo=apple" alt="macOS 13+">
+  <a href="https://github.com/onurerensavci/TelepAIth/actions/workflows/build.yml"><img src="https://github.com/onurerensavci/TelepAIth/actions/workflows/build.yml/badge.svg" alt="Build"></a>
+</p>
+
+**TelepAIth**, ekranının köşesinde süzülen, LED nokta gözlü küçük bir robot kafası. Claude ve GPT o an ne yapıyorsa okur, başının üstündeki balonda söyler. İş bitince ya da AI seni beklerken bildirim atar. Claude'dayken gözleri turuncu, GPT'deyken mavi yanar. Claude Code, Codex, Claude ve ChatGPT masaüstü uygulamalarıyla çalışır, istediğin başka bir AI'ı da bağlayabilirsin.
+
+<p align="center">
+  <img src="assets/readme/states-tr.svg" alt="Robotun durumları: boşta, düşünüyor, okuyor, düzenliyor, komut çalıştırıyor, seni bekliyor, bitti, hata, uyuyor ve ruh hâlleri" width="100%">
+</p>
+
+## Neler yapar?
+
+**👀 Takip eder**
+- **Claude Code ve Codex:** her adımı anında görür: dosya okuyor, arıyor, düzenliyor, komut çalıştırıyor, alt ajana iş veriyor…
+- **Claude ve ChatGPT uygulamaları:** ekrandaki Durdur / İzin ver düğmelerinden AI'ın çalıştığını, onay beklediğini ve bitirdiğini anlar. Ne aşamada olduğunu kısaca söyler: *bakıyor, çözüyor, anlıyor, bitiriyor*.
+- **Sohbet değiştirince** tıkladığın sohbete geçer, eskisini "bitti" sanmaz.
+- **Anlatıcı:** istersen Claude, ne yaptığını robota kendi ağzından söyler (küçük bir MCP aracı).
+- **Kota:** ClaudeBar kuruluysa kotan azalınca uyarır.
+
+**💬 Konuşur**
+- Eyleme göre emojiyle konuşur: düşünürken 🔮, okurken 📖, test çalıştırırken 🧪, paket kurarken 📦, `git push`'ta 🚀, bitince 🎉, seni beklerken ✋.
+- İş bitince tur özeti verir: *Tamamdır! · 2 dk · 12 araç · 4 düzenleme*.
+- Ruh hâlleri var: teşekkür edince gözleri kalp olur, BÜYÜK HARFLE yazınca şaşırır, `rm -rf` görünce korkar, testler geçince parti yapar, üst üste 3 hatada başı döner.
+- Türkçe ya da İngilizce konuşur. İstersen sesli söyler, kısa sesler çalar.
+
+**🔔 Haber verir**
+- 20 saniyeden uzun süren iş bitince, AI senden onay ya da cevap beklerken ve hata olunca bildirim atar.
+- **Kalkan:** Claude Code `rm -rf`, `git push --force`, `git reset --hard`, `DROP TABLE` gibi riskli bir komut çalıştırmadan önce sana sorar (engellemez, sadece onay sordurur).
+
+**🪄 Yerini bilir**
+- Claude'a ya da ChatGPT'ye tıklayınca o pencerenin sağ-alt köşesine uçar, pencereyi taşırsan peşinden gelir. Başka uygulamalara geçince yerinde kalır.
+- AI hangi masaüstündeyse (Spaces) orada kalır.
+- Ekran köşelerine yapışır, monitörden monitöre taşınır.
+- **🔒 Kilit** ile olduğu yerde sabitlenir, **📌 Her zaman üstte** ile pencerelerin üstünde durur.
+- Kendini günceller: yeni sürüm çıkınca alnındaki ışık turuncu yanar, tıklarsan kurar.
+
+<p align="center">
+  <img src="assets/readme/switch-tr.svg" alt="Claude'a geçince gözler turuncu, ChatGPT ya da Codex'e geçince mavi" width="560">
+</p>
 
 ## Kurulum
 
-Gerekli: macOS 13+ ve Xcode Command Line Tools (`xcode-select --install`).
+1. **[Son sürümü indir](https://github.com/onurerensavci/TelepAIth/releases/latest)** (`TelepAIth-vX.Y.Z.zip`), zip'i aç, `TelepAIth.app`'i **Uygulamalar** klasörüne sürükle.
+2. **İlk açılış:** Uygulama Apple'a onaylatılmadığı için macOS ilk açılışı engeller. **Sistem Ayarları → Gizlilik ve Güvenlik**'e git, en altta TelepAIth için **Yine de Aç**'a bas.
+   <details><summary>Terminal'le tek satırda</summary>
 
-```bash
-cd TelepAIth
-chmod +x scripts/*.sh
-scripts/build-app.sh
-open build/TelepAIth.app
+   ```bash
+   xattr -dr com.apple.quarantine /Applications/TelepAIth.app && open /Applications/TelepAIth.app
+   ```
+   </details>
+3. **İzinler:** Bildirim izni sorulunca **İzin ver**. Claude ve ChatGPT uygulamalarını izleyebilmesi için **Sistem Ayarları → Gizlilik ve Güvenlik → Erişilebilirlik → TelepAIth**'i aç. Bu izin güncellemelerden sonra da kalır.
+4. **Bağla:** Menü çubuğundaki robot ikonu → **Bağlantılar**:
+
+| Bağlantı | Ne yapar | Not |
+|---|---|---|
+| **Claude ve ChatGPT uygulamaları** | Masaüstü uygulamalarını ekrandan izler | Erişilebilirlik izni ister, varsayılan açık |
+| **Claude Code** | `~/.claude/settings.json`'a hook ekler | Yeni açılan oturumlar haber verir |
+| **Codex** | `~/.codex/hooks.json`'a hook ekler | Codex'te bir kere `/hooks` yazıp onayla |
+| **Anlatıcı** | Claude masaüstüne `telepaith_say` aracını ekler | Claude'u yeniden başlat, açılan penceredeki talimatı profil tercihlerine ekle |
+| **ClaudeBar** | Kota uyarılarını alır | ClaudeBar → Webhooks → `http://localhost:19850/claudebar` (JSON) |
+
+Hook'lar ayar dosyalarının yedeğini alır, sadece kendi kayıtlarına dokunur ve olayı arka planda gönderir, yani Claude Code'u ya da Codex'i yavaşlatmaz. Menüden tekrar tıklayınca kaldırılır.
+
+İlk deneme için menü → **Dene → Claude: kısa bir görev**. Robotun düşünüp, okuyup, düzenleyip zıpladığını görürsün.
+
+## Robotla konuşmak
+
+| Hareket | Ne olur |
+|---|---|
+| **Tıkla** | Son 5 olayı gösterir. Işık turuncuysa güncellemeyi kurar, kırmızıysa neyin bozuk olduğunu söyler. |
+| **Çift tıkla** | O an gösterdiği AI'ın uygulamasını öne getirir. |
+| **Sürükle** | Taşır. Bir köşeye yaklaştırıp bırakınca oraya yapışır, başka monitöre de gider. |
+| **Sağ tık** | Son olaylar · 🔒 Kilitle · 📌 Her zaman üstte · Teşhis · Gizle |
+
+**Alnındaki ışık:** 🟢 her şey yolunda · 🟠 güncelleme var · 🔴 bir şey çalışmıyor (tıkla, sebebini söylesin).
+
+## Nasıl çalışır?
+
+```mermaid
+flowchart LR
+  CC["Claude Code"] -- hook --> T
+  CX["Codex"] -- hook --> T
+  APP["Claude / ChatGPT<br/>uygulamaları"] -- Erişilebilirlik --> T
+  MCP["Claude anlatıcı<br/>(MCP)"] -- telepaith_say --> T
+  ANY["Kendi AI'ın"] -- "HTTP POST" --> T
+  T(("TelepAIth<br/>127.0.0.1:19850")) --> B["🤖 Balon"]
+  T --> N["🔔 Bildirim"]
+  T --> S["🔊 Ses"]
 ```
 
-Menü çubuğunda bir sihirli değnek ikonu çıkar, ekranın altında da turuncu robot belirir. Kalıcı kurmak için `build/TelepAIth.app`'i Uygulamalar klasörüne kopyala. Bildirim izni sorulursa izin ver.
+TelepAIth bu Mac'te küçük bir yerel sunucu açar. Hook'lar, anlatıcı ve kendi araçların olayları buraya gönderir. Masaüstü uygulamalarını ise macOS Erişilebilirlik arayüzüyle ekrandaki düğmelerden ve durum satırından okur.
 
-İlk denemede menüden **Dene → Claude: kısa bir görev** seç. Robotun düşünüp, okuyup, düzenleyip, komut çalıştırıp zıpladığını görürsün.
+## Gizlilik
 
-## GitHub ve güncellemeler
-
-Depo **herkese açık (public)** olmalı; güncelleme denetimi GitHub API'sine anahtarsız bakıyor.
-
-Depo: https://github.com/onurerensavci/telepaith — her push'ta GitHub Actions kodu macOS'ta derler (Actions sekmesinde yeşil tik = derleniyor).
-
-**Sürüm yayınlama:**
-
-1. Bir değişiklik bitince `VERSION` dosyasındaki numarayı artır (ör. `0.2.0`) ve main'e gönder.
-2. GitHub'da **Actions → Release → Run workflow → Run workflow**. Sürüm kutusunu boş bırakırsan `VERSION` dosyasındaki numara kullanılır.
-
-Actions uygulamayı derler, `v0.2.0` etiketini atar ve Releases'a `TelepAIth-v0.2.0.zip` olarak koyar. Bilgisayarında depo klonu varsa `scripts/release.sh 0.2.0` de aynı işi yapar.
-
-**Kullanıcı tarafı:** İlk sürümü Releases'tan indirip Uygulamalar'a koy. İnternetten indirilen imzasız uygulama ilk açılışta engellenir: sağ tık → Aç, ya da `xattr -dr com.apple.quarantine /Applications/TelepAIth.app`. Sonraki sürümlerde uygulama açılıştan 15 saniye sonra ve 3 saatte bir GitHub'a bakar; yeni sürüm varsa robotun alnı turuncu yanar ve balonda söyler, yeni sürüm varsa bildirim gelir, menüde **⬆︎ Güncelle** çıkar. Tıklayınca indirir, eski sürümün yerine koyar ve yeniden açılır (sorun olursa eskiyi geri koyar). Menüdeki **Güncellemeleri denetle…** ile elle de bakabilirsin.
-
-Yerelde `scripts/build-app.sh` ile derlenen kopya da, `origin` GitHub deposuysa güncellemeleri oradan denetler.
-
-## Bağlantılar
-
-Menü → **Bağlantılar**:
-
-- **Claude ve ChatGPT uygulamaları:** Claude, ChatGPT ve Codex masaüstü uygulamalarında AI'ın çalıştığını, onay beklediğini ve bitirdiğini ekrandaki düğmelerden ("Durdur", "İzin ver") anlar. macOS'un **Erişilebilirlik** iznini ister: Sistem Ayarları → Gizlilik ve Güvenlik → Erişilebilirlik → TelepAIth. Uygulama imzasız olduğu için her güncellemeden sonra bu izni kapatıp açman gerekebilir; menüde ⚠︎ uyarısı çıkarsa bundandır. Varsayılan olarak açıktır; ilk açılışta izin ister. Çalışırken yazı kutusunun hemen üstündeki durum satırını (ör. "Mapping the dot grid onto the shapes") okuyup balonda söyler. Menüde her uygulama için ne gördüğü yazar (izleniyor / çalışıyor / onay bekliyor / yazı kutusu bulunamadı). Algılama tutmazsa düğme adlarını `~/.telepaith/watch-debug.txt` dosyasına yazar (menü → Algılama günlüğünü aç); bu dosyayı paylaşırsan algılamayı düzeltmek kolaylaşır.
-
-- **Claude Code:** `~/.claude/settings.json`'a hook ekler. Yeni açılan oturumlar robota haber verir. İlk değişiklikten önce dosyanın yedeği `settings.json.telepaith-backup` olarak alınır.
-- **Codex (GPT):** `~/.codex/hooks.json`'a hook ekler. Codex yeni hook'lar için onay istiyor: Codex'i açınca `/hooks` yazıp TelepAIth hook'larını onayla.
-- Tekrar tıklayınca hook'lar kaldırılır. Başka araçların hook'larına dokunulmaz; TelepAIth kendi kayıtlarını `__telepaith_hook` işaretinden tanır.
-
-Hook'lar olayı arka planda gönderip hemen çıkar, yani Claude Code ya da Codex'i yavaşlatmaz. TelepAIth kapalıysa istek sessizce düşer.
-
-### ClaudeBar kota uyarıları
-
-ClaudeBar → Settings → Sync & Alerts → Webhooks → Add Webhook:
-
-- URL: `http://localhost:19850/claudebar`
-- Channel: **JSON**
-- Sends: Quota alerts + Status alerts
-
-Menüdeki **ClaudeBar kota uyarıları…** URL'yi panoya kopyalar.
-
-## Anlatıcı: Claude kendisi söylesin
-
-Ekrandan tahmin etmek yerine Claude'un robota doğrudan "şunu yapıyorum" demesi için TelepAIth küçük bir MCP aracı (`telepaith_say`) içerir.
-
-1. Menü → Bağlantılar → **Anlatıcı (Claude kendisi söylesin)**. Claude masaüstünün MCP ayarına eklenir (`claude_desktop_config.json`, ilk değişiklikten önce yedeği alınır).
-2. Claude uygulamasını kapatıp aç.
-3. Claude → Ayarlar → Profil tercihlerine şu talimatı ekle (açılan pencerede kopyalama düğmesi var): *"Çalışırken her önemli adımın başında telepaith_say aracıyla ne yaptığını kısa Türkçe bir cümleyle söyle, iş bitince state "done" ile haber ver."*
-
-Claude Code için Terminal'de bir kere: `claude mcp add --scope user telepaith -- "/Applications/TelepAIth.app/Contents/MacOS/TelepAIth" --mcp --source claude`
-
-## Kalkan
-
-Claude Code bağlıyken `rm -rf`, `git push --force`, `git reset --hard`, `DROP TABLE` gibi tehlikeli görünen komutlarda Claude Code senden onay ister (komutu engellemez, sadece sordurur). Menü → Bağlantılar → Claude Code altındaki **Kalkan** ile kapatılabilir.
-
-## Teşhis
-
-Menü → **Teşhis…** (ya da robota sağ tık): robotun her uygulamada ne gördüğünü gösterir: pencere, yazı kutusu, Durdur/Gönder/İzin ver düğmeleri, metin akışı, aşama, düğme adları. **Panoya kopyala** ile raporu paylaşabilirsin.
-
-## Diğer
-
-- **Çift tıklama:** robota çift tıklayınca o an gösterdiği AI'ın uygulamasını öne getirir.
-- **Sesli konuşma:** menü → Sesli konuşsun; iş bitince, seni beklerken ve güncelleme olunca Türkçe sesli söyler.
-- **Testler:** `swift test` (GitHub'da her push'ta çalışır).
+Her şey senin Mac'inde kalır. Sunucu yalnızca bu bilgisayardan gelen istekleri kabul eder, tarayıcıdaki sayfaların isteklerini reddeder. Ekrandan okunan yazılar hiçbir yere gönderilmez. Dışarıya giden tek bağlantı, GitHub'da yeni sürüm olup olmadığına bakan güncelleme denetimi.
 
 ## Kendi AI'ını bağla
 
-Herhangi bir araç `POST` ile olay gönderebilir. Yeni bir `source` ilk olayda yeni bir robot olarak belirir.
+Herhangi bir araç tek bir `POST` ile robota olay gönderebilir. Yeni bir `source` ilk olayda belirir. Gemini için mor hazır, diğerlerinin rengini [Ayarlar](#ayarlar)'dan verebilirsin.
 
 ```bash
 curl -s -H 'Content-Type: application/json' \
   -d '{"state":"running","text":"Testleri çalıştırıyor","project":"app"}' \
   "http://127.0.0.1:19850/event?source=gemini"
 ```
+
+<details><summary>Alanlar</summary>
 
 | Alan | Açıklama |
 |---|---|
@@ -113,13 +126,14 @@ curl -s -H 'Content-Type: application/json' \
 | `project` | Balonda küçük başlık (isteğe bağlı) |
 | `session` | Aynı AI'da birden fazla oturum varsa ayırmak için (isteğe bağlı) |
 | `notify` | `true` ise `done` olayında süre beklemeden bildirim atar |
-| `emoji` | Balonda metnin önüne konacak emoji (isteğe bağlı; yoksa duruma göre seçilir) |
+| `emoji` | Metnin önüne konacak emoji (isteğe bağlı, yoksa duruma göre seçilir) |
 
-Claude Code/Codex formatında (`hook_event_name` içeren) JSON da kabul edilir. Örnek: `scripts/send-test.sh gemini done "Hepsi geçti"`.
+Claude Code / Codex hook formatındaki JSON da (`hook_event_name` içeren) kabul edilir. Port doluysa sıradaki port kullanılır, geçerli port `~/.telepaith/port` dosyasında yazar. Hızlı deneme: `scripts/send-test.sh gemini done "Hepsi geçti"`.
+</details>
 
-Sunucu sadece bu Mac'ten gelen istekleri kabul eder (loopback), tarayıcıdaki sayfaların isteklerini reddeder. Port doluysa sıradaki port kullanılır; geçerli port `~/.telepaith/port` dosyasındadır.
+## Ayarlar
 
-## Renkler
+<details><summary>Renkler ve uygulama eşlemesi</summary>
 
 `~/.telepaith/config.json` (menü → Ayar klasörünü aç):
 
@@ -130,38 +144,59 @@ Sunucu sadece bu Mac'ten gelen istekleri kabul eder (loopback), tarayıcıdaki s
     "claude": { "name": "Claude", "color": "#D97757" },
     "gpt":    { "name": "GPT",    "color": "#3B82F6" },
     "gemini": { "name": "Gemini", "color": "#8B5CF6" }
-  }
+  },
+  "apps": { "com.ornek.uygulama": "gemini" }
 }
 ```
 
-Değiştirdikten sonra menü → **Renkleri ve kostümleri yeniden yükle**.
+`apps` ile bir uygulamanın hangi AI sayılacağını belirlersin (bundle id → kaynak). Değiştirdikten sonra menü → **Renkleri ve kostümleri yeniden yükle**.
+</details>
 
-## Kostümler (GPT görselleri)
+<details><summary>Kostümler: robota kendi çizimini giydir</summary>
 
-Robot normalde kodla çizilir. GPT'ye çizdirdiğin karakteri koymak için:
+Robot normalde kodla çizilir. Kendi karakterini koymak için:
 
-1. `docs/GORSEL-PROMPT.md`'deki prompt ile 5×2'lik kafa tablosunu ürettir (şeffaf arka plan).
+1. [`docs/GORSEL-PROMPT.md`](docs/GORSEL-PROMPT.md)'deki prompt ile 5×2'lik kafa tablosunu ürettir (şeffaf arka plan).
 2. Turuncu sürümü `~/.telepaith/skins/claude/sheet.png`, mavi sürümü `~/.telepaith/skins/gpt/sheet.png` olarak kaydet.
 3. Menü → **Renkleri ve kostümleri yeniden yükle**.
 
-Tablo sırası: 1. satır `idle, thinking, reading, searching, editing`; 2. satır `running, waiting, done, error, sleeping`. Tablo yerine tek tek `idle.png`, `waiting.png` gibi dosyalar da koyabilirsin; tek dosyalar tablodakini ezer. Kaynağa özel klasör yoksa `skins/default/` kullanılır.
-
-Uygulama ikonu `assets/AppIcon.png` (kaynağı `assets/logo.svg`). Değiştirmek için bu PNG'yi 1024×1024 yeni bir görselle değiştir; derleme sırasında .icns otomatik üretilir.
+Tablo sırası: 1. satır `idle, thinking, reading, searching, editing`; 2. satır `running, waiting, done, error, sleeping`. Tek tek `idle.png`, `waiting.png` gibi dosyalar da koyabilirsin, tek dosyalar tablodakini ezer. Kaynağa özel klasör yoksa `skins/default/` kullanılır.
+</details>
 
 ## Sorun giderme
 
-- **Robot hiç tepki vermiyor:** menüde iki tik var mı bak (`Bağlantılar`). Claude Code oturumunu yeniden başlat. `curl http://127.0.0.1:19850/` "TelepAIth çalışıyor" demeli.
-- **Codex tepki vermiyor:** Codex'te `/hooks` yazıp hook'ları onayladın mı?
-- **Bildirim gelmiyor:** Sistem Ayarları → Bildirimler → TelepAIth. Uygulamayı `swift run` ile çıplak çalıştırırsan bildirimler `osascript` ile gelir.
-- **ClaudeBar'ın kota ölçümleri robotu oynatıyor:** olmamalı; hook, ClaudeBar'ın `CLAUDEBAR_PROBE` işaretli oturumlarını yok sayar.
+<details><summary>Işık kırmızı yanıyor</summary>
 
-## Yol haritası
+Robota tıkla, neyin eksik olduğunu söyler. Çoğunlukla Erişilebilirlik iznidir: Sistem Ayarları → Gizlilik ve Güvenlik → Erişilebilirlik'te TelepAIth açık olmalı. Açık görünüp yine kırmızıysa robota tıkla ya da menüdeki uyarıdan izni sıfırlayıp yeniden ver.
+</details>
 
-- ChatGPT ve Claude masaüstü uygulamaları (Erişilebilirlik API'siyle "yazıyor/bitti" algılama)
-- claude.ai ve chatgpt.com için tarayıcı eklentisi
-- Mochi'deki gibi tehlikeli komut kalkanı (`rm -rf`, force push…)
-- Robotun yanında kota halkaları
+<details><summary>ChatGPT ya da Claude uygulamasında hiçbir şey demiyor</summary>
 
-## Teşekkür
+AI cevap yazarken robota sağ tık → **Teşhis… → Panoya kopyala** ve raporu bir [issue](https://github.com/onurerensavci/TelepAIth/issues/new) olarak gönder. Raporda robotun o pencerede neyi görüp neyi göremediği yazar, algılamayı düzeltmek için en hızlı yol bu.
+</details>
 
-Fikir [mochi](https://github.com/oztrkemree/mochi)'den, hook yaklaşımı (localhost'a POST, port dosyası, probe işareti) [ClaudeBar](https://github.com/tddworks/claudebar)'dan esinlendi.
+<details><summary>Claude Code ya da Codex'te sessiz</summary>
+
+Menü → Bağlantılar'da ilgili satırın işaretli olduğundan emin ol. Hook'lar yeni açılan oturumlarda devreye girer, açık oturumu yeniden başlat. Codex'te bir kere `/hooks` yazıp TelepAIth hook'larını onaylaman gerekir.
+</details>
+
+<details><summary>Robot kayboldu</summary>
+
+Menü → **Robotu göster** ya da **Robotu bu masaüstüne getir**. Kilitliyse başka masaüstünde kalmış olabilir.
+</details>
+
+<details><summary>Kaldırmak</summary>
+
+Menü → Bağlantılar'dan bağlı olanları kapat (hook'lar ve anlatıcı kaldırılır), uygulamayı çöpe at, istersen `~/.telepaith` klasörünü de sil.
+</details>
+
+## Geliştirme
+
+Kaynaktan derlemek, test çalıştırmak ve sürüm yayınlamak için: [docs/GELISTIRME.md](docs/GELISTIRME.md).
+
+```bash
+git clone https://github.com/onurerensavci/TelepAIth.git && cd TelepAIth
+scripts/build-app.sh && open build/TelepAIth.app
+```
+
+<p align="center"><sub><a href="https://github.com/oztrkemree/mochi">mochi</a>'den ve <a href="https://github.com/tddworks/claudebar">ClaudeBar</a>'dan ilham aldı.</sub></p>

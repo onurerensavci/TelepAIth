@@ -1,0 +1,202 @@
+<p align="right"><a href="README.md">Türkçe</a> · <b>English</b></p>
+
+<p align="center">
+  <img src="assets/readme/hero-en.svg" alt="TelepAIth: whatever Claude and GPT are doing, a little robot in your screen corner says it" width="100%">
+</p>
+
+<p align="center">
+  <a href="https://github.com/onurerensavci/TelepAIth/releases/latest"><img src="https://img.shields.io/badge/%E2%AC%87%20Download-macOS%2013%2B-D97757?style=for-the-badge" alt="Download"></a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/onurerensavci/TelepAIth/releases/latest"><img src="https://img.shields.io/github/v/release/onurerensavci/TelepAIth?color=7C5CFF" alt="Release"></a>
+  <a href="https://github.com/onurerensavci/TelepAIth/releases"><img src="https://img.shields.io/github/downloads/onurerensavci/TelepAIth/total?color=3B82F6" alt="Downloads"></a>
+  <img src="https://img.shields.io/badge/macOS-13%2B-111?logo=apple" alt="macOS 13+">
+  <a href="https://github.com/onurerensavci/TelepAIth/actions/workflows/build.yml"><img src="https://github.com/onurerensavci/TelepAIth/actions/workflows/build.yml/badge.svg" alt="Build"></a>
+</p>
+
+**TelepAIth** is a tiny robot head with LED dot-matrix eyes that floats in the corner of your screen. It reads what Claude and GPT are doing right now and says it in a speech bubble above its head, and it notifies you when a task finishes or the AI is waiting for you. Its eyes glow orange in Claude and blue in GPT. It works with Claude Code, Codex and the Claude and ChatGPT desktop apps, and you can hook up any other AI too.
+
+<p align="center">
+  <img src="assets/readme/states-en.svg" alt="Robot states: idle, thinking, reading, editing, running a command, waiting for you, done, error, asleep, plus moods" width="100%">
+</p>
+
+## What it does
+
+**👀 Follows along**
+- **Claude Code and Codex:** sees every step as it happens: reading files, searching, editing, running commands, handing work to a subagent…
+- **Claude and ChatGPT apps:** tells from the on-screen Stop / Allow buttons when the AI is working, waiting for approval or done, and sums up the phase in a word or two: *looking, solving, understanding, finishing*.
+- **Switching chats** follows the chat you clicked instead of calling the old one "done".
+- **Narrator:** optionally, Claude tells the robot what it's doing in its own words (a small MCP tool).
+- **Quota:** if ClaudeBar is installed, warns you when your quota runs low.
+
+**💬 Talks**
+- Speaks with an emoji for each action: 🔮 thinking, 📖 reading, 🧪 running tests, 📦 installing packages, 🚀 on `git push`, 🎉 when done, ✋ when waiting for you.
+- Wraps up each turn: *Done! · 2 min · 12 tools · 4 edits*.
+- Has moods: heart eyes when you say thanks, shocked by ALL CAPS, scared of `rm -rf`, throws a party when tests pass, gets dizzy after 3 errors in a row.
+- Speaks Turkish or English. Can read things out loud and play short sounds if you like.
+
+**🔔 Lets you know**
+- Notifies you when a task longer than 20 seconds finishes, when the AI needs your approval or an answer, and on errors.
+- **Shield:** before Claude Code runs something risky like `rm -rf`, `git push --force`, `git reset --hard` or `DROP TABLE`, it asks you first (it doesn't block, it just asks).
+
+**🪄 Knows its place**
+- Click Claude or ChatGPT and it flies to the bottom-right corner of that window, and follows if you move the window. Switch to other apps and it stays put.
+- Stays on whichever desktop (Space) the AI is on.
+- Snaps to screen corners and moves between monitors.
+- **🔒 Lock** pins it in place, **📌 Always on top** keeps it above every window.
+- Updates itself: the light on its forehead turns orange when a new version is out. Click it to install.
+
+<p align="center">
+  <img src="assets/readme/switch-en.svg" alt="Eyes glow orange in Claude and blue in ChatGPT or Codex" width="560">
+</p>
+
+## Install
+
+1. **[Download the latest release](https://github.com/onurerensavci/TelepAIth/releases/latest)** (`TelepAIth-vX.Y.Z.zip`), unzip it and drag `TelepAIth.app` into **Applications**.
+2. **First launch:** the app isn't notarized by Apple, so macOS blocks the first launch. Go to **System Settings → Privacy & Security** and click **Open Anyway** next to TelepAIth at the bottom.
+   <details><summary>One line in Terminal</summary>
+
+   ```bash
+   xattr -dr com.apple.quarantine /Applications/TelepAIth.app && open /Applications/TelepAIth.app
+   ```
+   </details>
+3. **Permissions:** allow notifications when asked. To watch the Claude and ChatGPT apps, turn on **System Settings → Privacy & Security → Accessibility → TelepAIth**. The permission survives updates.
+4. **Connect:** robot icon in the menu bar → **Connections**:
+
+| Connection | What it does | Note |
+|---|---|---|
+| **Claude and ChatGPT apps** | Watches the desktop apps on screen | Needs Accessibility permission, on by default |
+| **Claude Code** | Adds hooks to `~/.claude/settings.json` | New sessions start reporting |
+| **Codex** | Adds hooks to `~/.codex/hooks.json` | Type `/hooks` in Codex once and approve |
+| **Narrator** | Adds the `telepaith_say` tool to Claude desktop | Restart Claude, add the shown instruction to your profile preferences |
+| **ClaudeBar** | Receives quota alerts | ClaudeBar → Webhooks → `http://localhost:19850/claudebar` (JSON) |
+
+Hooks back up your settings files, only touch their own entries and send events in the background, so they don't slow Claude Code or Codex down. Click the menu item again to remove them.
+
+To try it out: menu → **Try it → Claude: a short task**. You'll see the robot think, read, edit and hop.
+
+## Talking to the robot
+
+| Action | What happens |
+|---|---|
+| **Click** | Shows the last 5 events. If the light is orange it installs the update, if red it tells you what's broken. |
+| **Double-click** | Brings the AI app it's showing to the front. |
+| **Drag** | Moves it. Drop it near a corner to snap there, or onto another monitor. |
+| **Right-click** | Recent events · 🔒 Lock · 📌 Always on top · Diagnostics · Hide |
+
+**Forehead light:** 🟢 all good · 🟠 update available · 🔴 something's broken (click and it'll tell you why).
+
+## How it works
+
+```mermaid
+flowchart LR
+  CC["Claude Code"] -- hook --> T
+  CX["Codex"] -- hook --> T
+  APP["Claude / ChatGPT<br/>apps"] -- Accessibility --> T
+  MCP["Claude narrator<br/>(MCP)"] -- telepaith_say --> T
+  ANY["Your own AI"] -- "HTTP POST" --> T
+  T(("TelepAIth<br/>127.0.0.1:19850")) --> B["🤖 Bubble"]
+  T --> N["🔔 Notification"]
+  T --> S["🔊 Sound"]
+```
+
+TelepAIth runs a small local server on your Mac. Hooks, the narrator and your own tools send events to it. Desktop apps are read through the macOS Accessibility API, from their on-screen buttons and status line.
+
+## Privacy
+
+Everything stays on your Mac. The server only accepts requests from this computer and rejects requests from web pages. Text read from the screen is never sent anywhere. The only outgoing connection is the update check that asks GitHub whether a new version is out.
+
+## Connect your own AI
+
+Any tool can send the robot an event with a single `POST`. A new `source` shows up on its first event. Gemini comes in purple; give others a color in [Settings](#settings).
+
+```bash
+curl -s -H 'Content-Type: application/json' \
+  -d '{"state":"running","text":"Running the tests","project":"app"}' \
+  "http://127.0.0.1:19850/event?source=gemini"
+```
+
+<details><summary>Fields</summary>
+
+| Field | Description |
+|---|---|
+| `state` | `idle`, `thinking`, `reading`, `searching`, `editing`, `running`, `delegating`, `waiting`, `done`, `error` |
+| `text` | Text shown in the bubble |
+| `project` | Small caption in the bubble (optional) |
+| `session` | Tells apart multiple sessions of the same AI (optional) |
+| `notify` | If `true`, a `done` event notifies right away |
+| `emoji` | Emoji put before the text (optional, picked from the state otherwise) |
+
+JSON in the Claude Code / Codex hook format (with `hook_event_name`) is accepted too. If the port is taken the next one is used; the current port is in `~/.telepaith/port`. Quick test: `scripts/send-test.sh gemini done "All green"`.
+</details>
+
+## Settings
+
+<details><summary>Colors and app mapping</summary>
+
+`~/.telepaith/config.json` (menu → Open settings folder):
+
+```json
+{
+  "longTurnSeconds": 20,
+  "sources": {
+    "claude": { "name": "Claude", "color": "#D97757" },
+    "gpt":    { "name": "GPT",    "color": "#3B82F6" },
+    "gemini": { "name": "Gemini", "color": "#8B5CF6" }
+  },
+  "apps": { "com.example.app": "gemini" }
+}
+```
+
+`apps` maps an app (bundle id) to an AI. After editing, menu → **Reload colors and skins**.
+</details>
+
+<details><summary>Skins: dress the robot in your own art</summary>
+
+The robot is drawn in code by default. To use your own character:
+
+1. Generate a 5×2 sheet of heads with the prompt in [`docs/GORSEL-PROMPT.md`](docs/GORSEL-PROMPT.md) (transparent background).
+2. Save the orange version as `~/.telepaith/skins/claude/sheet.png` and the blue one as `~/.telepaith/skins/gpt/sheet.png`.
+3. Menu → **Reload colors and skins**.
+
+Sheet order: row 1 `idle, thinking, reading, searching, editing`; row 2 `running, waiting, done, error, sleeping`. You can also drop single files like `idle.png` or `waiting.png`; they override the sheet. Without a source folder, `skins/default/` is used.
+</details>
+
+## Troubleshooting
+
+<details><summary>The light is red</summary>
+
+Click the robot and it tells you what's missing. Usually it's Accessibility: TelepAIth must be on in System Settings → Privacy & Security → Accessibility. If it looks on but stays red, click the robot or use the warning in the menu to reset the permission and grant it again.
+</details>
+
+<details><summary>Nothing happens in the ChatGPT or Claude app</summary>
+
+While the AI is answering, right-click the robot → **Diagnostics… → Copy to clipboard** and send the report as an [issue](https://github.com/onurerensavci/TelepAIth/issues/new). It shows what the robot can and can't see in that window, which is the fastest way to fix detection.
+</details>
+
+<details><summary>Silent in Claude Code or Codex</summary>
+
+Make sure the item is checked in menu → Connections. Hooks kick in for new sessions, so restart the open one. In Codex, type `/hooks` once and approve the TelepAIth hooks.
+</details>
+
+<details><summary>The robot is gone</summary>
+
+Menu → **Show robot** or **Bring robot to this desktop**. If it's locked, it may be on another desktop.
+</details>
+
+<details><summary>Uninstall</summary>
+
+Turn off the active items in menu → Connections (hooks and the narrator are removed), move the app to the Trash, and delete `~/.telepaith` if you like.
+</details>
+
+## Development
+
+Building from source, running tests and releasing: [docs/GELISTIRME.md](docs/GELISTIRME.md) (Turkish).
+
+```bash
+git clone https://github.com/onurerensavci/TelepAIth.git && cd TelepAIth
+scripts/build-app.sh && open build/TelepAIth.app
+```
+
+<p align="center"><sub>Inspired by <a href="https://github.com/oztrkemree/mochi">mochi</a> and <a href="https://github.com/tddworks/claudebar">ClaudeBar</a>.</sub></p>
