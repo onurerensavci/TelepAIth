@@ -66,7 +66,8 @@ enum HookInstaller {
     static func command(source: String) -> String {
         let m = AppInfo.hookMarker
         let portFile = "$HOME/\(AppInfo.supportDirName)/port"
-        let url = "http://127.0.0.1:${PORT}/event?source=\(source)"
+        // app/term: hangi terminalde çalıştığı (balona tıklayınca o pencereyi öne getirmek için)
+        let url = "http://127.0.0.1:${PORT}/event?source=\(source)&app=${__CFBundleIdentifier:-}&term=${TERM_PROGRAM:-}"
         return "\(m)() { [ \"$CLAUDEBAR_PROBE\" = \"1\" ] && return 0; P=$(cat); "
             + "PORT=$(cat \"\(portFile)\" 2>/dev/null || echo \(AppInfo.defaultPort)); "
             + "{ printf '%s' \"$P\" | curl -s -m 3 --noproxy '*' -H 'Content-Type: application/json' -H 'Expect:' --data-binary @- \"\(url)\"; } >/dev/null 2>&1 & }; \(m)"

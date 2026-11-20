@@ -25,11 +25,14 @@ final class AppController: NSObject {
         try? FileManager.default.createDirectory(at: AppInfo.skinsDir, withIntermediateDirectories: true)
         Themes.writeExampleConfigIfMissing()
         Themes.shared.reload()
+        Notifier.shared.onStatusChange = { [weak self] in self?.rebuildMenu() }
         Notifier.shared.setup()
 
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 
         manager.onChange = { [weak self] in self?.rebuildMenu() }
+        manager.onOpenSettings = { [weak self] in self?.openSettings() }
+        manager.onReportBug = { [weak self] in self?.reportBug() }
         manager.start()
 
         server.onReady = { [weak self] port in
@@ -58,6 +61,14 @@ final class AppController: NSObject {
             try? HookInstaller.install(target)
         }
         rebuildMenu()
+
+        // İlk açılışta kurulum sihirbazı
+        if !Preferences.onboardingDone {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+                guard let self = self else { return }
+                OnboardingWindow.shared.show(host: self)
+            }
+        }
     }
 
     func stop() {
@@ -111,12 +122,15 @@ final class AppController: NSObject {
         manager.setHealth(health)
         Diagnostics.shared.general = [
             (loc("Sürüm", "Version"), Updater.shared.currentVersion),
+            ("macOS", ProcessInfo.processInfo.operatingSystemVersionString),
             (loc("Sunucu", "Server"), server.port > 0 ? "127.0.0.1:\(server.port)" : (serverError ?? "—")),
             (loc("Erişilebilirlik izni", "Accessibility"), AppWatcher.isTrusted ? loc("var", "granted") : loc("yok", "missing")),
             (loc("Masaüstü izleme", "Desktop watching"), Preferences.watchApps ? loc("açık", "on") : loc("kapalı", "off")),
+            (loc("Bildirim izni", "Notifications"), Notifier.shared.status.text),
             ("Claude Code", HookInstaller.isInstalled(.claude) ? loc("bağlı", "connected") : loc("bağlı değil", "not connected")),
             ("Codex", HookInstaller.isInstalled(.codex) ? loc("bağlı", "connected") : loc("bağlı değil", "not connected")),
             (loc("Anlatıcı", "Narrator"), NarratorInstaller.isInstalled() ? loc("Claude masaüstüne ekli", "added to Claude desktop") : loc("ekli değil", "not added")),
+            (loc("Odak modu", "Focus mode"), FocusMode.statusText),
         ]
 
         let menu = NSMenu()
@@ -133,7 +147,7 @@ final class AppController: NSObject {
         switch health {
         case .ok:
             dotColor = .systemGreen
-            healthText = loc("Her şey yolunda", "All good")
+            healthText = FocusMode.isActive ? loc("Odak modu ", "Focus mode ") + FocusMode.statusText : loc("Her şey yolunda", "All good")
         case .update(let version):
             dotColor = .systemOrange
             healthText = loc("Güncelleme var: \(version)", "Update available: \(version)")
@@ -142,8 +156,8 @@ final class AppController: NSObject {
             healthText = reason
         }
         let healthTitle = NSMutableAttributedString(string: "● ", attributes: [.foregroundColor: dotColor])
-        healthTitle.append(NSAttributedString(string: healthText, attributes: [.font: NSFont.menuFont(ofSize: 0),
-                                                                                .foregroundColor: NSColor.secondaryLabelColor]))
+        healthTitle.append(NSAttributedString(string: clip(healthText, 70), attributes: [.font: NSFont.menuFont(ofSize: 0),
+                                                                                          .foregroundColor: NSColor.secondaryLabelColor]))
         healthItem.attributedTitle = healthTitle
         menu.addItem(healthItem)
 
@@ -167,95 +181,71 @@ final class AppController: NSObject {
             menu.addItem(item)
         }
 
+        // Uyarılar: sadece bir şey eksikse görünür
+        if Preferences.notificationsEnabled && Notifier.shared.status == .denied {
+            menu.addItem(actionItem("⚠︎ " + loc("Bildirimler macOS'ta kapalı — aç…", "Notifications are off in macOS — turn on…"),
+                                    #selector(openNotificationSettings)))
+        }
+        if Preferences.watchApps && !AppWatcher.isTrusted {
+            menu.addItem(actionItem("⚠︎ " + loc("Erişilebilirlik izni gerekli…", "Accessibility permission needed…"),
+                                    #selector(openAccessibility)))
+            let reset = actionItem(loc("İzni sıfırla ve yeniden iste", "Reset and request permission again"),
+                                   #selector(resetAccessibility))
+            reset.indentationLevel = 1
+            menu.addItem(reset)
+        }
+
         menu.addItem(.separator())
         menu.addItem(toggleItem(loc("Robotu göster", "Show robot"), on: manager.visible, action: #selector(toggleRobots)))
         menu.addItem(actionItem(loc("Robotu bu masaüstüne getir", "Bring robot to this desktop"), #selector(bringRobotHere)))
-        menu.addItem(toggleItem(loc("Robotu kilitle (yerinde kalsın)", "Lock robot (stay in place)"), on: manager.isLocked,
-                                action: #selector(toggleLock)))
-        menu.addItem(toggleItem(loc("Her zaman üstte", "Always on top"), on: Preferences.alwaysOnTop,
-                                action: #selector(toggleAlwaysOnTop)))
-        menu.addItem(toggleItem(loc("Bildirimler", "Notifications"), on: Preferences.notificationsEnabled,
-                                action: #selector(toggleNotifications)))
-        menu.addItem(toggleItem(loc("Emojiler", "Emojis"), on: Preferences.emojiEnabled, action: #selector(toggleEmoji)))
-        menu.addItem(toggleItem(loc("Boştayken laf atsın", "Idle chatter"), on: Preferences.idleChatter, action: #selector(toggleChatter)))
-        menu.addItem(toggleItem(loc("AI penceresine gitsin", "Follow the AI window"), on: Preferences.followAppWindow,
-                                action: #selector(toggleFollow)))
 
-        let language = NSMenuItem(title: loc("Dil", "Language"), action: nil, keyEquivalent: "")
-        let languageMenu = NSMenu()
-        for lang in Language.allCases {
-            let item = toggleItem(lang.displayName, on: Language.current == lang, action: #selector(selectLanguage(_:)))
-            item.representedObject = lang.rawValue
-            languageMenu.addItem(item)
-        }
-        language.submenu = languageMenu
-        menu.addItem(language)
-
-        menu.addItem(toggleItem(loc("Sesler", "Sounds"), on: Preferences.sounds, action: #selector(toggleSounds)))
-        menu.addItem(toggleItem(loc("Sesli konuşsun", "Speak out loud"), on: Preferences.speak, action: #selector(toggleSpeak)))
+        let focus = NSMenuItem(title: loc("Odak modu", "Focus mode"), action: nil, keyEquivalent: "")
+        focus.state = FocusMode.isActive ? .on : .off
+        let focusMenu = NSMenu()
+        let focusStatus = NSMenuItem(title: FocusMode.statusText, action: nil, keyEquivalent: "")
+        focusStatus.isEnabled = false
+        focusMenu.addItem(focusStatus)
+        focusMenu.addItem(.separator())
+        focusMenu.addItem(actionItem(loc("1 saat", "1 hour"), #selector(focusHour)))
+        focusMenu.addItem(actionItem(loc("Kapatana kadar", "Until I turn it off"), #selector(focusForever)))
+        let off = actionItem(loc("Kapat", "Turn off"), #selector(focusOff))
+        off.isEnabled = FocusMode.manualActive
+        focusMenu.addItem(off)
+        focusMenu.addItem(.separator())
+        focusMenu.addItem(toggleItem(loc("Toplantıda kendiliğinden aç", "Automatically in meetings"),
+                                     on: Preferences.autoFocusInMeetings, action: #selector(toggleAutoFocus)))
+        focus.submenu = focusMenu
+        menu.addItem(focus)
+        menu.addItem(actionItem(loc("Bugünün özeti", "Today's summary"), #selector(showSummaryAction)))
 
         menu.addItem(.separator())
-        let connections = NSMenuItem(title: loc("Bağlantılar", "Connections"), action: nil, keyEquivalent: "")
-        connections.isEnabled = false
-        menu.addItem(connections)
-        let watch = toggleItem(loc("Claude ve ChatGPT uygulamaları", "Claude & ChatGPT apps"), on: Preferences.watchApps,
-                               action: #selector(toggleWatchApps))
-        watch.indentationLevel = 1
-        menu.addItem(watch)
-        if Preferences.watchApps && !AppWatcher.isTrusted {
-            let warn = actionItem("⚠︎ " + loc("Erişilebilirlik izni gerekli…", "Accessibility permission needed…"),
-                                  #selector(openAccessibility))
-            warn.indentationLevel = 2
-            menu.addItem(warn)
-            let reset = actionItem(loc("İzni sıfırla ve yeniden iste", "Reset and request permission again"),
-                                   #selector(resetAccessibility))
-            reset.indentationLevel = 2
-            menu.addItem(reset)
-        } else if Preferences.watchApps {
-            for (name, status) in manager.watcherStatus.sorted(by: { $0.key < $1.key }) {
-                let line = NSMenuItem(title: "\(name): \(status)", action: nil, keyEquivalent: "")
-                line.isEnabled = false
-                line.indentationLevel = 2
-                menu.addItem(line)
-            }
-            if FileManager.default.fileExists(atPath: AppWatcher.debugFile.path) {
-                let debug = actionItem(loc("Algılama günlüğünü aç", "Open detection log"), #selector(openDebugLog))
-                debug.indentationLevel = 2
-                menu.addItem(debug)
-            }
-        }
-        for target in HookTarget.allCases {
-            let installed = HookInstaller.isInstalled(target)
-            let item = toggleItem(target.displayName, on: installed, action: #selector(toggleHook(_:)))
-            item.representedObject = target.rawValue
-            item.indentationLevel = 1
-            menu.addItem(item)
-            if target == .claude && installed {
-                let shield = toggleItem(loc("Kalkan: tehlikeli komutta onay iste", "Shield: ask before risky commands"),
-                                        on: Preferences.shield, action: #selector(toggleShield))
-                shield.indentationLevel = 2
-                menu.addItem(shield)
-            }
-        }
-        let narrator = toggleItem(loc("Anlatıcı (Claude kendisi söylesin)", "Narrator (Claude tells it)"),
-                                  on: NarratorInstaller.isInstalled(), action: #selector(toggleNarrator))
-        narrator.indentationLevel = 1
-        menu.addItem(narrator)
-        let claudeBar = actionItem(loc("ClaudeBar kota uyarıları…", "ClaudeBar quota alerts…"), #selector(showClaudeBarHelp))
-        claudeBar.indentationLevel = 1
-        menu.addItem(claudeBar)
+        menu.addItem(actionItem(loc("Ayarlar…", "Settings…"), #selector(openSettings), key: ","))
+        menu.addItem(actionItem(loc("Kurulum sihirbazı…", "Setup assistant…"), #selector(openOnboarding)))
 
-        menu.addItem(.separator())
         let demo = NSMenuItem(title: loc("Dene", "Try it"), action: nil, keyEquivalent: "")
         let demoMenu = NSMenu()
         demoMenu.addItem(actionItem(loc("Claude: kısa bir görev", "Claude: a short task"), #selector(demoClaude)))
         demoMenu.addItem(actionItem(loc("GPT: onay beklesin", "GPT: wait for approval"), #selector(demoGPTWaiting)))
         demoMenu.addItem(actionItem(loc("Claude: kota uyarısı", "Claude: quota alert"), #selector(demoQuota)))
+        demoMenu.addItem(actionItem(loc("İki oturum aynı anda", "Two sessions at once"), #selector(demoParallel)))
+        demoMenu.addItem(.separator())
+        demoMenu.addItem(actionItem(loc("Test bildirimi gönder", "Send a test notification"), #selector(testNotification)))
         demo.submenu = demoMenu
         menu.addItem(demo)
-        menu.addItem(actionItem(loc("Teşhis…", "Diagnostics…"), #selector(openDiagnostics)))
-        menu.addItem(actionItem(loc("Ayar klasörünü aç", "Open settings folder"), #selector(openSupportDir)))
-        menu.addItem(actionItem(loc("Renkleri ve kostümleri yeniden yükle", "Reload colors and skins"), #selector(reloadAppearance)))
+
+        let help = NSMenuItem(title: loc("Yardım", "Help"), action: nil, keyEquivalent: "")
+        let helpMenu = NSMenu()
+        helpMenu.addItem(actionItem(loc("Hata bildir…", "Report a problem…"), #selector(reportBug)))
+        helpMenu.addItem(actionItem(loc("Teşhis…", "Diagnostics…"), #selector(openDiagnostics)))
+        if FileManager.default.fileExists(atPath: AppWatcher.debugFile.path) {
+            helpMenu.addItem(actionItem(loc("Algılama günlüğünü aç", "Open detection log"), #selector(openDebugLog)))
+        }
+        helpMenu.addItem(.separator())
+        helpMenu.addItem(actionItem(loc("Ayar klasörünü aç", "Open settings folder"), #selector(openSupportDir)))
+        helpMenu.addItem(actionItem(loc("Renkleri ve kostümleri yeniden yükle", "Reload colors and skins"), #selector(reloadAppearance)))
+        help.submenu = helpMenu
+        menu.addItem(help)
+
         let checkTitle = Updater.shared.isBusy
             ? loc("Güncelleme indiriliyor…", "Downloading update…")
             : loc("Güncellemeleri denetle…", "Check for updates…")
@@ -318,10 +308,81 @@ final class AppController: NSObject {
         rebuildMenu()
     }
 
-    @objc private func toggleShield() {
-        Preferences.shield.toggle()
-        if HookInstaller.isInstalled(.claude) { try? HookInstaller.install(.claude) }
+    // MARK: Yeni menü eylemleri
+
+    @objc private func openNotificationSettings() {
+        Notifier.openSettings()
+    }
+
+    @objc private func focusHour() {
+        FocusMode.turnOn(for: 3600)
+        manager.focusChanged()
         rebuildMenu()
+    }
+
+    @objc private func focusForever() {
+        FocusMode.turnOn(for: nil)
+        manager.focusChanged()
+        rebuildMenu()
+    }
+
+    @objc private func focusOff() {
+        FocusMode.turnOff()
+        manager.focusChanged()
+        rebuildMenu()
+    }
+
+    @objc private func toggleAutoFocus() {
+        Preferences.autoFocusInMeetings.toggle()
+        manager.focusChanged()
+        rebuildMenu()
+    }
+
+    @objc private func showSummaryAction() {
+        manager.showSummary()
+    }
+
+    @objc func openSettings() {
+        rebuildMenu()
+        SettingsWindow.shared.show(host: self)
+    }
+
+    @objc private func openOnboarding() {
+        OnboardingWindow.shared.show(host: self)
+    }
+
+    @objc private func testNotification() {
+        Notifier.shared.sendTest()
+    }
+
+    @objc func reportBug() {
+        rebuildMenu()
+        BugReport.open()
+    }
+
+    @objc private func demoParallel() {
+        let a = "demo-\(Int.random(in: 1000...9999))"
+        let b = "demo-\(Int.random(in: 1000...9999))"
+        play([
+            (0, AgentEvent(source: "claude", sessionID: a, kind: .prompt, state: .thinking,
+                           text: loc("Düşünüyor…", "Thinking…"), project: "api", emoji: "🔮")),
+            (1, AgentEvent(source: "claude", sessionID: b, kind: .prompt, state: .thinking,
+                           text: loc("Düşünüyor…", "Thinking…"), project: "web", emoji: "🔮")),
+            (2, AgentEvent(source: "gpt", sessionID: b + "g", kind: .tool, state: .running,
+                           text: loc("Komut: ", "Command: ") + "npm test", project: "mobile", emoji: "🧪")),
+            (4, AgentEvent(source: "claude", sessionID: a, kind: .tool, state: .editing,
+                           text: loc("Düzenliyor: ", "Editing ") + "server.ts", project: "api", emoji: "✍️")),
+            (6, AgentEvent(source: "claude", sessionID: b, kind: .waiting, state: .waiting,
+                           text: loc("Onayını bekliyor: ", "Needs your approval: ") + "rm -rf dist", project: "web", emoji: "✋")),
+            (12, AgentEvent(source: "claude", sessionID: b, kind: .toolDone)),
+            (13, AgentEvent(source: "gpt", sessionID: b + "g", kind: .stop, state: .done, project: "mobile")),
+            (15, AgentEvent(source: "claude", sessionID: a, kind: .stop, state: .done, project: "api")),
+            (16, AgentEvent(source: "claude", sessionID: b, kind: .stop, state: .done, project: "web")),
+        ])
+    }
+
+    @objc private func toggleShield() {
+        setShield(!Preferences.shield)
     }
 
     @objc private func openDiagnostics() {
@@ -330,10 +391,14 @@ final class AppController: NSObject {
     }
 
     @objc private func toggleNarrator() {
+        setNarrator(on: !NarratorInstaller.isInstalled())
+    }
+
+    func setNarrator(on: Bool) {
         do {
-            if NarratorInstaller.isInstalled() {
-                try NarratorInstaller.uninstall()
-            } else {
+            if !on {
+                if NarratorInstaller.isInstalled() { try NarratorInstaller.uninstall() }
+            } else if !NarratorInstaller.isInstalled() {
                 try NarratorInstaller.install()
                 NSApp.activate(ignoringOtherApps: true)
                 let alert = NSAlert()
@@ -371,7 +436,11 @@ final class AppController: NSObject {
     }
 
     @objc private func toggleWatchApps() {
-        let on = !Preferences.watchApps
+        setWatchApps(!Preferences.watchApps)
+    }
+
+    func setWatchApps(_ on: Bool) {
+        guard on != Preferences.watchApps else { return }
         manager.setWatchApps(on)
         if on && !AppWatcher.isTrusted {
             showAlert(title: loc("Erişilebilirlik izni", "Accessibility permission"),
@@ -418,12 +487,20 @@ final class AppController: NSObject {
 
     @objc private func toggleHook(_ sender: NSMenuItem) {
         guard let raw = sender.representedObject as? String, let target = HookTarget(rawValue: raw) else { return }
+        setHook(target, on: !HookInstaller.isInstalled(target), quiet: false)
+    }
+
+    func setHook(_ target: HookTarget, on: Bool, quiet: Bool) {
         do {
-            if HookInstaller.isInstalled(target) {
-                try HookInstaller.uninstall(target)
-            } else {
+            if !on {
+                if HookInstaller.isInstalled(target) { try HookInstaller.uninstall(target) }
+            } else if !HookInstaller.isInstalled(target) {
                 try HookInstaller.install(target)
                 manager.model(for: target.source)
+                if quiet {
+                    rebuildMenu()
+                    return
+                }
                 let info: String
                 switch target {
                 case .claude:
@@ -441,7 +518,7 @@ final class AppController: NSObject {
         rebuildMenu()
     }
 
-    @objc private func showClaudeBarHelp() {
+    @objc func showClaudeBarHelp() {
         let url = "http://localhost:\(server.port > 0 ? server.port : AppInfo.defaultPort)/claudebar"
         NSApp.activate(ignoringOtherApps: true)
         let alert = NSAlert()
@@ -549,5 +626,56 @@ final class AppController: NSObject {
         alert.messageText = title
         alert.informativeText = text
         alert.runModal()
+    }
+}
+
+
+// MARK: - Ayarlar penceresi ve kurulum sihirbazı için
+
+extension AppController: SettingsHost {
+    var robotVisible: Bool {
+        get { manager.visible }
+        set {
+            manager.visible = newValue
+            rebuildMenu()
+        }
+    }
+
+    var robotLocked: Bool { manager.isLocked }
+    var serverPort: UInt16 { server.port }
+    var watcherStatus: [String: String] { manager.watcherStatus }
+
+    func setRobotLocked(_ value: Bool) {
+        manager.setLocked(value)
+        rebuildMenu()
+    }
+
+    func setAlwaysOnTop(_ value: Bool) {
+        manager.setAlwaysOnTop(value)
+        rebuildMenu()
+    }
+
+    func followSettingChanged() {
+        manager.followSettingChanged()
+        rebuildMenu()
+    }
+
+    func setShield(_ on: Bool) {
+        Preferences.shield = on
+        if HookInstaller.isInstalled(.claude) { try? HookInstaller.install(.claude) }
+        rebuildMenu()
+    }
+
+    func focusChanged() {
+        manager.focusChanged()
+        rebuildMenu()
+    }
+
+    func showSummary() {
+        manager.showSummary()
+    }
+
+    func settingsChanged() {
+        rebuildMenu()
     }
 }

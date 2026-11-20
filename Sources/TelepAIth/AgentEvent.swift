@@ -95,6 +95,34 @@ struct AgentEvent {
     var moodSeconds: Double = 3
     /// Bu süreç öndeyken bildirim gösterme (kullanıcı zaten bakıyor)
     var quietIfFrontmostPID: Int32? = nil
+    /// Balona ya da bildirime tıklayınca öne getirilecek uygulama (Claude penceresi, terminal…)
+    var appPID: Int32? = nil
+    var appBundleID: String? = nil
+    /// ClaudeBar'dan gelen kalan kota yüzdesi
+    var quotaLeft: Int? = nil
+}
+
+/// Tıklayınca gidilecek yer: bir süreç ya da bir uygulama.
+struct AppTarget: Equatable {
+    var pid: Int32?
+    var bundleID: String?
+
+    var isEmpty: Bool { pid == nil && (bundleID ?? "").isEmpty }
+
+    /// Hook komutu terminalin kimliğini gönderir; boşsa TERM_PROGRAM'dan tahmin et.
+    static func bundleID(app: String?, term: String?) -> String? {
+        if let app = app?.trimmingCharacters(in: .whitespaces), !app.isEmpty { return app }
+        switch (term ?? "").lowercased() {
+        case "apple_terminal": return "com.apple.Terminal"
+        case "iterm.app": return "com.googlecode.iterm2"
+        case "vscode": return "com.microsoft.VSCode"
+        case "warpterminal": return "dev.warp.Warp-Stable"
+        case "ghostty": return "com.mitchellh.ghostty"
+        case "wezterm": return "com.github.wez.wezterm"
+        case "tabby": return "org.tabby"
+        default: return nil
+        }
+    }
 }
 
 /// Gelen HTTP isteğini robotun anlayacağı olaya çevirir.
@@ -103,8 +131,14 @@ enum EventParser {
         let json = (try? JSONSerialization.jsonObject(with: body)) as? [String: Any] ?? [:]
         if path.hasPrefix("/claudebar") { return claudeBar(json) }
         let source = Themes.canonical(query["source"] ?? (json["agent"] as? String) ?? "custom")
-        if let hook = json["hook_event_name"] as? String { return hookEvent(hook, json, source: source) }
-        return generic(json, source: source)
+        var event: AgentEvent?
+        if let hook = json["hook_event_name"] as? String {
+            event = hookEvent(hook, json, source: source)
+        } else {
+            event = generic(json, source: source)
+        }
+        event?.appBundleID = AppTarget.bundleID(app: query["app"] ?? (json["app"] as? String), term: query["term"])
+        return event
     }
 
     // MARK: Claude Code ve Codex hook'ları (ikisi aynı formatı kullanıyor)
@@ -266,10 +300,12 @@ enum EventParser {
         var state: RobotState? = nil
         var text: String
         var emoji = "⚠️"
+        var quotaLeft: Int?
         switch type {
         case "quota":
             emoji = "🔋"
             if let left = (j["left"] as? NSNumber)?.intValue {
+                quotaLeft = left
                 text = loc("Kalan kota: %\(left)", "Quota left: \(left)%")
             } else {
                 text = loc("Kota azalıyor", "Quota is running low")
@@ -297,8 +333,10 @@ enum EventParser {
             emoji = "🔗"
         }
         if let login = j["login"] as? String, !login.isEmpty { text += " (\(login))" }
-        return AgentEvent(source: source, sessionID: "claudebar", kind: .quota, state: state, text: text,
-                          forceNotify: type != "recap", emoji: emoji)
+        var event = AgentEvent(source: source, sessionID: "claudebar", kind: .quota, state: state, text: text,
+                               forceNotify: type != "recap", emoji: emoji)
+        event.quotaLeft = quotaLeft
+        return event
     }
 
     // MARK: Genel format — başka bir AI'ı bağlamak için

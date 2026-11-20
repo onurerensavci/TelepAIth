@@ -97,4 +97,55 @@ final class TelepAIthTests: XCTestCase {
         XCTAssertEqual(request.query["source"], "claude")
         XCTAssertEqual(request.body, Data("{}".utf8))
     }
+
+    func testQuotaLeftFromClaudeBar() {
+        let e = EventParser.parse(path: "/claudebar", query: [:], body: Data(#"{"type":"quota","provider":"claude","left":18}"#.utf8))
+        XCTAssertEqual(e?.quotaLeft, 18)
+        let m = RobotModel(source: "claude")
+        _ = m.apply(e!)
+        XCTAssertEqual(m.quotaLeft, 18)
+    }
+
+    func testTerminalTarget() {
+        XCTAssertEqual(AppTarget.bundleID(app: "com.apple.Terminal", term: "iTerm.app"), "com.apple.Terminal")
+        XCTAssertEqual(AppTarget.bundleID(app: "", term: "iTerm.app"), "com.googlecode.iterm2")
+        XCTAssertNil(AppTarget.bundleID(app: nil, term: "unknown"))
+        let body = Data(#"{"hook_event_name":"UserPromptSubmit","session_id":"s1","prompt":"merhaba"}"#.utf8)
+        let e = EventParser.parse(path: "/event", query: ["source": "claude", "app": "com.mitchellh.ghostty"], body: body)
+        XCTAssertEqual(e?.appBundleID, "com.mitchellh.ghostty")
+        XCTAssertTrue(HookInstaller.command(source: "claude").contains("app=${__CFBundleIdentifier:-}"))
+    }
+
+    func testSessionTargetAndMinis() {
+        let m = RobotModel(source: "claude")
+        var a = AgentEvent(source: "claude", sessionID: "a", kind: .prompt, state: .thinking, text: "x")
+        a.appBundleID = "com.apple.Terminal"
+        _ = m.apply(a)
+        _ = m.apply(AgentEvent(source: "claude", sessionID: "b", kind: .waiting, state: .waiting, text: "onay"))
+        // Bekleyen oturum öne çıkar, diğeri minik kafa olur
+        XCTAssertEqual(m.state, .waiting)
+        XCTAssertNotNil(m.waitingSince)
+        let minis = m.miniSessions(excluding: m.bestSessionID)
+        XCTAssertEqual(minis.count, 1)
+        XCTAssertEqual(minis.first?.state, .thinking)
+    }
+
+    func testDailySummary() {
+        let stats = DailyStats()
+        let day = Date(timeIntervalSince1970: 1_700_000_000)
+        stats.recordTurn(source: "claude", seconds: 125, tools: 4, edits: 3, at: day)
+        stats.recordTurn(source: "claude", seconds: 60, tools: 1, edits: 0, at: day)
+        let text = stats.summary(names: { _ in "Claude" }, date: day) ?? ""
+        XCTAssertTrue(text.hasPrefix("Claude: 2 iş"), text)
+        XCTAssertTrue(text.contains("3 düzenleme"), text)
+    }
+
+    func testFocusMode() {
+        FocusMode.turnOn(for: 60)
+        XCTAssertTrue(FocusMode.manualActive)
+        FocusMode.turnOff()
+        XCTAssertFalse(FocusMode.manualActive)
+        XCTAssertTrue(FocusMode.isMeetingApp("us.zoom.xos"))
+        XCTAssertFalse(FocusMode.isMeetingApp("com.apple.Safari"))
+    }
 }

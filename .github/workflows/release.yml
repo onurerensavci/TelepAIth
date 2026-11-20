@@ -79,13 +79,27 @@ jobs:
         run: |
           cd build
           ditto -c -k --keepParent TelepAIth.app "TelepAIth-${TAG}.zip"
+          # Sabit adlı kopya: Homebrew ve "son sürümü indir" bağlantıları sürüm numarası bilmeden çalışsın
+          cp "TelepAIth-${TAG}.zip" TelepAIth.zip
+
+      - name: DMG oluştur
+        env:
+          TAG: ${{ steps.v.outputs.tag }}
+        run: |
+          rm -rf build/dmg && mkdir -p build/dmg
+          ditto build/TelepAIth.app build/dmg/TelepAIth.app
+          ln -s /Applications build/dmg/Applications
+          hdiutil create -volname "TelepAIth" -srcfolder build/dmg -ov -format UDZO "build/TelepAIth-${TAG}.dmg"
+          cp "build/TelepAIth-${TAG}.dmg" build/TelepAIth.dmg
+          hdiutil verify "build/TelepAIth-${TAG}.dmg"
 
       - name: Sürümü yayınla
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.v.outputs.tag }}
         run: |
-          gh release create "$TAG" "build/TelepAIth-${TAG}.zip" \
+          gh release create "$TAG" "build/TelepAIth-${TAG}.zip" "build/TelepAIth-${TAG}.dmg" \
+            build/TelepAIth.zip build/TelepAIth.dmg \
             --target "$GITHUB_SHA" \
             --title "TelepAIth ${TAG}" \
             --generate-notes

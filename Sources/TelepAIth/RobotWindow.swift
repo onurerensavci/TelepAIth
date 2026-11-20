@@ -20,6 +20,12 @@ final class RobotAvatar: ObservableObject {
     @Published private(set) var bubbleBelow = false   // ekranın üst yarısında: balon kafanın altında
     @Published private(set) var health: Health = .ok
     @Published private(set) var locked = Preferences.robotLocked
+    /// Aynı anda çalışan diğer oturumlar (minik kafalar)
+    @Published private(set) var minis: [RobotModel.MiniSession] = []
+    /// Odak modu: robot soluk durur, sadece seni bekleyen şeyleri söyler
+    @Published private(set) var focus = FocusMode.isActive
+    /// Balonun pencere içindeki yeri (SwiftUI, sol-üst köken). Tıklamayı yakalamak için.
+    var bubbleFrame: CGRect = .zero
 
     /// Kafanın merkezi (ekran koordinatı, ana ekranın sol-alt köşesi köken)
     private(set) var head: CGPoint = .zero
@@ -41,6 +47,23 @@ final class RobotAvatar: ObservableObject {
 
     func setHealth(_ value: Health) {
         if health != value { health = value }
+    }
+
+    func setMinis(_ value: [RobotModel.MiniSession]) {
+        if minis != value { minis = value }
+    }
+
+    func setFocus(_ value: Bool) {
+        if focus != value { focus = value }
+    }
+
+    /// Balonun ekrandaki yeri (görünüyorsa)
+    var bubbleScreenRect: NSRect? {
+        guard bubbleFrame.width > 0, bubbleFrame.height > 0 else { return nil }
+        let origin = windowOrigin
+        return NSRect(x: origin.x + bubbleFrame.minX,
+                      y: origin.y + Layout.windowSize.height - bubbleFrame.maxY,
+                      width: bubbleFrame.width, height: bubbleFrame.height)
     }
 
     func setLocked(_ value: Bool) {
@@ -245,6 +268,9 @@ final class AvatarHostingView: NSHostingView<AvatarView> {
     var onDragEnd: (() -> Void)?
     var onRightClick: ((NSEvent) -> Void)?
     var onDoubleClick: (() -> Void)?
+    var onBubbleClick: (() -> Void)?
+    /// Tıklanan nokta balonun üstünde mi (kafanın değil)?
+    var isOverBubble: ((NSPoint) -> Bool)?
 
     private var mouseStart: NSPoint = .zero
     private var dragging = false
@@ -272,6 +298,8 @@ final class AvatarHostingView: NSHostingView<AvatarView> {
         if dragging {
             dragging = false
             onDragEnd?()
+        } else if isOverBubble?(NSEvent.mouseLocation) == true {
+            onBubbleClick?()
         } else if event.clickCount >= 2 {
             onDoubleClick?()
         } else {
@@ -291,6 +319,11 @@ final class AvatarWindowController: NSObject {
     var onDoubleClick: (() -> Void)?
     var onLockChanged: ((Bool) -> Void)?
     var onAlwaysOnTopChanged: ((Bool) -> Void)?
+    var onBubbleClick: (() -> Void)?
+    var onFocusChanged: (() -> Void)?
+    var onOpenSettings: (() -> Void)?
+    var onShowSummary: (() -> Void)?
+    var onReportBug: (() -> Void)?
 
     private let panel: RobotPanel
     private let host: AvatarHostingView
@@ -334,6 +367,11 @@ final class AvatarWindowController: NSObject {
         host.onDragEnd = { [weak self] in self?.avatar.endDrag() }
         host.onRightClick = { [weak self] event in self?.showMenu(event) }
         host.onDoubleClick = { [weak self] in self?.onDoubleClick?() }
+        host.onBubbleClick = { [weak self] in self?.onBubbleClick?() }
+        host.isOverBubble = { [weak self] point in
+            guard let self = self, !self.avatar.headRect.contains(point) else { return false }
+            return self.avatar.bubbleScreenRect?.contains(point) ?? false
+        }
     }
 
     func show() {
@@ -365,8 +403,9 @@ final class AvatarWindowController: NSObject {
     private func syncFrame() {
         let origin = avatar.windowOrigin
         if panel.frame.origin != origin { panel.setFrameOrigin(origin) }
-        // Fare kafanın üstünde değilse tıklamalar arkadaki pencerelere geçsin (balon dahil)
-        let over = avatar.isDragging || avatar.headRect.contains(NSEvent.mouseLocation)
+        // Fare kafanın ya da balonun üstünde değilse tıklamalar arkadaki pencerelere geçsin
+        let mouse = NSEvent.mouseLocation
+        let over = avatar.isDragging || avatar.headRect.contains(mouse) || (avatar.bubbleScreenRect?.contains(mouse) ?? false)
         if panel.ignoresMouseEvents == over { panel.ignoresMouseEvents = !over }
     }
 
@@ -384,9 +423,24 @@ final class AvatarWindowController: NSObject {
         onTop.target = self
         onTop.state = Preferences.alwaysOnTop ? .on : .off
         menu.addItem(onTop)
+        let focus = NSMenuItem(title: FocusMode.manualActive ? loc("🌙 Odak modunu kapat", "🌙 Turn off focus mode")
+                                                               : loc("🌙 Odak modu (1 saat)", "🌙 Focus mode (1 hour)"),
+                               action: #selector(focusAction), keyEquivalent: "")
+        focus.target = self
+        menu.addItem(focus)
+        menu.addItem(.separator())
+        let summary = NSMenuItem(title: loc("📊 Bugünün özeti", "📊 Today's summary"), action: #selector(summaryAction), keyEquivalent: "")
+        summary.target = self
+        menu.addItem(summary)
+        let settings = NSMenuItem(title: loc("Ayarlar…", "Settings…"), action: #selector(settingsAction), keyEquivalent: "")
+        settings.target = self
+        menu.addItem(settings)
         let diagnostics = NSMenuItem(title: loc("Teşhis…", "Diagnostics…"), action: #selector(diagnosticsAction), keyEquivalent: "")
         diagnostics.target = self
         menu.addItem(diagnostics)
+        let bug = NSMenuItem(title: loc("Hata bildir…", "Report a problem…"), action: #selector(bugAction), keyEquivalent: "")
+        bug.target = self
+        menu.addItem(bug)
         menu.addItem(.separator())
         let hide = NSMenuItem(title: loc("Robotu gizle", "Hide robot"), action: #selector(hideAction), keyEquivalent: "")
         hide.target = self
@@ -417,6 +471,21 @@ final class AvatarWindowController: NSObject {
             for: 4)
         onLockChanged?(value)
     }
+
+    @objc private func focusAction() {
+        if FocusMode.manualActive {
+            FocusMode.turnOff()
+            avatar.current.say(withEmoji("☀️", loc("Odak modu kapandı, yine konuşuyorum.", "Focus mode off, I'm chatty again.")), for: 4)
+        } else {
+            FocusMode.turnOn(for: 3600)
+            avatar.current.say(withEmoji("🌙", loc("Bir saat sessizim; sadece seni bekleyen şeyleri söylerim.", "Quiet for an hour; I'll only tell you what needs you.")), for: 4)
+        }
+        onFocusChanged?()
+    }
+
+    @objc private func summaryAction() { onShowSummary?() }
+    @objc private func settingsAction() { onOpenSettings?() }
+    @objc private func bugAction() { onReportBug?() }
 
     @objc private func diagnosticsAction() {
         DiagnosticsWindow.shared.show()

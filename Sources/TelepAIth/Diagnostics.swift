@@ -26,7 +26,10 @@ final class Diagnostics: ObservableObject {
     @Published var apps: [AppDiagnostics] = []
     @Published var general: [(String, String)] = []
 
-    var reportText: String {
+    var reportText: String { reportText(includeTexts: true) }
+
+    /// includeTexts: ekrandan okunan yazı örnekleri (sohbet içeriği olabilir) eklensin mi
+    func reportText(includeTexts: Bool) -> String {
         var lines = ["TelepAIth teşhis raporu — \(Date())"]
         for (key, value) in general { lines.append("\(key): \(value)") }
         for app in apps {
@@ -38,7 +41,7 @@ final class Diagnostics: ObservableObject {
             lines.append("Sohbet: \(app.chat)")
             lines.append("Roller: \(app.roles)")
             lines.append("Düğmeler: " + app.buttons.joined(separator: " | "))
-            lines.append("Metinler: " + app.texts.joined(separator: " | "))
+            if includeTexts { lines.append("Metinler: " + app.texts.joined(separator: " | ")) }
         }
         return lines.joined(separator: "\n")
     }
@@ -131,5 +134,57 @@ final class DiagnosticsWindow {
         }
         NSApp.activate(ignoringOtherApps: true)
         window?.makeKeyAndOrderFront(nil)
+    }
+}
+
+
+/// Tek tıkla hata raporu: sürüm, macOS, bağlantılar ve robotun gördükleriyle dolu bir GitHub issue'su açar.
+/// Ekrandan okunan yazılar (sohbet içeriği olabilir) rapora girmez; tam rapor panoya kopyalanır.
+enum BugReport {
+    static var repo: String {
+        (Bundle.main.object(forInfoDictionaryKey: "TelepAIthUpdateRepo") as? String) ?? "onurerensavci/TelepAIth"
+    }
+
+    static func open() {
+        let full = Diagnostics.shared.reportText(includeTexts: true)
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(full, forType: .string)
+
+        let os = ProcessInfo.processInfo.operatingSystemVersionString
+        var report = Diagnostics.shared.reportText(includeTexts: false)
+        if report.count > 5000 { report = String(report.prefix(5000)) + "\n…" }
+        let body = loc("""
+        **Ne oldu?**
+        <!-- Ne yapıyordun, ne bekliyordun, ne oldu? -->
+
+
+        **Ortam**
+        - macOS: \(os)
+
+        <details><summary>Teşhis raporu</summary>
+
+        ```
+        \(report)
+        ```
+        </details>
+        """, """
+        **What happened?**
+        <!-- What were you doing, what did you expect, what happened instead? -->
+
+
+        **Environment**
+        - macOS: \(os)
+
+        <details><summary>Diagnostics</summary>
+
+        ```
+        \(report)
+        ```
+        </details>
+        """)
+        var components = URLComponents(string: "https://github.com/\(repo)/issues/new")
+        components?.queryItems = [URLQueryItem(name: "title", value: loc("Sorun: ", "Problem: ")),
+                                  URLQueryItem(name: "body", value: body)]
+        if let url = components?.url { NSWorkspace.shared.open(url) }
     }
 }

@@ -16,11 +16,25 @@ final class RobotModel: ObservableObject {
         var edits = 0
         var errors = 0
         var errorRun = 0
+        var target: AppTarget?
+        var waitingSince: Date?
+        var reminded = false
     }
 
     struct Notice {
         let title: String
         let body: String
+        /// Odak modunda da gösterilsin mi (seni bekliyor, hata, kota bitti)
+        var important = false
+        var target: AppTarget?
+    }
+
+    /// Robotun yanındaki minik kafalar: aynı anda çalışan diğer oturumlar.
+    struct MiniSession: Equatable, Identifiable {
+        let id: String
+        let source: String
+        let state: RobotState
+        let label: String
     }
 
     let source: String
@@ -31,7 +45,20 @@ final class RobotModel: ObservableObject {
     @Published private(set) var celebrateStart: Date?
     @Published private(set) var errorStart: Date?
     @Published private(set) var mood: Mood?
+    /// Balona tıklayınca gidilecek yer (gösterilen oturumun uygulaması)
+    @Published private(set) var target: AppTarget?
+    /// Gösterilen oturum ne zamandan beri seni bekliyor
+    @Published private(set) var waitingSince: Date?
+    /// ClaudeBar'dan son bilinen kalan kota (%)
+    @Published private(set) var quotaLeft: Int?
+    private var quotaAt: Date?
+    /// Balondaki yazı robotun kendi söylediği bir şey mi (güncelleme, kilit, odak…)? Odak modunda da gösterilir.
+    @Published private(set) var bubbleIsExplicit = false
+    private var explicitUntil: Date?
     private var moodUntil: Date?
+    private(set) var bestSessionID: String?
+    /// Zamanlayıcıdan gelen bildirimler (bekleme hatırlatması); RobotManager boşaltır
+    var pendingNotices: [Notice] = []
 
     var onStateChange: (() -> Void)?
 
@@ -83,7 +110,7 @@ final class RobotModel: ObservableObject {
     }
 
     private static func play(_ name: String) {
-        guard Preferences.sounds else { return }
+        guard Preferences.sounds, !FocusMode.isActive else { return }
         NSSound(named: NSSound.Name(name))?.play()
     }
 
@@ -115,7 +142,17 @@ final class RobotModel: ObservableObject {
             let text = withEmoji(e.emoji, e.text ?? "")
             showOverride(text, for: 10, now: now)
             if e.state == .error { errorStart = now }
-            if e.forceNotify { notice = Notice(title: theme.displayName + loc(" kota", " quota"), body: text) }
+            if let left = e.quotaLeft {
+                quotaLeft = max(0, min(100, left))
+                quotaAt = now
+            } else if e.state == .error {
+                quotaLeft = 0
+                quotaAt = now
+            }
+            if e.forceNotify {
+                notice = Notice(title: theme.displayName + loc(" kota", " quota"), body: text,
+                                important: e.state == .error || (e.quotaLeft ?? 100) <= 10)
+            }
 
         case .heartbeat:
             sessions[e.sessionID]?.updated = now
@@ -129,6 +166,8 @@ final class RobotModel: ObservableObject {
                     s.state = .thinking
                     s.text = loc("Devam ediyor…", "Back to work…")
                     s.emoji = "🔮"
+                    s.waitingSince = nil
+                    s.reminded = false
                 }
                 if e.state == .error {
                     s.errors += 1
@@ -161,6 +200,17 @@ final class RobotModel: ObservableObject {
                 s.emoji = e.emoji ?? s.state.emoji
             }
             if let p = e.project { s.project = p }
+            if let pid = e.appPID ?? e.quietIfFrontmostPID {
+                s.target = AppTarget(pid: pid, bundleID: nil)
+            } else if let id = e.appBundleID {
+                s.target = AppTarget(pid: nil, bundleID: id)
+            }
+            if s.state == .waiting {
+                if s.waitingSince == nil { s.waitingSince = now }
+            } else {
+                s.waitingSince = nil
+                s.reminded = false
+            }
             s.updated = now
             if e.kind == .prompt {
                 s.turnStart = now
@@ -196,6 +246,9 @@ final class RobotModel: ObservableObject {
                 } else {
                     s.emoji = e.emoji ?? RobotModel.doneEmoji()
                 }
+                if duration >= 1 || s.tools > 0 {
+                    DailyStats.shared.recordTurn(source: source, seconds: duration, tools: s.tools, edits: s.edits, at: now)
+                }
                 s.turnStart = nil
                 celebrateStart = now
                 RobotModel.play("Glass")
@@ -204,21 +257,24 @@ final class RobotModel: ObservableObject {
                 if e.sessionID != "mcp" && (e.forceNotify || duration >= Preferences.longTurnSeconds) {
                     var body = (s.project ?? loc("Görev", "Task")) + " — " + formatDuration(duration)
                     if let m = e.lastMessage, !m.isEmpty { body += "\n" + clip(m, 140) }
-                    notice = Notice(title: withEmoji(s.emoji, theme.displayName + loc(" bitirdi", " is done")), body: body)
+                    notice = Notice(title: withEmoji(s.emoji, theme.displayName + loc(" bitirdi", " is done")), body: body,
+                                    target: s.target)
                 }
             case .waiting:
                 let canNotify = s.lastWaitNotice.map { now.timeIntervalSince($0) > 20 } ?? true
                 if canNotify {
                     s.lastWaitNotice = now
+                    DailyStats.shared.recordWait(source: source, at: now)
                     RobotModel.play("Ping")
                     notice = Notice(title: withEmoji(s.emoji, theme.displayName + loc(" seni bekliyor", " needs you") + place),
-                                    body: s.text ?? loc("Cevabını bekliyor", "Waiting for your reply"))
+                                    body: s.text ?? loc("Cevabını bekliyor", "Waiting for your reply"),
+                                    important: true, target: s.target)
                 }
             case .failure:
                 errorStart = now
                 RobotModel.play("Basso")
                 notice = Notice(title: withEmoji(s.emoji, theme.displayName + loc(" hata verdi", " hit an error") + place),
-                                body: s.text ?? "")
+                                body: s.text ?? "", important: true, target: s.target)
             case .interrupt:
                 s.turnStart = nil
             default:
@@ -235,8 +291,10 @@ final class RobotModel: ObservableObject {
 
     /// Robotun balonda bir şey söylemesi (güncelleme haberi, uyarı…)
     func say(_ text: String, for seconds: TimeInterval = 8) {
-        showOverride(text, for: seconds, now: Date())
-        refresh(now: Date())
+        let now = Date()
+        showOverride(text, for: seconds, now: now)
+        explicitUntil = now.addingTimeInterval(seconds)
+        refresh(now: now)
     }
 
     func showHistory() {
@@ -256,6 +314,7 @@ final class RobotModel: ObservableObject {
     private func showOverride(_ text: String, for seconds: TimeInterval, now: Date) {
         overrideText = text
         overrideUntil = now.addingTimeInterval(seconds)
+        explicitUntil = nil
     }
 
     // MARK: - Durum hesaplama (saniyede 30 kez çağrılır)
@@ -268,28 +327,53 @@ final class RobotModel: ObservableObject {
         if now.timeIntervalSince(lastCleanup) > 5 {
             lastCleanup = now
             sessions = sessions.filter { now.timeIntervalSince($0.value.updated) < 3600 }
+            // Kota bilgisi 6 saatte eskir
+            if let at = quotaAt, now.timeIntervalSince(at) > 6 * 3600 {
+                quotaAt = nil
+                quotaLeft = nil
+            }
+            // Uzun süre onay bekleyen oturum: 2 dakika sonra bir kez daha hatırlat
+            if Preferences.waitReminders {
+                for (id, s) in sessions where s.state == .waiting && !s.reminded {
+                    guard let since = s.waitingSince, now.timeIntervalSince(since) >= 120 else { continue }
+                    sessions[id]?.reminded = true
+                    let place = s.project.map { " · \($0)" } ?? ""
+                    pendingNotices.append(Notice(title: withEmoji("⏰", theme.displayName + loc(" hâlâ seni bekliyor", " is still waiting for you") + place),
+                                                 body: s.text ?? loc("Cevabını bekliyor", "Waiting for your reply"),
+                                                 important: true, target: s.target))
+                    showOverride(withEmoji("⏰", loc("Hâlâ onayını bekliyorum!", "Still waiting for your OK!")), for: 6, now: now)
+                }
+            }
         }
 
         var bestSession: Session?
+        var bestID: String?
         var bestState: RobotState = .idle
         for (id, s) in sessions {
             let st = effectiveState(s, id: id, now: now)
             if let b = bestSession {
                 if st.priority > bestState.priority || (st.priority == bestState.priority && s.updated > b.updated) {
                     bestSession = s
+                    bestID = id
                     bestState = st
                 }
             } else {
                 bestSession = s
+                bestID = id
                 bestState = st
             }
         }
+        bestSessionID = bestID
+        let newTarget = bestSession?.target
+        if newTarget != target { target = newTarget }
+        let newWaiting = bestState == .waiting ? bestSession?.waitingSince : nil
+        if newWaiting != waitingSince { waitingSince = newWaiting }
 
         var newState = bestSession == nil ? RobotState.idle : bestState
         if newState == .idle && now.timeIntervalSince(lastEventAt) > 600 { newState = .sleeping }
 
         // Boştayken ara sıra laf at
-        if newState == .idle && Preferences.idleChatter && overrideUntil == nil && now >= nextIdleThought {
+        if newState == .idle && Preferences.idleChatter && !FocusMode.isActive && overrideUntil == nil && now >= nextIdleThought {
             showOverride(RobotModel.idleThought(), for: 5, now: now)
             nextIdleThought = now.addingTimeInterval(Double.random(in: 150...360))
         }
@@ -315,8 +399,22 @@ final class RobotModel: ObservableObject {
             state = newState
             onStateChange?()
         }
+        let explicit = (explicitUntil.map { $0 > now } ?? false) && text != nil
+        if explicit != bubbleIsExplicit { bubbleIsExplicit = explicit }
         if text != bubbleText { bubbleText = text }
         if subtitle != bubbleSubtitle { bubbleSubtitle = subtitle }
+    }
+
+    /// Bu AI'ın, ekranda gösterilen dışında kalan çalışan/bekleyen oturumları.
+    func miniSessions(excluding excluded: String?, now: Date = Date()) -> [MiniSession] {
+        sessions.compactMap { (id, s) -> MiniSession? in
+            guard id != excluded else { return nil }
+            let st = effectiveState(s, id: id, now: now)
+            guard st.isWorking || st == .waiting else { return nil }
+            let label = [theme.displayName, s.project, s.text.map { clip($0, 40) }].compactMap { $0 }.joined(separator: " · ")
+            return MiniSession(id: source + "/" + id, source: source, state: st, label: label)
+        }
+        .sorted { $0.id < $1.id }
     }
 
     private func effectiveState(_ s: Session, id: String, now: Date) -> RobotState {

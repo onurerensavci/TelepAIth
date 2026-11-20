@@ -30,7 +30,8 @@ final class AppWatcher {
         var startedAt: TimeInterval = 0
         var lastTail: String?         // en alttaki mesaj metni (akış algılama için)
         var growthPolls = 0
-        var stablePolls = 0
+        var lastGrowthAt: TimeInterval = 0
+        var lastActiveAt: TimeInterval = 0   // en son "Durdur" görüldüğü ya da metnin aktığı an
         var chatKey: String?          // hangi sohbet açık (sayfa adresi ya da pencere başlığı)
         var chatCounter = 0
         func session(_ pid: pid_t) -> String { "app-\(pid)-\(chatCounter)" }
@@ -127,6 +128,20 @@ final class AppWatcher {
     private var busy = false
     private var states: [pid_t: AppState] = [:]   // yalnızca queue içinde
 
+    // Değişiklik bildirimleri (AXObserver): ekranda bir şey değişince hemen tara, yoklamayı seyrekleştir.
+    private var observers: [pid_t: AXObserver] = [:]   // yalnızca ana iş parçacığında
+    private var kickPending = false
+    private var rescanWhenDone = false
+    private var lastScanAt: TimeInterval = 0
+    private var anyGenerating = false
+    /// Teşhis için: kaç uygulamayı anlık izleyebiliyoruz
+    private(set) var observedCount = 0
+
+    private static let axCallback: AXObserverCallback = { _, _, _, refcon in
+        guard let refcon = refcon else { return }
+        Unmanaged<AppWatcher>.fromOpaque(refcon).takeUnretainedValue().kick()
+    }
+
     static var isTrusted: Bool { AXIsProcessTrusted() }
 
     /// macOS'un "Erişilebilirlik izni ver" penceresini açar.
@@ -159,7 +174,7 @@ final class AppWatcher {
 
     func start() {
         guard timer == nil else { return }
-        let t = Timer(timeInterval: 0.8, repeats: true) { [weak self] _ in self?.tick() }
+        let t = Timer(timeInterval: 0.4, repeats: true) { [weak self] _ in self?.tick(force: false) }
         RunLoop.main.add(t, forMode: .common)
         timer = t
     }
@@ -167,28 +182,87 @@ final class AppWatcher {
     func stop() {
         timer?.invalidate()
         timer = nil
+        for pid in Array(observers.keys) { unobserve(pid) }
         queue.async { self.states = [:] }
         onStatus?([:])
     }
 
+    /// Ekranda bir şey değişti: kısa bir beklemeden sonra tara (art arda gelen bildirimleri birleştirir).
+    fileprivate func kick() {
+        guard timer != nil, !kickPending else { return }
+        kickPending = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
+            guard let self = self else { return }
+            self.kickPending = false
+            self.tick(force: true)
+        }
+    }
+
     // Ana iş parçacığında: hangi uygulamalar açık?
-    private func tick() {
-        guard !busy, AppWatcher.isTrusted else { return }
+    private func tick(force: Bool) {
+        guard AppWatcher.isTrusted else { return }
+        if busy {
+            if force { rescanWhenDone = true }
+            return
+        }
+        let now = ProcessInfo.processInfo.systemUptime
+        // Bildirimler çalışıyorsa boştayken 2 sn'de bir bakmak yeter; çalışırken ya da bildirim yoksa 0,8 sn
+        let interval: TimeInterval = (anyGenerating || observers.isEmpty) ? 0.8 : 2.0
+        if force {
+            if now - lastScanAt < 0.3 { return }
+        } else if now - lastScanAt < interval {
+            return
+        }
+        lastScanAt = now
         let ownPID = ProcessInfo.processInfo.processIdentifier
         let targets: [Target] = NSWorkspace.shared.runningApplications.compactMap { app in
             guard app.processIdentifier != ownPID, app.activationPolicy == .regular,
                   let source = AppMatcher.source(for: app) else { return nil }
             return Target(pid: app.processIdentifier, source: source, name: app.localizedName ?? source)
         }
+        let alive = Set(targets.map { $0.pid })
+        for pid in Array(observers.keys) where !alive.contains(pid) { unobserve(pid) }
+        for target in targets { observe(target.pid) }
         busy = true
         queue.async {
             let (status, diagnostics) = self.scan(targets)
+            let generating = self.states.values.contains { $0.generating }
             DispatchQueue.main.async {
                 self.busy = false
+                self.anyGenerating = generating
                 self.onStatus?(status)
                 self.onDiagnostics?(diagnostics)
+                if self.rescanWhenDone {
+                    self.rescanWhenDone = false
+                    self.kick()
+                }
             }
         }
+    }
+
+    private func observe(_ pid: pid_t) {
+        guard observers[pid] == nil else { return }
+        var created: AXObserver?
+        guard AXObserverCreate(pid, AppWatcher.axCallback, &created) == .success, let observer = created else { return }
+        let app = AXUIElementCreateApplication(pid)
+        let refcon = Unmanaged.passUnretained(self).toOpaque()
+        let names = [kAXValueChangedNotification, kAXCreatedNotification, kAXUIElementDestroyedNotification,
+                     kAXFocusedWindowChangedNotification, kAXFocusedUIElementChangedNotification,
+                     kAXTitleChangedNotification, "AXLayoutChanged"]
+        var added = 0
+        for name in names where AXObserverAddNotification(observer, app, name as CFString, refcon) == .success {
+            added += 1
+        }
+        guard added > 0 else { return }   // uygulama bildirim göndermiyor: yoklamaya devam
+        CFRunLoopAddSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(observer), .commonModes)
+        observers[pid] = observer
+        observedCount = observers.count
+    }
+
+    private func unobserve(_ pid: pid_t) {
+        guard let observer = observers.removeValue(forKey: pid) else { return }
+        CFRunLoopRemoveSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(observer), .commonModes)
+        observedCount = observers.count
     }
 
     // MARK: - Tarama (arka planda)
@@ -240,6 +314,16 @@ final class AppWatcher {
                 }
             }
 
+            // Yazı kutusu ağaçta tanınmadıysa: uygulamanın odaktaki metin alanına bak (ChatGPT gibi yerli uygulamalar)
+            if found.composer == nil, let focused = AppWatcher.value(app, kAXFocusedUIElementAttribute) {
+                let element = focused as! AXUIElement
+                let role = AppWatcher.string(element, kAXRoleAttribute) ?? ""
+                if role == kAXTextAreaRole || role == kAXTextFieldRole || role == "AXComboBox",
+                   let f = AppWatcher.frame(element), f.width > 80 {
+                    found.composer = f
+                }
+            }
+
             if found.stop != nil || found.send != nil || found.composer != nil { st.sawComposer = true }
 
             // Başka sohbete geçildi mi? Geçildiyse eski sohbet için "bitti" deme, tıklanan sohbete geç.
@@ -265,21 +349,18 @@ final class AppWatcher {
             }
 
             // İkinci yol: son mesaj büyümeye devam ediyorsa cevap akıyordur (düğme adı bilinmese de çalışır)
+            // Zamana bağlı: tarama sıklığı değişse de (bildirimle anlık tarama) aynı sonucu verir
             let tail = AppWatcher.tailText(found)
             if let t = tail, let prev = st.lastTail, t != prev {
                 if t.count > prev.count && t.hasPrefix(String(prev.prefix(12))) {
-                    st.growthPolls += 1
-                    st.stablePolls = 0
+                    st.growthPolls = now - st.lastGrowthAt < 3 ? st.growthPolls + 1 : 1
+                    st.lastGrowthAt = now
                 } else {
                     st.growthPolls = 0      // başka bir mesaj ya da kaydırma
-                    st.stablePolls = 0
                 }
-            } else if tail != nil && tail == st.lastTail {
-                st.stablePolls += 1
-                if st.stablePolls >= 3 { st.growthPolls = 0 }
             }
             st.lastTail = tail
-            let streaming = st.growthPolls >= 2
+            let streaming = st.growthPolls >= 2 && now - st.lastGrowthAt < 2.5
 
             let generatingNow = found.stop != nil || streaming
             update(&st, pid: target.pid, found: found, generatingNow: generatingNow, streaming: streaming, now: now)
@@ -316,6 +397,7 @@ final class AppWatcher {
         let session = st.session(pid)
         if generatingNow {
             st.quietPolls = 0
+            st.lastActiveAt = now
             if !st.generating {
                 st.generating = true
                 st.lastHeartbeat = now
@@ -341,7 +423,7 @@ final class AppWatcher {
             }
         } else if st.generating {
             st.quietPolls += 1
-            if st.quietPolls >= 2 {   // ~1.6 sn boyunca "Durdur" yoksa (ve metin akmıyorsa) bitti say
+            if st.quietPolls >= 2 && now - st.lastActiveAt >= 1.6 {   // 1,6 sn boyunca "Durdur" yoksa (ve metin akmıyorsa) bitti say
                 st.generating = false
                 st.approving = false
                 if now - st.startedAt >= 4 {
@@ -410,7 +492,13 @@ final class AppWatcher {
     }
 
     private func emitMain(_ event: AgentEvent) {
-        DispatchQueue.main.async { self.onEvent?(event) }
+        var e = event
+        // Oturum adı "app-<pid>-<n>": balona tıklayınca bu uygulamayı öne getirmek için
+        if e.appPID == nil, e.sessionID.hasPrefix("app-") {
+            let parts = e.sessionID.split(separator: "-")
+            if parts.count >= 2, let pid = Int32(parts[1]) { e.appPID = pid }
+        }
+        DispatchQueue.main.async { self.onEvent?(e) }
     }
 
     /// Ağacı gezer; bölge verilmişse dışında kalan dalları atlar (ekran dışı eski mesajlar vb.).
@@ -430,7 +518,9 @@ final class AppWatcher {
             if role == kAXTextAreaRole || role == kAXTextFieldRole {
                 var settable: DarwinBoolean = false
                 AXUIElementIsAttributeSettable(element, kAXValueAttribute as CFString, &settable)
-                if settable.boolValue, let f = elementFrame, f.width > 80 {
+                // Yazılabilir ya da "Bir şey sor…" gibi yer tutucusu olan alan yazı kutusudur
+                let placeholder = AppWatcher.string(element, "AXPlaceholderValue") ?? ""
+                if (settable.boolValue || !placeholder.isEmpty), let f = elementFrame, f.width > 80 {
                     if found.composer == nil || f.maxY > found.composer!.maxY { found.composer = f }
                 } else if let f = elementFrame, let text = AppWatcher.string(element, kAXValueAttribute), !text.isEmpty {
                     found.texts.append((text, f))

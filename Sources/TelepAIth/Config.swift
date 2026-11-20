@@ -123,10 +123,96 @@ enum Preferences {
         set { defaults.set(newValue, forKey: "longTurnSeconds") }
     }
 
+    /// Kullanıcı o AI uygulamasına bakarken de bildirim gelsin (normalde gelmez, zaten görüyorsun).
+    static var notifyWhenFrontmost: Bool {
+        get { defaults.object(forKey: "notifyWhenFrontmost") as? Bool ?? false }
+        set { defaults.set(newValue, forKey: "notifyWhenFrontmost") }
+    }
+
+    /// AI uzun süre onay beklerse robot ısrar etsin (sallansın, 2 dakikada bir hatırlatsın).
+    static var waitReminders: Bool {
+        get { defaults.object(forKey: "waitReminders") as? Bool ?? true }
+        set { defaults.set(newValue, forKey: "waitReminders") }
+    }
+
+    /// Aynı anda çalışan diğer oturumlar robotun yanında minik kafalar olarak görünsün.
+    static var miniHeads: Bool {
+        get { defaults.object(forKey: "miniHeads") as? Bool ?? true }
+        set { defaults.set(newValue, forKey: "miniHeads") }
+    }
+
+    /// Odak modu elle açıldıysa bitiş zamanı (0: kapalı, sonsuz: kapatılana kadar).
+    static var focusUntil: Double {
+        get { defaults.object(forKey: "focusUntil") as? Double ?? 0 }
+        set { defaults.set(newValue, forKey: "focusUntil") }
+    }
+
+    /// Zoom, Teams, Webex, FaceTime gibi toplantı uygulamaları öndeyken odak modu kendiliğinden açılsın.
+    static var autoFocusInMeetings: Bool {
+        get { defaults.object(forKey: "autoFocusInMeetings") as? Bool ?? true }
+        set { defaults.set(newValue, forKey: "autoFocusInMeetings") }
+    }
+
+    /// Akşam günün özetini söylesin.
+    static var dailySummary: Bool {
+        get { defaults.object(forKey: "dailySummary") as? Bool ?? true }
+        set { defaults.set(newValue, forKey: "dailySummary") }
+    }
+
+    /// Günlük özetin saati (0-23).
+    static var dailySummaryHour: Int {
+        get { defaults.object(forKey: "dailySummaryHour") as? Int ?? 18 }
+        set { defaults.set(newValue, forKey: "dailySummaryHour") }
+    }
+
+    /// İlk açılış sihirbazı tamamlandı mı?
+    static var onboardingDone: Bool {
+        get { defaults.object(forKey: "onboardingDone") as? Bool ?? false }
+        set { defaults.set(newValue, forKey: "onboardingDone") }
+    }
+
     /// Açılışta ekrana konacak robotlar.
     static var knownSources: [String] {
         get { defaults.stringArray(forKey: "knownSources") ?? ["claude"] }
         set { defaults.set(newValue, forKey: "knownSources") }
+    }
+}
+
+/// Odak modu: toplantıda ya da elle açılınca robot susar, sadece seni bekleyen şeyleri söyler.
+enum FocusMode {
+    /// Toplantı uygulaması öndeyken RobotManager doldurur.
+    static var meetingActive = false
+
+    static var manualActive: Bool { Preferences.focusUntil > Date().timeIntervalSince1970 }
+
+    static var isActive: Bool { manualActive || (Preferences.autoFocusInMeetings && meetingActive) }
+
+    static func turnOn(for seconds: TimeInterval?) {
+        Preferences.focusUntil = seconds.map { Date().timeIntervalSince1970 + $0 } ?? Double.greatestFiniteMagnitude
+    }
+
+    static func turnOff() { Preferences.focusUntil = 0 }
+
+    /// Toplantı uygulamaları (bundle id başı)
+    static let meetingApps = ["us.zoom.xos", "com.microsoft.teams", "com.microsoft.teams2", "com.cisco.webexmeetingsapp",
+                              "com.webex.meetingmanager", "com.apple.FaceTime", "com.hnc.Discord", "com.tinyspeck.slackmacgap.huddle"]
+
+    static func isMeetingApp(_ bundleID: String?) -> Bool {
+        guard let id = bundleID?.lowercased() else { return false }
+        return meetingApps.contains { id.hasPrefix($0.lowercased()) }
+    }
+
+    /// Menü/ayarlar için kısa açıklama
+    static var statusText: String {
+        if manualActive {
+            if Preferences.focusUntil > 4e9 { return loc("açık (kapatana kadar)", "on (until you turn it off)") }
+            let f = DateFormatter()
+            f.dateFormat = "HH:mm"
+            return loc("açık, \(f.string(from: Date(timeIntervalSince1970: Preferences.focusUntil)))'e kadar",
+                       "on until \(f.string(from: Date(timeIntervalSince1970: Preferences.focusUntil)))")
+        }
+        if Preferences.autoFocusInMeetings && meetingActive { return loc("açık (toplantıdasın)", "on (you're in a meeting)") }
+        return loc("kapalı", "off")
     }
 }
 

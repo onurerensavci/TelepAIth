@@ -1,4 +1,5 @@
 import AppKit
+import CoreAudio
 import QuartzCore
 
 /// Uygulama → AI eşlemesi: öndeki uygulama Claude ise turuncu, Codex/ChatGPT ise mavi robot.
@@ -31,8 +32,13 @@ final class RobotManager {
     private var lastTrustCheck = CACurrentMediaTime()
     private var wasTrusted = AppWatcher.isTrusted
     private var lastUpdateAnnounce: CFTimeInterval = 0
+    private var lastMiniCheck: CFTimeInterval = 0
+    private var lastSlowCheck: CFTimeInterval = 0
+    private var wasFocused = FocusMode.isActive
 
     var onChange: (() -> Void)?
+    var onOpenSettings: (() -> Void)?
+    var onReportBug: (() -> Void)?
 
     var visible: Bool = Preferences.robotsVisible {
         didSet {
@@ -64,6 +70,11 @@ final class RobotManager {
         window.onClick = { [weak self] in self?.robotClicked() }
         window.onDoubleClick = { [weak self] in self?.openCurrentApp() }
         window.onAlwaysOnTopChanged = { [weak self] _ in self?.onChange?() }
+        window.onBubbleClick = { [weak self] in self?.bubbleClicked() }
+        window.onFocusChanged = { [weak self] in self?.focusChanged() }
+        window.onOpenSettings = { [weak self] in self?.onOpenSettings?() }
+        window.onShowSummary = { [weak self] in self?.showSummary() }
+        window.onReportBug = { [weak self] in self?.onReportBug?() }
         window.onLockChanged = { [weak self] locked in
             guard let self = self else { return }
             if locked { self.dockPID = nil } else { self.frontmostChanged(NSWorkspace.shared.frontmostApplication) }
@@ -98,6 +109,7 @@ final class RobotManager {
         }
 
         frontmostChanged(NSWorkspace.shared.frontmostApplication)
+        Notifier.shared.onClick = { target in RobotManager.activate(target) }
 
         watcher.onEvent = { [weak self] event in self?.handle(event) }
         watcher.onDiagnostics = { diagnostics in
@@ -130,15 +142,109 @@ final class RobotManager {
     func handle(_ event: AgentEvent) {
         let m = model(for: event.source)
         if let notice = m.apply(event) {
-            let lookingAtIt = event.quietIfFrontmostPID != nil
-                && NSWorkspace.shared.frontmostApplication?.processIdentifier == event.quietIfFrontmostPID
-            if !lookingAtIt {
-                Notifier.shared.notify(title: notice.title, body: notice.body)
-                Speech.say(notice.title)
-            }
+            deliver(notice, quietPID: event.quietIfFrontmostPID)
         }
         chooseDisplay()
         onChange?()
+    }
+
+    /// Bildirimi gönderir: odak modunda sadece önemliler, kullanıcı o uygulamaya bakıyorsa hiç (ayara göre).
+    private func deliver(_ notice: RobotModel.Notice, quietPID: Int32?) {
+        if FocusMode.isActive && !notice.important { return }
+        if !Preferences.notifyWhenFrontmost, let pid = quietPID,
+           NSWorkspace.shared.frontmostApplication?.processIdentifier == pid {
+            return
+        }
+        Notifier.shared.notify(title: notice.title, body: notice.body, target: notice.target)
+        if !FocusMode.isActive { Speech.say(notice.title) }
+    }
+
+    /// Bir uygulamayı öne getirir (süreç kimliğiyle ya da bundle id ile; kapalıysa açar).
+    static func activate(_ target: AppTarget) {
+        if let pid = target.pid, let app = NSRunningApplication(processIdentifier: pid), !app.isTerminated {
+            app.activate(options: [.activateAllWindows])
+            return
+        }
+        guard let id = target.bundleID, !id.isEmpty else { return }
+        if let app = NSRunningApplication.runningApplications(withBundleIdentifier: id).first {
+            app.activate(options: [.activateAllWindows])
+        } else if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: id) {
+            NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration())
+        }
+    }
+
+    /// Balona tıklayınca: o oturumun penceresine/terminaline git; bilinmiyorsa AI uygulamasını aç.
+    private func bubbleClicked() {
+        guard let avatar = avatar else { return }
+        if let target = avatar.current.target, !target.isEmpty {
+            RobotManager.activate(target)
+        } else {
+            openCurrentApp()
+        }
+    }
+
+    // MARK: - Odak modu ve günlük özet
+
+    func focusChanged() {
+        let on = FocusMode.isActive
+        avatar?.setFocus(on)
+        if on != wasFocused {
+            wasFocused = on
+            onChange?()
+        }
+    }
+
+    /// Mikrofon başka bir uygulama tarafından kullanılıyor mu? (görüşmedeyiz demek; izin gerektirmez)
+    static func microphoneInUse() -> Bool {
+        var deviceID = AudioDeviceID(0)
+        var size = UInt32(MemoryLayout<AudioDeviceID>.size)
+        var address = AudioObjectPropertyAddress(mSelector: kAudioHardwarePropertyDefaultInputDevice,
+                                                 mScope: kAudioObjectPropertyScopeGlobal,
+                                                 mElement: kAudioObjectPropertyElementMain)
+        guard AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size, &deviceID) == noErr,
+              deviceID != 0 else { return false }
+        var running: UInt32 = 0
+        size = UInt32(MemoryLayout<UInt32>.size)
+        address.mSelector = kAudioDevicePropertyDeviceIsRunningSomewhere
+        guard AudioObjectGetPropertyData(deviceID, &address, 0, nil, &size, &running) == noErr else { return false }
+        return running != 0
+    }
+
+    /// Toplantıda mıyız: toplantı uygulaması öndeyse ya da mikrofon açıkken (AI uygulaması dışında bir yerde).
+    private func updateMeeting() {
+        let front = NSWorkspace.shared.frontmostApplication
+        let frontIsAI = front.map { AppMatcher.source(for: $0) != nil } ?? false
+        let meeting = FocusMode.isMeetingApp(front?.bundleIdentifier) || (!frontIsAI && RobotManager.microphoneInUse())
+        if meeting != FocusMode.meetingActive {
+            FocusMode.meetingActive = meeting
+        }
+        focusChanged()
+    }
+
+    func todaySummaryText() -> String? {
+        DailyStats.shared.summary(names: { [weak self] source in
+            self?.models[source]?.theme.displayName ?? Themes.shared.theme(for: source).displayName
+        })
+    }
+
+    /// Bugünün özetini robota söylet (menüden ya da akşam kendiliğinden).
+    func showSummary() {
+        guard let avatar = avatar else { return }
+        if !visible { visible = true }
+        if let text = todaySummaryText() {
+            avatar.current.say(withEmoji("📊", loc("Bugün:\n", "Today:\n") + text), for: 14)
+        } else {
+            avatar.current.say(withEmoji("📊", loc("Bugün henüz bitmiş bir iş yok.", "No finished tasks yet today.")), for: 5)
+        }
+    }
+
+    private func checkDailySummary() {
+        guard Preferences.dailySummary, !DailyStats.shared.shownToday, !FocusMode.isActive,
+              Calendar.current.component(.hour, from: Date()) >= Preferences.dailySummaryHour,
+              let text = todaySummaryText() else { return }
+        DailyStats.shared.shownToday = true
+        avatar?.current.say(withEmoji("📊", loc("Günün özeti:\n", "Your day:\n") + text), for: 14)
+        Notifier.shared.notify(title: withEmoji("📊", loc("TelepAIth · günün özeti", "TelepAIth · your day")), body: text)
     }
 
     var isLocked: Bool { Preferences.robotLocked }
@@ -356,6 +462,28 @@ final class RobotManager {
         if let avatar = avatar, case .update(let version) = avatar.health,
            now - lastUpdateAnnounce > 45 * 60, avatar.current.state == .idle {
             announceUpdate(version)
+        }
+        // Bekleme hatırlatmaları gibi zamanlayıcı bildirimleri
+        for m in models.values where !m.pendingNotices.isEmpty {
+            let notices = m.pendingNotices
+            m.pendingNotices = []
+            for n in notices { deliver(n, quietPID: n.target?.pid) }
+        }
+        // Minik kafalar: gösterilenin dışında çalışan/bekleyen tüm oturumlar
+        if now - lastMiniCheck > 0.5, let avatar = avatar {
+            lastMiniCheck = now
+            var minis: [RobotModel.MiniSession] = []
+            for m in allModels {
+                minis += m.miniSessions(excluding: m === avatar.current ? m.bestSessionID : nil, now: date)
+            }
+            // Gösterilen AI'ın kendisi zaten büyük kafada; başka AI'ların tek oturumu da minik kafa olur
+            avatar.setMinis(minis)
+        }
+        // Toplantı, odak süresi, günlük özet (5 sn'de bir)
+        if now - lastSlowCheck > 5 {
+            lastSlowCheck = now
+            updateMeeting()
+            checkDailySummary()
         }
         if visible { window?.tick(dt: dt) }
     }

@@ -12,12 +12,23 @@ struct AvatarView: View {
             : (avatar.alignLeft ? .bottomLeading : .bottomTrailing)
         return ZStack {
             AvatarStage(model: avatar.current, alignLeft: avatar.alignLeft, bubbleBelow: avatar.bubbleBelow,
-                        health: avatar.health, locked: avatar.locked)
+                        health: avatar.health, locked: avatar.locked, minis: avatar.minis, focus: avatar.focus)
                 .id(avatar.current.source)
                 .transition(.scale(scale: 0.4).combined(with: .opacity))
         }
         .padding(Layout.margin)
         .frame(width: Layout.windowSize.width, height: Layout.windowSize.height, alignment: frameAlignment)
+        .coordinateSpace(name: "avatar")
+        .onPreferenceChange(BubbleFrameKey.self) { frame in avatar.bubbleFrame = frame }
+    }
+}
+
+/// Balonun pencere içindeki yeri (tıklamayı yakalamak için AppKit tarafına iletilir).
+struct BubbleFrameKey: PreferenceKey {
+    static var defaultValue: CGRect = .zero
+    static func reduce(value: inout CGRect, nextValue: () -> CGRect) {
+        let next = nextValue()
+        if next != .zero { value = next }
     }
 }
 
@@ -27,30 +38,63 @@ struct AvatarStage: View {
     let bubbleBelow: Bool
     let health: Health
     let locked: Bool
+    let minis: [RobotModel.MiniSession]
+    let focus: Bool
+
+    /// Odak modunda sadece seni bekleyen, hata veren ya da robotun kendi söylediği şeyler görünür
+    private var urgent: Bool { model.state == .waiting || model.state == .error || model.bubbleIsExplicit }
 
     var body: some View {
         VStack(alignment: alignLeft ? .leading : .trailing, spacing: 2) {
             if bubbleBelow {
-                head
+                headRow
                 bubble
             } else {
                 bubble
-                head
+                headRow
             }
         }
+        .opacity(focus && !urgent ? 0.5 : 1)
         .animation(.easeInOut(duration: 0.18), value: model.bubbleText)
+        .animation(.easeInOut(duration: 0.3), value: focus)
     }
 
     @ViewBuilder
     private var bubble: some View {
-        if let text = model.bubbleText {
+        if let text = model.bubbleText, !focus || urgent {
             BubbleView(title: model.theme.displayName,
                        subtitle: model.bubbleSubtitle,
                        text: text,
                        color: Color(nsColor: model.theme.color),
                        tailOnTop: bubbleBelow,
-                       tailLeading: alignLeft)
+                       tailLeading: alignLeft,
+                       clickable: !(model.target?.isEmpty ?? true))
+                .background(GeometryReader { g in
+                    Color.clear.preference(key: BubbleFrameKey.self, value: g.frame(in: .named("avatar")))
+                })
                 .transition(.opacity)
+        }
+    }
+
+    /// Kafa ve yanında (pencerenin içine doğru) diğer oturumların minik kafaları
+    private var headRow: some View {
+        HStack(alignment: .bottom, spacing: 6) {
+            if alignLeft {
+                head
+                minisView
+            } else {
+                minisView
+                head
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var minisView: some View {
+        if Preferences.miniHeads && !minis.isEmpty {
+            MiniHeadsView(minis: minis)
+                .padding(.bottom, 14)
+                .transition(.scale.combined(with: .opacity))
         }
     }
 
@@ -95,6 +139,7 @@ struct BubbleView: View {
     let color: Color
     let tailOnTop: Bool
     let tailLeading: Bool
+    var clickable = false
 
     private var fill: Color { Color(nsColor: .windowBackgroundColor).opacity(0.97) }
 
@@ -132,6 +177,13 @@ struct BubbleView: View {
                         .foregroundColor(.secondary)
                         .lineLimit(1)
                 }
+                if clickable {
+                    Spacer(minLength: 4)
+                    // Tıklayınca o pencereye gider
+                    Image(systemName: "arrow.up.forward.square")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundColor(.secondary)
+                }
             }
             Text(text)
                 .font(.system(size: 11))
@@ -162,7 +214,7 @@ struct HeadFigure: View {
         let accent = Color(nsColor: base.mix(.white, 0.55))
         let hop = hopHeight
         let float = floatOffset(state)
-        let shake = shakeOffset
+        let shake = shakeOffset + nudgeOffset
         let skin = SkinStore.shared.image(source: model.source, state: state)
         let lift = hop - float
 
@@ -171,6 +223,14 @@ struct HeadFigure: View {
                 .fill(Color.black.opacity(0.14))
                 .frame(width: Swift.max(24, 58 - lift * 1.5), height: 6)
                 .position(x: 50, y: 96)
+
+            // Kota halkası (ClaudeBar): kalan kota kadar dolu, azsa kırmızı
+            if let left = model.quotaLeft {
+                QuotaRing(left: left, color: Color(nsColor: base.mix(.white, 0.25)))
+                    .frame(width: 98, height: 98)
+                    .position(x: 50, y: 50)
+                    .offset(x: shake, y: -lift)
+            }
 
             Group {
                 if let skin = skin {
@@ -198,8 +258,35 @@ struct HeadFigure: View {
             if state == .sleeping {
                 ZzzView(time: time)
             }
+            // Uzun süredir seni bekliyor: "!" rozeti
+            if isNudging {
+                ZStack {
+                    Circle().fill(Color(red: 1.0, green: 0.6, blue: 0.2))
+                    Text("!").font(.system(size: 11, weight: .heavy)).foregroundColor(.white)
+                }
+                .frame(width: 17, height: 17)
+                .scaleEffect(1 + 0.12 * CGFloat(sin(time * 6)))
+                .position(x: 12, y: 16)
+                .offset(x: shake, y: -lift)
+            }
         }
         .frame(width: 100, height: 100)
+    }
+
+    /// Seni 30 saniyeden uzun süredir bekliyor mu?
+    private var waitAge: Double? {
+        guard Preferences.waitReminders, model.state == .waiting, let since = model.waitingSince else { return nil }
+        return time - since.timeIntervalSinceReferenceDate
+    }
+
+    private var isNudging: Bool { (waitAge ?? 0) > 30 }
+
+    /// Beklerken 4 saniyede bir kısa bir sallanma: "hey, buradayım!"
+    private var nudgeOffset: CGFloat {
+        guard let age = waitAge, age > 30 else { return 0 }
+        let phase = age.truncatingRemainder(dividingBy: 4)
+        guard phase < 0.6 else { return 0 }
+        return CGFloat(sin(phase * 40) * (1 - phase / 0.6)) * 4
     }
 
     // Havada süzülme
@@ -507,5 +594,81 @@ struct ZzzView: View {
 
     private func progress(_ i: Int) -> Double {
         (time * 0.6 + Double(i) / 3).truncatingRemainder(dividingBy: 1)
+    }
+}
+
+
+// MARK: - Kota halkası
+
+struct QuotaRing: View {
+    let left: Int
+    let color: Color
+
+    var body: some View {
+        let fraction = CGFloat(Swift.max(0, Swift.min(100, left))) / 100
+        let tint = left <= 20 ? Color(red: 0.97, green: 0.35, blue: 0.35) : color
+        ZStack {
+            Circle().stroke(Color.white.opacity(0.18), lineWidth: 2.5)
+            Circle()
+                .trim(from: 0, to: fraction)
+                .stroke(tint, style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+        }
+    }
+}
+
+// MARK: - Minik kafalar (aynı anda çalışan diğer oturumlar)
+
+struct MiniHeadsView: View {
+    let minis: [RobotModel.MiniSession]
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 15.0, paused: false)) { context in
+            let time = context.date.timeIntervalSinceReferenceDate
+            HStack(spacing: 4) {
+                ForEach(Array(minis.prefix(4).enumerated()), id: \.element.id) { index, mini in
+                    MiniHead(mini: mini, time: time + Double(index) * 0.7)
+                }
+                if minis.count > 4 {
+                    Text("+\(minis.count - 4)")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundColor(Color(red: 0.55, green: 0.52, blue: 0.66))
+                }
+            }
+        }
+    }
+}
+
+struct MiniHead: View {
+    let mini: RobotModel.MiniSession
+    let time: TimeInterval
+
+    var body: some View {
+        let color = Color(nsColor: Themes.shared.theme(for: mini.source).color.mix(.white, 0.18))
+        let waiting = mini.state == .waiting
+        let bob = CGFloat(sin(time * (waiting ? 5 : 3))) * (waiting ? 2 : 1.2)
+        ZStack {
+            RoundedRectangle(cornerRadius: 6)
+                .fill(LinearGradient(colors: [Color(red: 0.98, green: 0.97, blue: 0.95),
+                                              Color(red: 0.86, green: 0.84, blue: 0.92)],
+                                     startPoint: .top, endPoint: .bottom))
+                .frame(width: 22, height: 18)
+            RoundedRectangle(cornerRadius: 4)
+                .fill(Color(red: 0.09, green: 0.08, blue: 0.16))
+                .frame(width: 17, height: 10)
+                .offset(y: 1)
+            HStack(spacing: 4) {
+                Capsule().fill(color).frame(width: 3, height: waiting ? 6 : 5)
+                Capsule().fill(color).frame(width: 3, height: waiting ? 6 : 5)
+            }
+            .offset(y: 1)
+            if waiting {
+                Circle().fill(Color(red: 1.0, green: 0.6, blue: 0.2))
+                    .frame(width: 6, height: 6)
+                    .offset(x: 10, y: -8)
+            }
+        }
+        .offset(y: -bob)
+        .shadow(color: Color.black.opacity(0.12), radius: 1.5, x: 0, y: 1)
     }
 }
