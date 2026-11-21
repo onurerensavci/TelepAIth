@@ -35,6 +35,17 @@ function Shot($name) {
   [Snap]::Save((Join-Path (Resolve-Path $Out) "$name.png"))
   Write-Host "shot $name"
 }
+Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+public static class Mouse {
+  [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
+  [DllImport("user32.dll")] public static extern void mouse_event(int flags, int dx, int dy, int data, IntPtr extra);
+  public static void Down() { mouse_event(0x02, 0, 0, 0, IntPtr.Zero); }
+  public static void Up() { mouse_event(0x04, 0, 0, 0, IntPtr.Zero); }
+  public static void RightClick() { mouse_event(0x08, 0, 0, 0, IntPtr.Zero); mouse_event(0x10, 0, 0, 0, IntPtr.Zero); }
+}
+"@
 function State() {
   $port = (Get-Content (Join-Path $home2 "port")).Trim()
   $raw = (Invoke-WebRequest -UseBasicParsing "http://127.0.0.1:$port/state").Content
@@ -114,6 +125,31 @@ Shot "4-done"
 $st = State
 Check ($st.state -eq "Done" -or $st.minis -ge 1) "bitti / sıradaki oturum"
 
+# Fareyle: sürükleyip sol üst köşeye bırak → köşeye yapışmalı
+$st = State
+[Mouse]::SetCursorPos([int]$st.head.x, [int]$st.head.y); Start-Sleep -Milliseconds 400
+[Mouse]::Down(); Start-Sleep -Milliseconds 150
+for ($i = 1; $i -le 20; $i++) {
+  $x = [int]($st.head.x + ($vs.Left + 150 - $st.head.x) * $i / 20); $y = [int]($st.head.y + ($vs.Top + 150 - $st.head.y) * $i / 20)
+  [Mouse]::SetCursorPos($x, $y); Start-Sleep -Milliseconds 40
+}
+[Mouse]::Up(); Start-Sleep -Milliseconds 1500
+Shot "5-dragged"
+$st = State
+$wa = [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea
+Check ([Math]::Abs($st.head.x - ($wa.Left + 64)) -le 3 -and [Math]::Abs($st.head.y - ($wa.Top + 64)) -le 3) "sürükle-bırak: sol üst köşeye yapıştı"
+Check ($st.alignLeft -and $st.bubbleBelow) "balon köşeye göre yön değiştirdi"
+# Tıkla → son olaylar
+[Mouse]::SetCursorPos([int]$st.head.x, [int]$st.head.y); Start-Sleep -Milliseconds 300
+[Mouse]::Down(); Start-Sleep -Milliseconds 60; [Mouse]::Up(); Start-Sleep -Milliseconds 800
+Shot "6-clicked"
+$st = State
+Check ($st.bubble -ne $null) "tıklayınca balon açıldı"
+# Sağ tık → menü (Esc ile kapat)
+[Mouse]::RightClick(); Start-Sleep -Milliseconds 800
+Shot "7-menu"
+[System.Windows.Forms.SendKeys]::SendWait("{ESC}")
+# Boş alana tıklama alttaki pencereye geçmeli (robot tıklamayı yutmamalı): kafa dışındaki pencere alanı
 Start-Sleep 2
 if ($p.HasExited) { Get-Content (Join-Path $home2 "error.log") -ErrorAction SilentlyContinue; throw "Uygulama çöktü (kod $($p.ExitCode))" }
 if (Test-Path (Join-Path $home2 "error.log")) { Write-Host "--- error.log ---"; Get-Content (Join-Path $home2 "error.log") }

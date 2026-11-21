@@ -161,6 +161,7 @@ public static class EventParser
     public static AgentEvent? Parse(string path, IReadOnlyDictionary<string, string> query, string body)
     {
         JsonNode? json = null;
+        body = body.TrimStart('\uFEFF');   // Windows PowerShell boruları başa BOM ekleyebiliyor
         try { if (!string.IsNullOrWhiteSpace(body)) json = JsonNode.Parse(body); } catch { json = null; }
         var j = json as JsonObject ?? new JsonObject();
         if (path.StartsWith("/claudebar", StringComparison.Ordinal)) return ClaudeBar(j);
