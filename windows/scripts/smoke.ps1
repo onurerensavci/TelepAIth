@@ -1,6 +1,7 @@
-# CI duman testi: uygulamayı açar, olay gönderir, ekran görüntüsü alır, çökmediğini doğrular.
+﻿# CI duman testi: uygulamayı açar, olay gönderir, ekran görüntüsü alır, çökmediğini doğrular.
 param([string]$Exe, [string]$Hook, [string]$Out = "shots")
 $ErrorActionPreference = "Stop"
+$OutputEncoding = [Text.Encoding]::UTF8
 New-Item -ItemType Directory -Force $Out | Out-Null
 $home2 = Join-Path $env:RUNNER_TEMP "tp-home"
 New-Item -ItemType Directory -Force $home2 | Out-Null
@@ -8,7 +9,7 @@ $env:TELEPAITH_PORTABLE = "1"
 $env:TELEPAITH_HOME = $home2
 
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
-Add-Type -ReferencedAssemblies System.Drawing, System.Drawing.Primitives, System.Windows.Forms -TypeDefinition @"
+Add-Type -ReferencedAssemblies System.Drawing, System.Windows.Forms -TypeDefinition @"
 using System;
 using System.Drawing;
 using System.Runtime.InteropServices;
@@ -36,7 +37,7 @@ function Shot($name) {
 }
 function Post($json) {
   $port = (Get-Content (Join-Path $home2 "port")).Trim()
-  Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:$port/event" -Body $json -ContentType "application/json" | Out-Null
+  Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:$port/event" -Body ([Text.Encoding]::UTF8.GetBytes($json)) -ContentType "application/json; charset=utf-8" | Out-Null
 }
 function HookEvent($source, $json) { $json | & $Hook hook $source }
 
@@ -58,7 +59,7 @@ HookEvent "claude" '{"hook_event_name":"PreToolUse","session_id":"s2","cwd":"C:\
 Start-Sleep 3
 Shot "3-waiting-minis"
 Post '{"agent":"claude","session":"s1","project":"web","state":"done","text":"Bitti"}'
-Start-Sleep 1.2
+Start-Sleep -Milliseconds 1200
 Shot "4-done"
 
 Start-Sleep 2

@@ -41,7 +41,7 @@ jobs:
           ./out/hook/TelepAIthHook.exe shield
           Get-Item out/hook/TelepAIthHook.exe | Select-Object Name, Length
       - name: Duman testi (aç, olay gönder, ekran görüntüsü al)
-        shell: pwsh
+        shell: powershell
         run: ./windows/scripts/smoke.ps1 -Exe windows/TelepAIth/bin/Release/net8.0-windows/TelepAIth.exe -Hook out/hook/TelepAIthHook.exe -Out shots
       - uses: actions/upload-artifact@v4
         if: always()
