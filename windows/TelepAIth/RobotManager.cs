@@ -30,7 +30,6 @@ internal sealed class RobotManager
     public string WatcherDiagnostics => _watcher.Diagnostics;
 
     public event Action? Changed;
-    public Action? OpenSettings, ReportBug, OpenDiagnostics;
     public Func<System.Windows.Controls.ContextMenu>? BuildRobotMenu;
 
     private bool _visible = Prefs.RobotsVisible;
