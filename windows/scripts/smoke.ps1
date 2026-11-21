@@ -1,3 +1,4 @@
+﻿# NOT: Bu dosya UTF-8 BOM'lu kalmalı (Windows PowerShell 5.1 BOM'suz dosyadaki Türkçe karakterleri bozuyor).
 # CI duman testi: uygulamayı açar, olay gönderir, ekran görüntüsü alır, çökmediğini doğrular.
 param([string]$Exe, [string]$Hook, [string]$Out = "shots")
 $ErrorActionPreference = "Stop"
