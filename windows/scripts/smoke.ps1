@@ -156,6 +156,17 @@ for ($i = 1; $i -le 10; $i++) {
 Start-Sleep 2
 $st = State
 Check ($st.minis -ge $before + 10) "10 hook olayının hepsi ulaştı ($before → $($st.minis))"
+# Yeniden üretme denemesi: POST'un hemen ardından yeni bir AI'dan ilk hook olayı (bazen kayboluyordu)
+$lost = @()
+for ($i = 1; $i -le 15; $i++) {
+  $src = "ai$i"
+  Post ('{"agent":"claude","session":"w' + $i + '","state":"waiting","text":"onay ' + $i + '"}')
+  HookEvent $src ('{"hook_event_name":"UserPromptSubmit","session_id":"r' + $i + '","cwd":"C:\\proj\\r","prompt":"testleri düzelt"}')
+}
+Start-Sleep 2
+$st = State
+for ($i = 1; $i -le 15; $i++) { if (-not ($st.sessions -contains "ai$i/r$i=Thinking")) { $lost += "ai$i" } }
+Check ($lost.Count -eq 0) ("POST ardından ilk hook olayları ulaştı (kayıp: " + ($lost -join ",") + ")")
 Start-Sleep 2
 if ($p.HasExited) { Get-Content (Join-Path $home2 "error.log") -ErrorAction SilentlyContinue; throw "Uygulama çöktü (kod $($p.ExitCode))" }
 if (Test-Path (Join-Path $home2 "error.log")) { Write-Host "--- error.log ---"; Get-Content (Join-Path $home2 "error.log") }
