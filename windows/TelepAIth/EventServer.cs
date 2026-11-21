@@ -124,8 +124,10 @@ internal sealed class EventServer
                 var e = EventParser.Parse(request.Path, request.Query, request.Body);
                 if (Debug) Log($"{request.Method} {request.Path} q={string.Join("&", request.Query.Select(kv => kv.Key + "=" + kv.Value))} body={request.Body.Length} → {(e == null ? "400" : e.Source + "/" + e.SessionId + " " + e.Kind)}");
                 if (e == null) { await Respond(stream, 400, "unrecognized event"); return; }
-                await Respond(stream, 200, "ok");
+                // Önce olayı ilet, sonra cevap ver: hook yardımcısı cevabın başını okuyunca bağlantıyı kapatıyor,
+                // cevap yazılırken bağlantı koparsa olay kaybolmasın.
                 EventReceived?.Invoke(e);
+                try { await Respond(stream, 200, "ok"); } catch { }
             }
             catch
             {
@@ -146,7 +148,9 @@ internal sealed class EventServer
         var reason = code switch { 200 => "OK", 400 => "Bad Request", 403 => "Forbidden", 405 => "Method Not Allowed", 413 => "Payload Too Large", _ => "Error" };
         var payload = Encoding.UTF8.GetBytes(body);
         var head = Encoding.ASCII.GetBytes($"HTTP/1.1 {code} {reason}\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: {payload.Length}\r\nConnection: close\r\n\r\n");
-        await stream.WriteAsync(head).ConfigureAwait(false);
-        await stream.WriteAsync(payload).ConfigureAwait(false);
+        var all = new byte[head.Length + payload.Length];
+        head.CopyTo(all, 0);
+        payload.CopyTo(all, head.Length);
+        await stream.WriteAsync(all).ConfigureAwait(false);
     }
 }
