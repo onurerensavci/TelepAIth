@@ -182,6 +182,11 @@ Post '{"agent":"claude","session":"emo","state":"waiting","text":"🎉 Bitti! �
 Start-Sleep 1
 Shot "8-emoji-bubble"
 
+# Tepsi simgesi kenarlara kadar dolu mu? (eskisi 16 pikselde minicikti)
+$tr = Dbg "tray" | ConvertFrom-Json
+Write-Host "tray: $(Dbg 'tray')"
+Check ($tr.fill16 -gt 0.6 -and $tr.fill -gt 0.6) "tepsi simgesi dolu (%$([int]($tr.fill16 * 100)))"
+
 # Yeni görünüm: menüler ve pencereler açılıp hatasız çiziliyor mu?
 foreach ($ui in @("robotmenu", "traymenu", "settings&page=0", "settings&page=1", "settings&page=2", "settings&page=3", "onboarding", "diagnostics")) {
   $r = Dbg ("ui?open=" + $ui)

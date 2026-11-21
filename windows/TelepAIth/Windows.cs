@@ -219,15 +219,128 @@ internal static class AppIcon
         }
     }
 
-    public static System.Drawing.Icon TrayIcon()
+    // MARK: Tepsi simgesi
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool DestroyIcon(IntPtr handle);
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern int GetSystemMetricsForDpi(int index, uint dpi);
+
+    private static System.Drawing.Icon? _tray;
+    private static IntPtr _trayHandle;
+    private static string? _trayKey;
+
+    /// <summary>Tepsideki simgenin piksel boyutu (görev çubuğunun ekranının ölçeğine göre: 16, 20, 24, 32…)</summary>
+    public static int TraySize
     {
-        try
+        get
         {
-            using var s = typeof(AppIcon).Assembly.GetManifestResourceStream("AppIcon.ico");
-            if (s != null) return new System.Drawing.Icon(s, System.Windows.Forms.SystemInformation.SmallIconSize);
+            var scale = Native.MonitorAt(0, 0).Scale;
+            try
+            {
+                var px = GetSystemMetricsForDpi(49 /* SM_CXSMICON */, (uint)Math.Round(96 * scale));
+                if (px > 0) return px;
+            }
+            catch { }
+            return (int)Math.Round(16 * scale);
         }
-        catch { }
-        return System.Drawing.SystemIcons.Application;
+    }
+
+    /// <summary>
+    /// Tepsi simgesi: kenarlara kadar dolu robot kafası (uygulama ikonundaki boşluklar 16 pikselde onu minicik yapıyordu).
+    /// Gözler gösterilen AI'ın renginde; seni bekleyen bir şey varsa köşede turuncu nokta.
+    /// </summary>
+    public static System.Drawing.Icon TrayIcon(Rgb eyes, bool waiting)
+    {
+        var px = TraySize;
+        var key = $"{px}|{eyes}|{waiting}";
+        if (_tray != null && key == _trayKey) return _tray;
+        using var bmp = DrawTray(px, eyes, waiting);
+        var handle = bmp.GetHicon();
+        var icon = System.Drawing.Icon.FromHandle(handle);
+        var oldHandle = _trayHandle;
+        _tray = icon;
+        _trayHandle = handle;
+        _trayKey = key;
+        if (oldHandle != IntPtr.Zero) DestroyIcon(oldHandle);
+        return icon;
+    }
+
+    public static System.Drawing.Bitmap DrawTray(int px, Rgb eyes, bool waiting)
+    {
+        var bmp = new System.Drawing.Bitmap(px, px, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+        using var g = System.Drawing.Graphics.FromImage(bmp);
+        g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+        g.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.HighQuality;
+        g.Clear(System.Drawing.Color.Transparent);
+        var k = px / 16f;   // 16 birimlik tuval
+        System.Drawing.RectangleF R(float x, float y, float w, float h) => new(x * k, y * k, w * k, h * k);
+        System.Drawing.Color C(int r, int gg, int b, int a = 255) => System.Drawing.Color.FromArgb(a, r, gg, b);
+
+        System.Drawing.Drawing2D.GraphicsPath Round(System.Drawing.RectangleF r, float radius)
+        {
+            var d = Math.Min(radius * 2 * k, Math.Min(r.Width, r.Height));
+            var path = new System.Drawing.Drawing2D.GraphicsPath();
+            path.AddArc(r.X, r.Y, d, d, 180, 90);
+            path.AddArc(r.Right - d, r.Y, d, d, 270, 90);
+            path.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90);
+            path.AddArc(r.X, r.Bottom - d, d, d, 90, 90);
+            path.CloseFigure();
+            return path;
+        }
+
+        // Yan cıvatalar
+        using (var bolt = new System.Drawing.SolidBrush(C(0xB9, 0xB1, 0xD3)))
+        {
+            using var l = Round(R(0f, 6.4f, 2f, 3.4f), 1f);
+            using var r = Round(R(14f, 6.4f, 2f, 3.4f), 1f);
+            g.FillPath(bolt, l);
+            g.FillPath(bolt, r);
+        }
+        // Kafa: açık renk kabuk, ince koyu kenar (açık görev çubuğunda da seçilsin)
+        using (var shell = Round(R(1.1f, 1.6f, 13.8f, 13.2f), 3.8f))
+        {
+            using var fill = new System.Drawing.Drawing2D.LinearGradientBrush(R(0, 1.6f, 16, 13.2f), C(0xFB, 0xF8, 0xF3), C(0xD6, 0xD0, 0xE8), 90f);
+            g.FillPath(fill, shell);
+            using var edge = new System.Drawing.Pen(C(0x2A, 0x26, 0x3D, 150), Math.Max(1f, 0.55f * k));
+            g.DrawPath(edge, shell);
+        }
+        // Vizör
+        using (var visor = Round(R(3f, 4.6f, 10f, 7.6f), 2.4f))
+        using (var dark = new System.Drawing.SolidBrush(C(0x17, 0x14, 0x2A)))
+            g.FillPath(dark, visor);
+        // Gözler (AI'ın renginde, hafif açık)
+        var eye = eyes.Mix(Rgb.White, 0.15);
+        using (var eb = new System.Drawing.SolidBrush(C(eye.R, eye.G, eye.B)))
+        {
+            using var le = Round(R(5f, 6.3f, 2.3f, 4.2f), 1.15f);
+            using var re = Round(R(8.7f, 6.3f, 2.3f, 4.2f), 1.15f);
+            g.FillPath(eb, le);
+            g.FillPath(eb, re);
+        }
+        // Alındaki ışık (büyük boyutlarda)
+        if (px >= 24)
+            using (var led = new System.Drawing.SolidBrush(C(0x33, 0xD4, 0x78)))
+                g.FillEllipse(led, R(7.3f, 2.5f, 1.4f, 1.4f));
+        // Seni bekliyor: turuncu nokta
+        if (waiting)
+        {
+            using var badge = new System.Drawing.SolidBrush(C(0xFF, 0x99, 0x33));
+            using var ring = new System.Drawing.Pen(C(0x17, 0x14, 0x2A), Math.Max(1f, 0.7f * k));
+            var b = R(10.4f, 10.4f, 5.4f, 5.4f);
+            g.FillEllipse(badge, b);
+            g.DrawEllipse(ring, b);
+        }
+        return bmp;
+    }
+
+    /// <summary>Test için: simgenin ne kadarı dolu (0…1)</summary>
+    public static double TrayFill(int px)
+    {
+        using var bmp = DrawTray(px, new Rgb(0xD9, 0x77, 0x57), false);
+        var filled = 0;
+        for (var x = 0; x < px; x++)
+            for (var y = 0; y < px; y++)
+                if (bmp.GetPixel(x, y).A > 128) filled++;
+        return filled / (double)(px * px);
     }
 }
 

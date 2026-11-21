@@ -29,7 +29,8 @@ internal sealed class AppController : ISettingsHost
         try { Themes.WriteExampleConfigIfMissing(); } catch { }
         Themes.Shared.Reload();
 
-        _tray = new WinForms.NotifyIcon { Icon = AppIcon.TrayIcon(), Text = "TelepAIth", Visible = true };
+        _tray = new WinForms.NotifyIcon { Icon = AppIcon.TrayIcon(Themes.Shared.Theme("claude").Color, false), Text = "TelepAIth", Visible = true };
+        Microsoft.Win32.SystemEvents.DisplaySettingsChanged += (_, _) => Application.Current.Dispatcher.BeginInvoke(UpdateTrayIcon);
         _tray.MouseUp += (_, e) =>
         {
             if (e.Button == WinForms.MouseButtons.Left) Manager.Visible = !Manager.Visible;
@@ -82,12 +83,23 @@ internal sealed class AppController : ISettingsHost
     {
         var (health, text) = CurrentHealth();
         Manager.SetHealth(health, text);
+        UpdateTrayIcon();
         if (_tray != null)
         {
             var waiting = Manager.AllModels.Any(m => m.State == RobotState.Waiting);
             var tip = waiting ? "TelepAIth · " + L("seni bekliyor", "waiting for you") : "TelepAIth " + AppInfo.Version;
             _tray.Text = tip.Length > 63 ? tip[..63] : tip;
         }
+    }
+
+    /// <summary>Tepsi simgesi: gözler gösterilen AI'ın renginde, seni bekleyen varsa turuncu nokta</summary>
+    private void UpdateTrayIcon()
+    {
+        if (_tray == null) return;
+        var waiting = Manager.AllModels.Any(m => m.State == RobotState.Waiting);
+        var color = (Manager.Current?.Theme ?? Themes.Shared.Theme("claude")).Color;
+        var icon = AppIcon.TrayIcon(color, waiting);
+        if (!ReferenceEquals(_tray.Icon, icon)) _tray.Icon = icon;
     }
 
     // MARK: Sağlık ışığı
@@ -315,6 +327,11 @@ internal sealed class AppController : ISettingsHost
                 {
                     var (ok, colored, opaque) = Emoji.Probe(query.TryGetValue("e", out var e) ? e : "🎉");
                     return $"{{\"ok\":{(ok ? "true" : "false")},\"colored\":{colored},\"opaque\":{opaque},\"error\":\"{Emoji.LastError?.Replace("\"", "'")}\"}}";
+                }
+                case "/debug/tray":
+                {
+                    var px = AppIcon.TraySize;
+                    return $"{{\"px\":{px},\"fill16\":{AppIcon.TrayFill(16).ToString(System.Globalization.CultureInfo.InvariantCulture)},\"fill\":{AppIcon.TrayFill(px).ToString(System.Globalization.CultureInfo.InvariantCulture)}}}";
                 }
                 case "/debug/ui":
                 {
