@@ -69,6 +69,9 @@ public sealed class RobotModel
 
     public void ReloadTheme() => Theme = Themes.Shared.Theme(Source);
 
+    /// <summary>Teşhis: oturumlar ve durumları</summary>
+    public IEnumerable<(string Id, RobotState State)> SessionStates => _sessions.Select(kv => (kv.Key, kv.Value.State)).ToList();
+
     public string StatusLine => Clip(BubbleText ?? WithEmoji(State.Emoji(), State.Label()), 48);
 
     private static string DonePhrase()

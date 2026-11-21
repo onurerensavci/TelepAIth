@@ -138,8 +138,12 @@ internal sealed class RobotManager
 
     // MARK: Olaylar
 
+    private readonly Queue<string> _recent = new();
+
     public void Handle(AgentEvent e)
     {
+        _recent.Enqueue($"{DateTime.Now:HH:mm:ss.fff} {e.Source}/{e.SessionId} {e.Kind} {e.State}");
+        while (_recent.Count > 30) _recent.Dequeue();
         // Terminaldeki Claude Code / Codex: hook'u çalıştıran sürecin penceresi olan atası (terminal, VS Code…)
         if (e.AppPid == null && e.HookParentPid is { } ppid) e.AppPid = WindowedAncestor(ppid);
         var m = Model(e.Source);
@@ -468,6 +472,8 @@ internal sealed class RobotManager
             ["alignLeft"] = _avatar?.AlignLeft,
             ["bubbleBelow"] = _avatar?.BubbleBelow,
             ["focus"] = FocusMode.IsActive,
+            ["recent"] = new System.Text.Json.Nodes.JsonArray(_recent.Select(r => (System.Text.Json.Nodes.JsonNode?)r).ToArray()),
+            ["sessions"] = new System.Text.Json.Nodes.JsonArray(AllModels.SelectMany(m => m.SessionStates.Select(x => (System.Text.Json.Nodes.JsonNode?)$"{m.Source}/{x.Id}={x.State}")).ToArray()),
         };
         if (_avatar != null)
         {
