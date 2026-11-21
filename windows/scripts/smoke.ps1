@@ -1,4 +1,4 @@
-﻿# CI duman testi: uygulamayı açar, olay gönderir, ekran görüntüsü alır, çökmediğini doğrular.
+# CI duman testi: uygulamayı açar, olay gönderir, ekran görüntüsü alır, çökmediğini doğrular.
 param([string]$Exe, [string]$Hook, [string]$Out = "shots")
 $ErrorActionPreference = "Stop"
 $OutputEncoding = New-Object System.Text.UTF8Encoding $false
@@ -7,6 +7,7 @@ $home2 = Join-Path $env:RUNNER_TEMP "tp-home"
 New-Item -ItemType Directory -Force $home2 | Out-Null
 $env:TELEPAITH_PORTABLE = "1"
 $env:TELEPAITH_HOME = $home2
+$env:TELEPAITH_HOOK_DEBUG = "1"
 
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 Add-Type -ReferencedAssemblies System.Drawing, System.Windows.Forms -TypeDefinition @"
@@ -110,12 +111,6 @@ HookEvent "claude" '{"hook_event_name":"PreToolUse","session_id":"s2","cwd":"C:\
 Start-Sleep 3
 Shot "3-waiting-minis"
 $st = State
-if ($st.minis -lt 2) {
-  Write-Host "  hook yolu minik kafa üretmedi; aynı olaylar doğrudan POST ediliyor (teşhis)"
-  Post '{"hook_event_name":"UserPromptSubmit","session_id":"g9","cwd":"C:\\proj\\api","prompt":"x"}' "?source=gpt"
-  Start-Sleep 2
-  State | Out-Null
-}
 Check ($st.state -eq "Waiting") "onay bekliyor"
 Check ($st.bubble -like "*npm install*") "balonda komut yazıyor"
 Check ($st.minis -ge 2) "diğer oturumlar minik kafa"

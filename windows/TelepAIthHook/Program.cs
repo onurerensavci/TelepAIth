@@ -24,7 +24,12 @@ try
             var term = Environment.GetEnvironmentVariable("TERM_PROGRAM");
             if (!string.IsNullOrEmpty(term)) query.Append("&term=").Append(Uri.EscapeDataString(term));
             if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("WT_SESSION"))) query.Append("&wt=1");
-            Local.Post("/event?" + query, body, waitMs: 1500);
+            // Bir kere daha dene (TelepAIth o an meşgulse ya da yeni açılıyorsa)
+            if (!Local.Post("/event?" + query, body, waitMs: 1500))
+            {
+                Thread.Sleep(250);
+                Local.Post("/event?" + query, body, waitMs: 1500);
+            }
             return 0;
         }
         case "shield":
@@ -81,7 +86,7 @@ static class Local
         try
         {
             using var client = new TcpClient();
-            if (!client.ConnectAsync("127.0.0.1", port).Wait(500)) return false;
+            if (!client.ConnectAsync(System.Net.IPAddress.Loopback, port).Wait(1500)) return Fail($"connect timeout :{port}");
             client.ReceiveTimeout = waitMs;
             client.SendTimeout = waitMs;
             var payload = Encoding.UTF8.GetBytes(body);
@@ -92,12 +97,20 @@ static class Local
             stream.Write(payload);
             var buf = new byte[64];
             var n = stream.Read(buf, 0, buf.Length);
-            return n > 12 && Encoding.ASCII.GetString(buf, 0, n).Contains(" 200 ");
+            var reply = n > 0 ? Encoding.ASCII.GetString(buf, 0, n) : "";
+            return reply.Contains(" 200 ") || Fail("reply: " + reply.Split('\r')[0]);
         }
-        catch
+        catch (Exception ex)
         {
-            return false;
+            return Fail(ex.GetType().Name + ": " + ex.Message);
         }
+    }
+
+    /// <summary>TELEPAITH_HOOK_DEBUG=1 ise nedenini stderr'e yazar (normalde sessiz: hook'lar Claude Code'u rahatsız etmesin)</summary>
+    private static bool Fail(string why)
+    {
+        if (Environment.GetEnvironmentVariable("TELEPAITH_HOOK_DEBUG") == "1") Console.Error.WriteLine("TelepAIthHook: " + why);
+        return false;
     }
 }
 
