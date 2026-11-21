@@ -3,7 +3,11 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
+using System.Windows.Documents;
+using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Shapes;
 using TelepAIth.Core;
 using static TelepAIth.Core.Text;
 
@@ -20,29 +24,129 @@ internal interface ISettingsHost
     void Changed();
 }
 
-/// <summary>Koddan kurulan basit WPF parçaları.</summary>
+/// <summary>Koddan kurulan Windows 11 tarzı parçalar (kartlar, anahtar düğmeler, başlıklar).</summary>
 internal static class Ui
 {
-    public static TextBlock Title(string s) => new() { Text = s, FontSize = 18, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 8) };
-    public static TextBlock Header(string s) => new() { Text = s, FontSize = 13, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 12, 0, 4) };
-
-    public static TextBlock Para(string s, bool muted = false) => new()
+    public static T Themed<T>(T e, string? fg = null, string? bg = null) where T : FrameworkElement
     {
-        Text = s, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 2, 0, 6),
-        Foreground = muted ? Brushes.Gray : SystemColors.ControlTextBrush,
-    };
-
-    public static CheckBox Check(string s, bool value, Action<bool> set)
-    {
-        var c = new CheckBox { Content = new TextBlock { Text = s, TextWrapping = TextWrapping.Wrap }, IsChecked = value, Margin = new Thickness(0, 4, 0, 4) };
-        c.Checked += (_, _) => set(true);
-        c.Unchecked += (_, _) => set(false);
-        return c;
+        if (fg != null) e.SetResourceReference(TextElement.ForegroundProperty, fg);
+        if (bg != null)
+        {
+            switch (e)
+            {
+                case Border b: b.SetResourceReference(Border.BackgroundProperty, bg); break;
+                case Panel p: p.SetResourceReference(Panel.BackgroundProperty, bg); break;
+                case Control c: c.SetResourceReference(Control.BackgroundProperty, bg); break;
+            }
+        }
+        return e;
     }
 
-    public static Button Button(string s, Action act)
+    public static TextBlock Glyph(string code, double size = 16, string brush = "Text") =>
+        Themed(new TextBlock { Text = code, FontFamily = new FontFamily(Theme.Icons), FontSize = size, VerticalAlignment = VerticalAlignment.Center }, brush);
+
+    public static TextBlock PageTitle(string s) =>
+        new TextBlock { FontFamily = new FontFamily(Theme.DisplayFont), FontSize = 26, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 14) }.WithText(s);
+
+    public static TextBlock Section(string s) =>
+        new TextBlock { FontSize = 14, FontWeight = FontWeights.SemiBold, Margin = new Thickness(2, 18, 0, 6) }.WithText(s);
+
+    public static TextBlock Para(string s, bool muted = false, double size = 13)
     {
-        var b = new Button { Content = s, Padding = new Thickness(10, 3, 10, 3), Margin = new Thickness(0, 4, 8, 4), HorizontalAlignment = HorizontalAlignment.Left };
+        var t = new TextBlock { TextWrapping = TextWrapping.Wrap, FontSize = size, Margin = new Thickness(2, 2, 0, 8), LineHeight = size * 1.45 }.WithText(s);
+        return muted ? Themed(t, "SubText") : t;
+    }
+
+    /// <summary>Yazıyı renkli emojilerle birlikte yerleştirir.</summary>
+    public static TextBlock WithText(this TextBlock t, string s)
+    {
+        Emoji.Fill(t, s);
+        return t;
+    }
+
+    /// <summary>Kart: solda başlık + açıklama, sağda denetim.</summary>
+    public static Border Card(string title, string? desc, UIElement? control, string? glyph = null, Action? onClick = null)
+    {
+        var dock = new DockPanel { LastChildFill = true };
+        if (control != null)
+        {
+            DockPanel.SetDock(control, Dock.Right);
+            if (control is FrameworkElement fe) fe.VerticalAlignment = VerticalAlignment.Center;
+            dock.Children.Add(control);
+        }
+        if (glyph != null)
+        {
+            var g = Glyph(glyph, 18);
+            g.Margin = new Thickness(0, 0, 16, 0);
+            DockPanel.SetDock(g, Dock.Left);
+            dock.Children.Add(g);
+        }
+        var texts = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 16, 0) };
+        texts.Children.Add(new TextBlock { TextWrapping = TextWrapping.Wrap, FontSize = 13.5 }.WithText(title));
+        if (!string.IsNullOrEmpty(desc))
+            texts.Children.Add(Themed(new TextBlock { TextWrapping = TextWrapping.Wrap, FontSize = 12, Margin = new Thickness(0, 2, 0, 0) }.WithText(desc), "SubText"));
+        dock.Children.Add(texts);
+        var card = Themed(new Border
+        {
+            CornerRadius = new CornerRadius(6), BorderThickness = new Thickness(1), Padding = new Thickness(16, 12, 16, 12),
+            Margin = new Thickness(0, 0, 0, 4), MinHeight = 64, Child = dock,
+        }, bg: "Card");
+        card.SetResourceReference(Border.BorderBrushProperty, "CardBorder");
+        if (onClick != null)
+        {
+            card.Cursor = Cursors.Hand;
+            card.MouseLeftButtonUp += (_, e) =>
+            {
+                if (e.OriginalSource is DependencyObject d && IsInside<ButtonBase>(d)) return;
+                onClick();
+            };
+        }
+        return card;
+    }
+
+    private static bool IsInside<T>(DependencyObject d) where T : DependencyObject
+    {
+        for (var x = d; x != null; x = x is Visual || x is System.Windows.Media.Media3D.Visual3D ? VisualTreeHelper.GetParent(x) : LogicalTreeHelper.GetParent(x))
+            if (x is T) return true;
+        return false;
+    }
+
+    public static Border SwitchCard(string title, string? desc, bool value, Action<bool> set, string? glyph = null)
+    {
+        var sw = new CheckBox { IsChecked = value };
+        sw.SetResourceReference(FrameworkElement.StyleProperty, "Switch");
+        sw.Checked += (_, _) => set(true);
+        sw.Unchecked += (_, _) => set(false);
+        var label = new TextBlock { Margin = new Thickness(0, 0, 10, 0), VerticalAlignment = VerticalAlignment.Center };
+        label.SetResourceReference(TextElement.ForegroundProperty, "SubText");
+        void Sync() => label.Text = sw.IsChecked == true ? L("Açık", "On") : L("Kapalı", "Off");
+        Sync();
+        sw.Checked += (_, _) => Sync();
+        sw.Unchecked += (_, _) => Sync();
+        var right = new StackPanel { Orientation = Orientation.Horizontal };
+        right.Children.Add(label);
+        right.Children.Add(sw);
+        return Card(title, desc, right, glyph, () => sw.IsChecked = sw.IsChecked != true);
+    }
+
+    public static Border PickerCard<T>(string title, string? desc, IEnumerable<(T Value, string Text)> options, T current, Action<T> set, string? glyph = null)
+    {
+        var list = options.ToList();
+        var box = new ComboBox();
+        foreach (var o in list) box.Items.Add(new ComboBoxItem { Content = o.Text });
+        var idx = list.FindIndex(o => Equals(o.Value, current));
+        box.SelectedIndex = idx >= 0 ? idx : 0;
+        box.SelectionChanged += (_, _) =>
+        {
+            if (box.SelectedIndex >= 0) set(list[box.SelectedIndex].Value);
+        };
+        return Card(title, desc, box, glyph);
+    }
+
+    public static Button Button(string s, Action act, bool primary = false)
+    {
+        var b = new Button { Content = s, Margin = new Thickness(8, 0, 0, 0) };
+        if (primary) b.SetResourceReference(FrameworkElement.StyleProperty, "Primary");
         b.Click += (_, _) => act();
         return b;
     }
@@ -54,43 +158,37 @@ internal static class Ui
         return p;
     }
 
-    public static FrameworkElement Picker<T>(string label, IEnumerable<(T Value, string Text)> options, T current, Action<T> set)
-    {
-        var list = options.ToList();
-        var box = new ComboBox { MinWidth = 150, Margin = new Thickness(8, 0, 0, 0) };
-        foreach (var o in list) box.Items.Add(o.Text);
-        var idx = list.FindIndex(o => Equals(o.Value, current));
-        box.SelectedIndex = idx >= 0 ? idx : 0;
-        box.SelectionChanged += (_, _) =>
+    /// <summary>Durum kartı: yeşil tik ya da turuncu uyarı.</summary>
+    public static Border StatusCard(bool ok, string okText, string badText, UIElement? control = null) =>
+        Card(ok ? okText : badText, null, control, ok ? "" : "").Also(c =>
         {
-            if (box.SelectedIndex >= 0) set(list[box.SelectedIndex].Value);
-        };
-        var row = new DockPanel { Margin = new Thickness(0, 4, 0, 4), LastChildFill = false };
-        row.Children.Add(new TextBlock { Text = label, VerticalAlignment = VerticalAlignment.Center });
-        row.Children.Add(box);
-        return row;
-    }
+            if (((DockPanel)c.Child).Children.OfType<TextBlock>().FirstOrDefault(t => t.FontFamily.Source == Theme.Icons) is { } g)
+                g.SetResourceReference(TextElement.ForegroundProperty, ok ? "Good" : "Warn");
+        });
 
-    public static TextBlock Status(bool ok, string okText, string badText) => new()
+    public static T Also<T>(this T x, Action<T> a)
     {
-        Text = (ok ? "✔ " : "⚠ ") + (ok ? okText : badText),
-        Foreground = ok ? new SolidColorBrush(Color.FromRgb(0x2E, 0x9E, 0x5B)) : new SolidColorBrush(Color.FromRgb(0xD9, 0x7A, 0x1E)),
-        FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 4, 0, 4),
-    };
+        a(x);
+        return x;
+    }
 
     public static ScrollViewer Page(params UIElement[] items)
     {
-        var p = new StackPanel { Margin = new Thickness(16) };
+        var p = new StackPanel { Margin = new Thickness(28, 24, 28, 28), MaxWidth = 760 };
         foreach (var i in items) p.Children.Add(i);
-        return new ScrollViewer { Content = p, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+        return new ScrollViewer { Content = p, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
     }
 
-    public static Window Window(string title, double w, double h) => new()
+    public static Window Window(string title, double w, double h)
     {
-        Title = AppInfo.Name + " — " + title, Width = w, Height = h, WindowStartupLocation = WindowStartupLocation.CenterScreen,
-        FontFamily = new FontFamily("Segoe UI"), FontSize = 12.5, ShowInTaskbar = true,
-        Icon = AppIcon.Image,
-    };
+        var win = new Window
+        {
+            Title = AppInfo.Name + " — " + title, Width = w, Height = h, MinWidth = 520, MinHeight = 420,
+            WindowStartupLocation = WindowStartupLocation.CenterScreen, ShowInTaskbar = true, Icon = AppIcon.Image,
+        };
+        Theme.Style(win);
+        return win;
+    }
 
     public static void Bring(Window w)
     {
@@ -133,39 +231,90 @@ internal static class AppIcon
     }
 }
 
-/// <summary>Ayarlar: Genel · Bildirimler · Odak ve özet · Bağlantılar</summary>
-internal sealed class SettingsWindow
+/// <summary>Ayarlar: solda kenar çubuğu (Genel · Bildirimler · Odak ve özet · Bağlantılar), sağda kartlar.</summary>
+internal static class SettingsWindow
 {
     private static Window? _window;
-    private static TabControl? _tabs;
+    private static int _page;
 
-    public static void Show(ISettingsHost host)
+    public static void Show(ISettingsHost host, int? page = null)
     {
         if (_window == null)
         {
-            _window = Ui.Window(L("Ayarlar", "Settings"), 560, 600);
-            _window.Closed += (_, _) => { _window = null; _tabs = null; };
+            _window = Ui.Window(L("Ayarlar", "Settings"), 860, 640);
+            _window.Closed += (_, _) => _window = null;
         }
+        if (page is { } p) _page = p;
         Rebuild(host);
         Ui.Bring(_window);
     }
 
-    /// <summary>Durum değişince (izin, bağlantı) açık pencereyi tazele.</summary>
+    /// <summary>Durum değişince (dil, bağlantı) açık pencereyi tazele.</summary>
     public static void Refresh(ISettingsHost host)
     {
         if (_window != null) Rebuild(host);
     }
 
+    public static void Close() => _window?.Close();
+
+    private static readonly (string Glyph, Func<string> Title)[] Pages =
+    {
+        ("", () => L("Genel", "General")),
+        ("", () => L("Bildirimler", "Notifications")),
+        ("", () => L("Odak ve özet", "Focus & summary")),
+        ("", () => L("Bağlantılar", "Connections")),
+    };
+
     private static void Rebuild(ISettingsHost host)
     {
-        var selected = _tabs?.SelectedIndex ?? 0;
-        _tabs = new TabControl { Margin = new Thickness(8) };
-        _tabs.Items.Add(new TabItem { Header = L("Genel", "General"), Content = General(host) });
-        _tabs.Items.Add(new TabItem { Header = L("Bildirimler", "Notifications"), Content = Notifications(host) });
-        _tabs.Items.Add(new TabItem { Header = L("Odak ve özet", "Focus & summary"), Content = Focus(host) });
-        _tabs.Items.Add(new TabItem { Header = L("Bağlantılar", "Connections"), Content = Connections(host) });
-        _tabs.SelectedIndex = selected;
-        _window!.Content = _tabs;
+        var root = new Grid();
+        root.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(250) });
+        root.ColumnDefinitions.Add(new ColumnDefinition());
+
+        // Kenar çubuğu
+        var side = Ui.Themed(new DockPanel(), bg: "Side");
+        var brand = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(20, 22, 16, 18) };
+        if (AppIcon.Image != null) brand.Children.Add(new Image { Source = AppIcon.Image, Width = 36, Height = 36, Margin = new Thickness(0, 0, 12, 0) });
+        var names = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+        names.Children.Add(new TextBlock { Text = "TelepAIth", FontSize = 15, FontWeight = FontWeights.SemiBold });
+        names.Children.Add(Ui.Themed(new TextBlock { Text = $"{AppInfo.Version} · Windows " + L("(deneysel)", "(experimental)"), FontSize = 11.5 }, "SubText"));
+        brand.Children.Add(names);
+        DockPanel.SetDock(brand, Dock.Top);
+        side.Children.Add(brand);
+
+        var nav = new ListBox { Margin = new Thickness(10, 0, 10, 10) };
+        nav.SetResourceReference(FrameworkElement.StyleProperty, "Nav");
+        nav.ItemContainerStyle = (Style)Application.Current.FindResource("NavItem");
+        foreach (var (glyph, title) in Pages)
+        {
+            var item = new StackPanel { Orientation = Orientation.Horizontal };
+            item.Children.Add(Ui.Glyph(glyph, 16).Also(g => g.Margin = new Thickness(0, 0, 14, 0)));
+            item.Children.Add(new TextBlock { Text = title(), FontSize = 13.5, VerticalAlignment = VerticalAlignment.Center });
+            nav.Items.Add(item);
+        }
+        nav.SelectedIndex = _page;
+        side.Children.Add(nav);
+        root.Children.Add(side);
+
+        var content = new ContentControl();
+        Grid.SetColumn(content, 1);
+        root.Children.Add(content);
+
+        void ShowPage(int i)
+        {
+            _page = i;
+            content.Content = i switch
+            {
+                1 => Notifications(host),
+                2 => Focus(host),
+                3 => Connections(host),
+                _ => General(host),
+            };
+        }
+        nav.SelectionChanged += (_, _) => { if (nav.SelectedIndex >= 0) ShowPage(nav.SelectedIndex); };
+        ShowPage(_page);
+
+        _window!.Content = root;
         _window.Title = AppInfo.Name + " — " + L("Ayarlar", "Settings");
     }
 
@@ -173,54 +322,54 @@ internal sealed class SettingsWindow
     {
         var m = host.Manager;
         return Ui.Page(
-            Ui.Picker(L("Dil", "Language"), new[] { (Language.Tr, "Türkçe"), (Language.En, "English") }, Lang.Current, v =>
+            Ui.PageTitle(L("Genel", "General")),
+            Ui.Section(L("Görünüm", "Appearance")),
+            Ui.PickerCard(L("Dil", "Language"), null, new[] { (Language.Tr, "Türkçe"), (Language.En, "English") }, Lang.Current, v =>
             {
                 Lang.Set(v);
                 host.Changed();
                 Application.Current.Dispatcher.BeginInvoke(() => Refresh(host));
-            }),
-            Ui.Picker(L("Robot boyutu", "Robot size"), new[] { (0.75, L("Küçük (%75)", "Small (75%)")), (1.0, L("Normal (%100)", "Normal (100%)")), (1.3, L("Büyük (%130)", "Large (130%)")), (1.6, L("Çok büyük (%160)", "Extra large (160%)")) },
-                new[] { 0.75, 1.0, 1.3, 1.6 }.OrderBy(v => Math.Abs(v - Prefs.RobotScale)).First(), v => m.SetRobotScale(v)),
-            Ui.Check(L("Robotu göster", "Show the robot"), m.Visible, v => m.Visible = v),
-            Ui.Check(L("Her zaman üstte", "Always on top"), Prefs.AlwaysOnTop, v => m.SetAlwaysOnTop(v)),
-            Ui.Check(L("Kilitli (yerinde kalsın, AI pencerelerine gitmesin)", "Locked (stay put, don't follow AI windows)"), Prefs.RobotLocked, v => m.SetLocked(v)),
-            Ui.Check(L("Claude/ChatGPT'ye geçince o pencerenin köşesine gitsin", "Fly to the Claude/ChatGPT window corner"), Prefs.FollowAppWindow, v =>
-            {
-                Prefs.FollowAppWindow = v;
-                m.FollowSettingChanged();
-            }),
-            Ui.Check(L("Aynı anda çalışan oturumları minik kafalarla göster", "Show other running sessions as mini heads"), Prefs.MiniHeads, v => Prefs.MiniHeads = v),
-            Ui.Check(L("Eyleme göre emojiler", "Emojis for each action"), Prefs.EmojiEnabled, v => Prefs.EmojiEnabled = v),
-            Ui.Check(L("Boştayken ara sıra laf atsın", "Idle chatter"), Prefs.IdleChatter, v => Prefs.IdleChatter = v),
-            Ui.Check(L("Kısa sesler", "Short sounds"), Prefs.Sounds, v => Prefs.Sounds = v),
-            Ui.Check(L("Önemli anları sesli söylesin", "Say important moments out loud"), Prefs.Speak, v =>
+            }, ""),
+            Ui.PickerCard(L("Robot boyutu", "Robot size"), L("Robot ve balonu bu oranda büyür", "Scales the robot and its bubble"),
+                new[] { (0.75, L("Küçük (%75)", "Small (75%)")), (1.0, L("Normal (%100)", "Normal (100%)")), (1.3, L("Büyük (%130)", "Large (130%)")), (1.6, L("Çok büyük (%160)", "Extra large (160%)")) },
+                new[] { 0.75, 1.0, 1.3, 1.6 }.OrderBy(v => Math.Abs(v - Prefs.RobotScale)).First(), v => m.SetRobotScale(v), ""),
+            Ui.SwitchCard(L("Robotu göster", "Show the robot"), null, m.Visible, v => m.Visible = v, ""),
+            Ui.SwitchCard(L("Her zaman üstte", "Always on top"), L("Diğer pencereler robotu örtmesin", "Other windows won't cover the robot"), Prefs.AlwaysOnTop, v => m.SetAlwaysOnTop(v), ""),
+            Ui.SwitchCard(L("Kilitli", "Locked"), L("Yerinde kalsın, AI pencerelerine gitmesin", "Stay put, don't follow AI windows"), Prefs.RobotLocked, v => m.SetLocked(v), ""),
+            Ui.SwitchCard(L("Pencereye uç", "Fly to the window"), L("Claude/ChatGPT'ye geçince o pencerenin köşesine gitsin", "Move to the Claude/ChatGPT window corner when you switch to it"),
+                Prefs.FollowAppWindow, v => { Prefs.FollowAppWindow = v; m.FollowSettingChanged(); }, ""),
+            Ui.SwitchCard(L("Minik kafalar", "Mini heads"), L("Aynı anda çalışan diğer oturumları robotun yanında göster", "Show other running sessions next to the robot"), Prefs.MiniHeads, v => Prefs.MiniHeads = v, ""),
+            Ui.Section(L("Davranış", "Behaviour")),
+            Ui.SwitchCard(L("Eyleme göre emojiler", "Emojis for each action"), null, Prefs.EmojiEnabled, v => Prefs.EmojiEnabled = v, ""),
+            Ui.SwitchCard(L("Boştayken laf atsın", "Idle chatter"), L("Arada bir küçük şeyler söyler", "Says little things now and then"), Prefs.IdleChatter, v => Prefs.IdleChatter = v, ""),
+            Ui.SwitchCard(L("Kısa sesler", "Short sounds"), null, Prefs.Sounds, v => Prefs.Sounds = v, ""),
+            Ui.SwitchCard(L("Sesli söylesin", "Speak out loud"), L("Önemli anları Windows'un sesiyle okur", "Reads important moments with the Windows voice"), Prefs.Speak, v =>
             {
                 Prefs.Speak = v;
                 if (v) Speech.Say(L("Merhaba, ben TelepAIth.", "Hi, I'm TelepAIth."));
-            }),
-            Ui.Check(L("Windows açılınca başlasın", "Start with Windows"), Installer.AutostartEnabled, v => Installer.SetAutostart(v)),
-            Ui.Para(L($"Sürüm {AppInfo.Version} · deneysel Windows sürümü", $"Version {AppInfo.Version} · experimental Windows build"), true));
+            }, ""),
+            Ui.SwitchCard(L("Windows açılınca başlasın", "Start with Windows"), null, Installer.AutostartEnabled, v => Installer.SetAutostart(v), ""));
     }
 
     private static UIElement Notifications(ISettingsHost host)
     {
         var off = Notifier.SystemDisabled;
         return Ui.Page(
-            Ui.Header(L("Windows bildirimleri", "Windows notifications")),
-            Ui.Status(!off, L("Windows'ta bildirimler açık", "Notifications are on in Windows"),
-                L("Windows'ta bildirimler kapalı: Ayarlar → Sistem → Bildirimler", "Notifications are off in Windows: Settings → System → Notifications")),
-            Ui.Row(Ui.Button(L("Windows ayarlarını aç", "Open Windows settings"), Notifier.OpenSystemSettings),
-                Ui.Button(L("Test bildirimi gönder", "Send a test notification"), SendTest)),
-            Ui.Header(L("Ne zaman", "When")),
-            Ui.Check(L("Bildirimler", "Notifications"), Prefs.NotificationsEnabled, v => { Prefs.NotificationsEnabled = v; host.Changed(); }),
-            Ui.Check(L("O uygulamaya bakarken de bildir", "Notify even while I'm looking at that app"), Prefs.NotifyWhenFrontmost, v => Prefs.NotifyWhenFrontmost = v),
-            Ui.Check(L("Uzun süre onay beklerse ısrar etsin (sallansın, 2 dk sonra hatırlatsın)", "Nag if it waits for approval for long (wiggle, remind after 2 min)"),
-                Prefs.WaitReminders, v => Prefs.WaitReminders = v),
-            Ui.Picker(L("\"Bitti\" bildirimi için en az", "\"Done\" notification after at least"),
-                new[] { 0, 10, 20, 60, 180 }.Select(s => ((double)s, s == 0 ? L("her zaman", "always") : FormatDuration(s))),
-                new[] { 0.0, 10, 20, 60, 180 }.OrderBy(v => Math.Abs(v - Prefs.LongTurnSeconds)).First(), v => Prefs.LongTurnSeconds = v),
+            Ui.PageTitle(L("Bildirimler", "Notifications")),
+            Ui.StatusCard(!off, L("Windows'ta bildirimler açık", "Notifications are on in Windows"),
+                L("Windows'ta bildirimler kapalı: Ayarlar → Sistem → Bildirimler", "Notifications are off in Windows: Settings → System → Notifications"),
+                Ui.Row(Ui.Button(L("Windows ayarları", "Windows settings"), Notifier.OpenSystemSettings), Ui.Button(L("Test gönder", "Send a test"), SendTest))),
+            Ui.Section(L("Ne zaman", "When")),
+            Ui.SwitchCard(L("Bildirimler", "Notifications"), L("İş bitince ya da AI seni beklerken haber ver", "Tell me when a task finishes or the AI needs me"),
+                Prefs.NotificationsEnabled, v => { Prefs.NotificationsEnabled = v; host.Changed(); }, ""),
+            Ui.SwitchCard(L("O uygulamaya bakarken de bildir", "Notify while I'm looking at that app"), null, Prefs.NotifyWhenFrontmost, v => Prefs.NotifyWhenFrontmost = v, ""),
+            Ui.SwitchCard(L("Israr etsin", "Nag me"), L("Uzun süre onay beklerse sallansın, 2 dakika sonra yeniden hatırlatsın", "Wiggle when it waits long, remind again after 2 minutes"),
+                Prefs.WaitReminders, v => Prefs.WaitReminders = v, ""),
+            Ui.PickerCard(L("\"Bitti\" bildirimi", "\"Done\" notification"), L("Bundan kısa süren işler için bildirim atmaz", "Shorter tasks don't notify"),
+                new[] { 0, 10, 20, 60, 180 }.Select(s => ((double)s, s == 0 ? L("her zaman", "always") : L("en az ", "at least ") + FormatDuration(s))),
+                new[] { 0.0, 10, 20, 60, 180 }.OrderBy(v => Math.Abs(v - Prefs.LongTurnSeconds)).First(), v => Prefs.LongTurnSeconds = v, ""),
             Ui.Para(L("Bildirime ya da robotun balonuna tıklayınca o işin penceresine (Claude, ChatGPT ya da terminal) gidersin.",
-                "Click a notification or the robot's bubble to jump to that task's window (Claude, ChatGPT or the terminal)."), true));
+                "Click a notification or the robot's bubble to jump to that task's window (Claude, ChatGPT or the terminal)."), true, 12));
     }
 
     public static void SendTest() =>
@@ -236,21 +385,22 @@ internal sealed class SettingsWindow
             host.Changed();
             Refresh(host);
         }
+        var buttons = FocusMode.ManualActive
+            ? Ui.Row(Ui.Button(L("Kapat", "Turn off"), () => { FocusMode.TurnOff(); After(); }))
+            : Ui.Row(Ui.Button(L("1 saat", "1 hour"), () => { FocusMode.TurnOn(3600); After(); }, true),
+                     Ui.Button(L("Kapatana kadar", "Until I turn it off"), () => { FocusMode.TurnOn(null); After(); }));
         return Ui.Page(
-            Ui.Header(L("Odak modu", "Focus mode")),
-            Ui.Para(FocusMode.StatusText),
-            Ui.Row(Ui.Button(L("1 saat", "1 hour"), () => { FocusMode.TurnOn(3600); After(); }),
-                Ui.Button(L("Kapatana kadar", "Until I turn it off"), () => { FocusMode.TurnOn(null); After(); }),
-                Ui.Button(L("Kapat", "Turn off"), () => { FocusMode.TurnOff(); After(); })),
-            Ui.Check(L("Toplantıdayken kendiliğinden aç (Zoom/Teams öndeyken ya da mikrofon kullanımdayken)",
-                    "Turn on automatically in meetings (Zoom/Teams in front, or the microphone in use)"),
-                Prefs.AutoFocusInMeetings, v => { Prefs.AutoFocusInMeetings = v; After(); }),
+            Ui.PageTitle(L("Odak ve özet", "Focus & summary")),
+            Ui.Card(L("Odak modu", "Focus mode"), FocusMode.StatusText, buttons, ""),
+            Ui.SwitchCard(L("Toplantıda kendiliğinden aç", "Automatically in meetings"), L("Zoom/Teams öndeyken ya da mikrofon kullanımdayken", "When Zoom/Teams is in front or the microphone is in use"),
+                Prefs.AutoFocusInMeetings, v => { Prefs.AutoFocusInMeetings = v; After(); }, ""),
             Ui.Para(L("Odak modunda robot soluk durur ve susar; sadece seni bekleyen şeyleri ve hataları söyler.",
-                "In focus mode the robot dims and stays quiet; it only tells you what needs you and errors."), true),
-            Ui.Header(L("Günün özeti", "Daily summary")),
-            Ui.Check(L("Akşam günün özetini söylesin", "Tell me a summary of the day in the evening"), Prefs.DailySummary, v => Prefs.DailySummary = v),
-            Ui.Picker(L("Saat", "Time"), Enumerable.Range(15, 8).Select(h => (h, $"{h:00}:00")), Prefs.DailySummaryHour, v => Prefs.DailySummaryHour = v),
-            Ui.Button(L("Bugünün özetini şimdi göster", "Show today's summary now"), m.ShowSummary));
+                "In focus mode the robot dims and stays quiet; it only tells you what needs you and errors."), true, 12),
+            Ui.Section(L("Günün özeti", "Daily summary")),
+            Ui.SwitchCard(L("Akşam günün özetini söylesin", "Evening summary"), L("Kaç iş bitti, ne kadar sürdü, kaç kez seni bekledi", "How many tasks, how long, how often it waited for you"),
+                Prefs.DailySummary, v => Prefs.DailySummary = v, ""),
+            Ui.PickerCard(L("Saat", "Time"), null, Enumerable.Range(15, 8).Select(h => (h, $"{h:00}:00")), Prefs.DailySummaryHour, v => Prefs.DailySummaryHour = v, ""),
+            Ui.Card(L("Bugünün özeti", "Today's summary"), null, Ui.Button(L("Şimdi göster", "Show now"), m.ShowSummary), ""));
     }
 
     private static UIElement Connections(ISettingsHost host)
@@ -258,27 +408,28 @@ internal sealed class SettingsWindow
         var m = host.Manager;
         var items = new List<UIElement>
         {
-            Ui.Header(L("Masaüstü uygulamaları", "Desktop apps")),
-            Ui.Check(L("Claude ve ChatGPT uygulamalarını izle", "Watch the Claude and ChatGPT apps"), Prefs.WatchApps, v => { m.SetWatchApps(v); host.Changed(); }),
+            Ui.PageTitle(L("Bağlantılar", "Connections")),
+            Ui.Section(L("Masaüstü uygulamaları", "Desktop apps")),
+            Ui.SwitchCard(L("Claude ve ChatGPT uygulamalarını izle", "Watch the Claude and ChatGPT apps"),
+                L("Ayrı izin gerekmez; ekrandan okuduklarım bilgisayarından çıkmaz", "No extra permission; nothing I read leaves your PC"),
+                Prefs.WatchApps, v => { m.SetWatchApps(v); host.Changed(); }, ""),
         };
         if (Prefs.WatchApps)
         {
-            if (m.WatcherStatus.Count == 0) items.Add(Ui.Para(L("Claude ya da ChatGPT açık değil.", "Claude or ChatGPT isn't open."), true));
-            foreach (var (name, status) in m.WatcherStatus) items.Add(Ui.Para($"• {name}: {status}"));
-            items.Add(Ui.Para(L("Windows'ta ayrı bir izin gerekmez. Ekrandan okuduklarım bilgisayarından çıkmaz.",
-                "No extra permission is needed on Windows. Nothing I read from the screen leaves your PC."), true));
+            if (m.WatcherStatus.Count == 0) items.Add(Ui.Para(L("Claude ya da ChatGPT şu an açık değil.", "Claude or ChatGPT isn't open right now."), true, 12));
+            foreach (var (name, status) in m.WatcherStatus) items.Add(Ui.Para("• " + name + ": " + status, true, 12));
         }
-        items.Add(Ui.Header(L("Kodlama ajanları", "Coding agents")));
-        foreach (var t in new[] { HookTarget.Claude, HookTarget.Codex })
-        {
-            var target = t;
-            items.Add(Ui.Check(HookInstaller.DisplayName(target), HookInstaller.IsInstalled(target), v => host.SetHook(target, v, false)));
-        }
-        items.Add(Ui.Check(L("Kalkan: tehlikeli komutlarda onay iste", "Shield: ask before risky commands"), Prefs.Shield, v => host.SetShield(v)));
-        items.Add(Ui.Header(L("Ekstralar", "Extras")));
-        items.Add(Ui.Check(L("Anlatıcı (Claude ne yaptığını kendisi söylesin)", "Narrator (Claude tells it in its own words)"), NarratorInstaller.IsInstalled(), v => host.SetNarrator(v)));
-        items.Add(Ui.Row(new TextBlock { Text = L("ClaudeBar kota uyarıları", "ClaudeBar quota alerts"), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 10, 0) },
-            Ui.Button(L("Nasıl bağlanır?", "How to connect"), host.ShowClaudeBarHelp)));
+        items.Add(Ui.Section(L("Kodlama ajanları", "Coding agents")));
+        items.Add(Ui.SwitchCard("Claude Code", L("Terminaldeki her adımı anında görür", "Sees every step in the terminal instantly"),
+            HookInstaller.IsInstalled(HookTarget.Claude), v => host.SetHook(HookTarget.Claude, v, false), ""));
+        items.Add(Ui.SwitchCard("Codex", L("Codex'te bir kere /hooks yazıp onayla", "Type /hooks once in Codex and approve"),
+            HookInstaller.IsInstalled(HookTarget.Codex), v => host.SetHook(HookTarget.Codex, v, false), ""));
+        items.Add(Ui.SwitchCard(L("Kalkan", "Shield"), L("Tehlikeli komutlardan önce onay iste", "Ask before risky commands"), Prefs.Shield, v => host.SetShield(v), ""));
+        items.Add(Ui.Section(L("Ekstralar", "Extras")));
+        items.Add(Ui.SwitchCard(L("Anlatıcı", "Narrator"), L("Claude ne yaptığını kendi cümleleriyle söylesin", "Claude tells what it's doing in its own words"),
+            NarratorInstaller.IsInstalled(), v => host.SetNarrator(v), ""));
+        items.Add(Ui.Card(L("ClaudeBar kota uyarıları", "ClaudeBar quota alerts"), L("Kota azalınca robot uyarır", "The robot warns when quota runs low"),
+            Ui.Button(L("Nasıl bağlanır?", "How to connect"), host.ShowClaudeBarHelp), ""));
         return Ui.Page(items.ToArray());
     }
 }
@@ -288,13 +439,14 @@ internal static class OnboardingWindow
 {
     private static Window? _window;
     private static int _step;
+    private const int Last = 4;
 
     public static void Show(ISettingsHost host)
     {
         if (_window == null)
         {
-            _window = Ui.Window(L("Kurulum", "Setup"), 520, 460);
-            _window.ResizeMode = ResizeMode.NoResize;
+            _window = Ui.Window(L("Kurulum", "Setup"), 620, 560);
+            _window.ResizeMode = ResizeMode.CanMinimize;
             _window.Closed += (_, _) =>
             {
                 _window = null;
@@ -306,65 +458,82 @@ internal static class OnboardingWindow
         Ui.Bring(_window);
     }
 
+    public static void Close() => _window?.Close();
+
     private static void Render(ISettingsHost host)
     {
-        const int last = 4;
         var content = _step switch
         {
             0 => Ui.Page(
-                Ui.Title(L("TelepAIth'e hoş geldin", "Welcome to TelepAIth")),
+                Header(),
+                Ui.PageTitle(L("TelepAIth'e hoş geldin 👋", "Welcome to TelepAIth 👋")),
                 Ui.Para(L("Claude ve GPT o an ne yapıyorsa ekranının köşesindeki robot söyler.",
                     "A little robot in your screen corner tells you what Claude and GPT are doing.")),
                 Ui.Para(L("Birkaç adımda bildirimleri ve bağlantıları kuralım. Hepsini sonra Ayarlar'dan değiştirebilirsin.",
                     "Let's set up notifications and connections in a few steps. You can change all of it later in Settings.")),
-                Ui.Para(L("Not: Bu, Windows'un ilk deneme sürümü. Bir şey ters giderse robota sağ tıkla → Hata bildir.",
-                    "Note: this is the first trial build for Windows. If something goes wrong, right-click the robot → Report a problem."), true)),
+                Ui.Card(L("Deneme sürümü", "Trial build"), L("Bir şey ters giderse robota sağ tıkla → Hata bildir.", "If something goes wrong, right-click the robot → Report a problem."), null, "")),
             1 => Ui.Page(
-                Ui.Title(L("Bildirimler", "Notifications")),
+                Ui.PageTitle(L("Bildirimler 🔔", "Notifications 🔔")),
                 Ui.Para(L("Uzun bir iş bitince ya da AI senden onay beklerken haber vereyim.",
                     "I'll let you know when a long task finishes or the AI needs your approval.")),
-                Ui.Status(!Notifier.SystemDisabled, L("Windows'ta bildirimler açık", "Notifications are on in Windows"), L("Windows'ta bildirimler kapalı", "Notifications are off in Windows")),
-                Ui.Row(Ui.Button(L("Test bildirimi gönder", "Send a test"), SettingsWindow.SendTest),
-                    Ui.Button(L("Windows ayarlarını aç", "Open Windows settings"), Notifier.OpenSystemSettings)),
-                Ui.Check(L("Bildirimler", "Notifications"), Prefs.NotificationsEnabled, v => Prefs.NotificationsEnabled = v)),
+                Ui.StatusCard(!Notifier.SystemDisabled, L("Windows'ta bildirimler açık", "Notifications are on in Windows"), L("Windows'ta bildirimler kapalı", "Notifications are off in Windows"),
+                    Ui.Row(Ui.Button(L("Test gönder", "Send a test"), SettingsWindow.SendTest), Ui.Button(L("Windows ayarları", "Windows settings"), Notifier.OpenSystemSettings))),
+                Ui.SwitchCard(L("Bildirimler", "Notifications"), null, Prefs.NotificationsEnabled, v => Prefs.NotificationsEnabled = v, "")),
             2 => Ui.Page(
-                Ui.Title(L("Claude ve ChatGPT uygulamaları", "The Claude and ChatGPT apps")),
+                Ui.PageTitle(L("Claude ve ChatGPT 👀", "Claude and ChatGPT 👀")),
                 Ui.Para(L("Masaüstü uygulamalarının ne zaman çalıştığını, onay beklediğini ve bitirdiğini Windows'un erişilebilirlik arayüzüyle görürüm. Ekrandan okuduklarım hiçbir yere gönderilmez.",
                     "I use Windows' accessibility interface to see when the desktop apps are working, waiting or done. Nothing I read from the screen leaves your PC.")),
-                Ui.Check(L("Claude ve ChatGPT uygulamalarını izle", "Watch the Claude and ChatGPT apps"), Prefs.WatchApps, v => host.Manager.SetWatchApps(v))),
+                Ui.SwitchCard(L("Claude ve ChatGPT uygulamalarını izle", "Watch the Claude and ChatGPT apps"), null, Prefs.WatchApps, v => host.Manager.SetWatchApps(v), "")),
             3 => Ui.Page(
-                Ui.Title(L("Kodlama ajanları", "Coding agents")),
+                Ui.PageTitle(L("Kodlama ajanları 💻", "Coding agents 💻")),
                 Ui.Para(L("Terminalde Claude Code ya da Codex kullanıyorsan bağla; her adımı anında görürüm.",
                     "If you use Claude Code or Codex in a terminal, connect them; I'll see every step instantly.")),
-                Ui.Check("Claude Code", HookInstaller.IsInstalled(HookTarget.Claude), v => host.SetHook(HookTarget.Claude, v, true)),
-                Ui.Check("Codex", HookInstaller.IsInstalled(HookTarget.Codex), v => host.SetHook(HookTarget.Codex, v, true)),
-                Ui.Para(L("Yeni açacağın oturumlar bağlanır. Codex'te bir kere /hooks yazıp onaylaman gerekir.",
-                    "New sessions will connect. In Codex, type /hooks once and approve."), true)),
+                Ui.SwitchCard("Claude Code", L("Yeni açacağın oturumlar bağlanır", "New sessions connect"), HookInstaller.IsInstalled(HookTarget.Claude), v => host.SetHook(HookTarget.Claude, v, true), ""),
+                Ui.SwitchCard("Codex", L("Codex'te bir kere /hooks yazıp onayla", "Type /hooks once in Codex and approve"), HookInstaller.IsInstalled(HookTarget.Codex), v => host.SetHook(HookTarget.Codex, v, true), "")),
             _ => Ui.Page(
-                Ui.Title(L("Hazırız 🎉", "All set 🎉")),
-                Ui.Para("• " + L("Robotu sürükleyip bir köşeye bırak, oraya yapışır.", "Drag the robot near a corner and it snaps there.")),
-                Ui.Para("• " + L("Balona tıkla: o işin penceresine gidersin.", "Click the bubble to jump to that task's window.")),
-                Ui.Para("• " + L("Robota tıkla: son olaylar. Çift tıkla: AI uygulamasını aç.", "Click the robot for recent events. Double-click to open the AI app.")),
-                Ui.Para("• " + L("Sağ tık: kilit, her zaman üstte, odak modu, günün özeti.", "Right-click: lock, always on top, focus mode, today's summary.")),
-                Ui.Para("• " + L("Görev çubuğunun sağındaki robot simgesi → Ayarlar.", "The robot icon in the taskbar tray → Settings."))),
+                Ui.PageTitle(L("Hazırız 🎉", "All set 🎉")),
+                Ui.Card(L("Köşeye bırak", "Drop it in a corner"), L("Robotu sürükleyip bir köşeye bırak, oraya yapışır.", "Drag the robot near a corner and it snaps there."), null, ""),
+                Ui.Card(L("Balona tıkla", "Click the bubble"), L("O işin penceresine gidersin.", "Jump to that task's window."), null, ""),
+                Ui.Card(L("Robota tıkla", "Click the robot"), L("Son olaylar. Çift tıkla: AI uygulamasını aç.", "Recent events. Double-click to open the AI app."), null, ""),
+                Ui.Card(L("Sağ tık", "Right-click"), L("Kilit, her zaman üstte, odak modu, günün özeti.", "Lock, always on top, focus mode, today's summary."), null, ""),
+                Ui.Card(L("Tepsi simgesi", "Tray icon"), L("Görev çubuğunun sağındaki robot simgesi → Ayarlar.", "The robot icon in the taskbar tray → Settings."), null, "")),
         };
 
-        var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(16, 0, 16, 14) };
+        var bar = Ui.Themed(new DockPanel { LastChildFill = false }, bg: "Side");
+        var dots = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(24, 0, 0, 0) };
+        for (var i = 0; i <= Last; i++)
+        {
+            var current = i == _step;
+            var d = new Ellipse { Width = current ? 8 : 6, Height = current ? 8 : 6, Margin = new Thickness(0, 0, 7, 0), VerticalAlignment = VerticalAlignment.Center };
+            d.SetResourceReference(Shape.FillProperty, current ? "Accent" : "CardBorder");
+            dots.Children.Add(d);
+        }
+        DockPanel.SetDock(dots, Dock.Left);
+        bar.Children.Add(dots);
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 14, 24, 14) };
         if (_step > 0) buttons.Children.Add(Ui.Button(L("Geri", "Back"), () => { _step--; Render(host); }));
-        if (_step < last)
-            buttons.Children.Add(Ui.Button(_step == 0 ? L("Başlayalım", "Let's go") : L("İleri", "Next"), () => { _step++; Render(host); }));
+        if (_step < Last)
+            buttons.Children.Add(Ui.Button(_step == 0 ? L("Başlayalım", "Let's go") : L("İleri", "Next"), () => { _step++; Render(host); }, true));
         else
             buttons.Children.Add(Ui.Button(L("Bitir", "Finish"), () =>
             {
                 Prefs.OnboardingDone = true;
                 _window?.Close();
-            }));
+            }, true));
+        DockPanel.SetDock(buttons, Dock.Right);
+        bar.Children.Add(buttons);
 
         var root = new DockPanel();
-        DockPanel.SetDock(buttons, Dock.Bottom);
-        root.Children.Add(buttons);
+        DockPanel.SetDock(bar, Dock.Bottom);
+        root.Children.Add(bar);
         root.Children.Add(content);
         _window!.Content = root;
+    }
+
+    private static UIElement Header()
+    {
+        var img = new Image { Source = AppIcon.Image, Width = 64, Height = 64, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 0, 0, 12) };
+        return img;
     }
 }
 
@@ -374,27 +543,35 @@ internal static class DiagnosticsWindow
     private static Window? _window;
     private static System.Windows.Threading.DispatcherTimer? _timer;
 
+    public static void Close() => _window?.Close();
+
     public static void Show(Func<string> report)
     {
         if (_window == null)
         {
-            _window = Ui.Window(L("Teşhis", "Diagnostics"), 680, 540);
-            var box = new TextBox
-            {
-                IsReadOnly = true, FontFamily = new FontFamily("Consolas"), FontSize = 11.5, TextWrapping = TextWrapping.Wrap,
-                VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Margin = new Thickness(12, 0, 12, 12), BorderThickness = new Thickness(0),
-            };
-            var top = new DockPanel { Margin = new Thickness(12, 10, 12, 8) };
-            var copy = Ui.Button(L("Panoya kopyala", "Copy to clipboard"), () => { try { Clipboard.SetText(report()); } catch { } });
+            _window = Ui.Window(L("Teşhis", "Diagnostics"), 760, 580);
+            var box = new TextBox();
+            box.SetResourceReference(FrameworkElement.StyleProperty, "Mono");
+            var card = Ui.Themed(new Border { CornerRadius = new CornerRadius(6), BorderThickness = new Thickness(1), Padding = new Thickness(14, 10, 6, 10), Child = box }, bg: "Card");
+            card.SetResourceReference(Border.BorderBrushProperty, "CardBorder");
+
+            var top = new DockPanel { Margin = new Thickness(0, 0, 0, 14) };
+            var copy = Ui.Button(L("Panoya kopyala", "Copy to clipboard"), () => { try { Clipboard.SetText(report()); } catch { } }, true);
             DockPanel.SetDock(copy, Dock.Right);
             top.Children.Add(copy);
-            top.Children.Add(new TextBlock { Text = L("Robot ne görüyor?", "What does the robot see?"), FontSize = 14, FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center });
-            var root = new DockPanel();
+            top.Children.Add(new TextBlock { Text = L("Robot ne görüyor?", "What does the robot see?"), FontFamily = new FontFamily(Theme.DisplayFont), FontSize = 22, FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center });
+
+            var root = new DockPanel { Margin = new Thickness(24, 20, 24, 24) };
             DockPanel.SetDock(top, Dock.Top);
             root.Children.Add(top);
-            root.Children.Add(box);
+            root.Children.Add(card);
             _window.Content = root;
-            void Update() => box.Text = report();
+            void Update()
+            {
+                var keep = box.VerticalOffset;
+                box.Text = report();
+                box.ScrollToVerticalOffset(keep);
+            }
             Update();
             _timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(1.5) };
             _timer.Tick += (_, _) => Update();

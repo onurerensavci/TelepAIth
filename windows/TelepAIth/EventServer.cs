@@ -25,6 +25,9 @@ internal sealed class EventServer
     /// <summary>GET /state: robotun o anki durumu (teşhis ve otomatik testler için)</summary>
     public Func<string>? StateProvider;
 
+    /// <summary>Sadece TELEPAITH_HOOK_DEBUG=1 iken: /debug/... (otomatik testler pencere/menü açabilsin)</summary>
+    public Func<string, System.Collections.Generic.Dictionary<string, string>, string>? DebugHandler;
+
     public void Start()
     {
         for (var port = AppInfo.DefaultPort; port < AppInfo.DefaultPort + 20; port++)
@@ -110,6 +113,11 @@ internal sealed class EventServer
                 if (request.Method == "GET" && request.Path == "/state" && StateProvider != null)
                 {
                     await Respond(stream, 200, StateProvider());
+                    return;
+                }
+                if (Debug && DebugHandler != null && request.Path.StartsWith("/debug/", StringComparison.Ordinal))
+                {
+                    await Respond(stream, 200, DebugHandler(request.Path, request.Query));
                     return;
                 }
                 if (request.Method != "POST") { await Respond(stream, 405, "method not allowed"); return; }

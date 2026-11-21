@@ -11,7 +11,8 @@ using WinForms = System.Windows.Forms;
 namespace TelepAIth;
 
 /// <summary>Menüde bir satır: başlık, eylem, işaret, alt menü. null = ayraç.</summary>
-internal sealed record MenuEntry(string Title, Action? Act = null, bool? Checked = null, bool Enabled = true, List<MenuEntry?>? Children = null);
+internal sealed record MenuEntry(string Title, Action? Act = null, bool? Checked = null, bool Enabled = true, List<MenuEntry?>? Children = null,
+    string? Icon = null, Rgb? Dot = null, bool Header = false);
 
 /// <summary>Tepsi simgesi, sunucu ve robotu birbirine bağlar.</summary>
 internal sealed class AppController : ISettingsHost
@@ -23,6 +24,7 @@ internal sealed class AppController : ISettingsHost
 
     public void Start()
     {
+        Theme.Apply();
         try { System.IO.Directory.CreateDirectory(AppInfo.SkinsDir); } catch { }
         try { Themes.WriteExampleConfigIfMissing(); } catch { }
         Themes.Shared.Reload();
@@ -31,9 +33,8 @@ internal sealed class AppController : ISettingsHost
         _tray.MouseUp += (_, e) =>
         {
             if (e.Button == WinForms.MouseButtons.Left) Manager.Visible = !Manager.Visible;
+            else if (e.Button == WinForms.MouseButtons.Right) ShowTrayMenu();
         };
-        _tray.ContextMenuStrip = new WinForms.ContextMenuStrip();
-        _tray.ContextMenuStrip.Opening += (_, _) => FillTray();
         Notifier.Attach(_tray);
 
         Manager.Changed += Changed;
@@ -42,6 +43,7 @@ internal sealed class AppController : ISettingsHost
 
         _server.EventReceived += e => Application.Current.Dispatcher.BeginInvoke(() => Manager.Handle(e));
         _server.StateProvider = () => Application.Current.Dispatcher.Invoke(Manager.StateJson);
+        _server.DebugHandler = (path, query) => Application.Current.Dispatcher.Invoke(() => Debug(path, query));
         _server.Start();
         _serverError = _server.Error;
 
@@ -101,62 +103,65 @@ internal sealed class AppController : ISettingsHost
 
     // MARK: Menüler
 
+    private static readonly Rgb Green = new(0x2E, 0xC2, 0x6E), Orange = new(0xFF, 0x99, 0x33), Red = new(0xF2, 0x4C, 0x4C);
+
     private List<MenuEntry?> TrayEntries()
     {
         var list = new List<MenuEntry?>();
-        var header = _server.Port > 0 ? $"TelepAIth {AppInfo.Version} · 127.0.0.1:{_server.Port}" : "TelepAIth · " + (_serverError ?? L("başlatılıyor…", "starting…"));
-        list.Add(new MenuEntry(header, Enabled: false));
         var (health, htext) = CurrentHealth();
+        var title = _server.Port > 0 ? $"TelepAIth {AppInfo.Version}" : "TelepAIth · " + (_serverError ?? L("başlatılıyor…", "starting…"));
+        list.Add(new MenuEntry(title, Header: true, Dot: health switch { Health.Broken => Red, Health.Update => Orange, _ => Green }));
         list.Add(new MenuEntry(health switch
         {
-            Health.Broken => "🔴 " + Clip(htext, 70),
-            Health.Update => "🟠 " + L($"Güncelleme var: {htext}", $"Update available: {htext}"),
-            _ => "🟢 " + (FocusMode.IsActive ? L("Odak modu ", "Focus mode ") + FocusMode.StatusText : L("Her şey yolunda", "All good")),
+            Health.Broken => Clip(htext, 70),
+            Health.Update => L($"Güncelleme var: {htext}", $"Update available: {htext}"),
+            _ => FocusMode.IsActive ? L("Odak modu ", "Focus mode ") + FocusMode.StatusText : L("Her şey yolunda", "All good"),
         }, Enabled: false));
         if (Updater.Shared.Available is { } rel)
-            list.Add(new MenuEntry("⬆ " + L($"Güncelle: {rel.Version} hazır", $"Update: {rel.Version} is ready"), Updater.Shared.PromptInstall, Enabled: !Updater.Shared.IsBusy));
+            list.Add(new MenuEntry(L($"Güncelle: {rel.Version} hazır", $"Update: {rel.Version} is ready"), Updater.Shared.PromptInstall,
+                Enabled: !Updater.Shared.IsBusy, Icon: "\uE896"));
+        if (Notifier.SystemDisabled)
+            list.Add(new MenuEntry(L("Bildirimler Windows'ta kapalı — aç…", "Notifications are off in Windows — turn on…"), Notifier.OpenSystemSettings, Icon: "\uE7BA"));
         list.Add(null);
         foreach (var m in Manager.AllModels)
         {
             var source = m.Source;
-            list.Add(new MenuEntry($"● {m.Theme.DisplayName} — {m.StatusLine}", () => Manager.ShowHistory(source)));
+            list.Add(new MenuEntry($"{m.Theme.DisplayName} — {m.StatusLine}", () => Manager.ShowHistory(source), Dot: m.Theme.Color));
         }
         if (Prefs.WatchApps)
             foreach (var (name, status) in Manager.WatcherStatus)
-                list.Add(new MenuEntry($"    👀 {name}: {status}", Enabled: false));
-        if (Notifier.SystemDisabled)
-            list.Add(new MenuEntry("⚠ " + L("Bildirimler Windows'ta kapalı — aç…", "Notifications are off in Windows — turn on…"), Notifier.OpenSystemSettings));
+                list.Add(new MenuEntry($"{name}: {status}", Enabled: false, Icon: "\uE7B3"));
         list.Add(null);
-        list.Add(new MenuEntry(L("Robotu göster", "Show robot"), () => Manager.Visible = !Manager.Visible, Manager.Visible));
-        list.Add(new MenuEntry(L("Robotu bu masaüstüne getir", "Bring robot to this desktop"), Manager.BringHere));
-        list.Add(new MenuEntry(L("Odak modu", "Focus mode"), Children: FocusEntries()));
-        list.Add(new MenuEntry(L("Bugünün özeti", "Today's summary"), Manager.ShowSummary));
+        list.Add(new MenuEntry(L("Robotu göster", "Show robot"), () => Manager.Visible = !Manager.Visible, Manager.Visible, Icon: "\uE890"));
+        list.Add(new MenuEntry(L("Robotu bu masaüstüne getir", "Bring robot to this desktop"), Manager.BringHere, Icon: "\uE7C4"));
+        list.Add(new MenuEntry(L("Odak modu", "Focus mode"), Children: FocusEntries(), Icon: "\uE708"));
+        list.Add(new MenuEntry(L("Bugünün özeti", "Today's summary"), Manager.ShowSummary, Icon: "\uE787"));
         list.Add(null);
-        list.Add(new MenuEntry(L("Ayarlar…", "Settings…"), () => SettingsWindow.Show(this)));
-        list.Add(new MenuEntry(L("Kurulum sihirbazı…", "Setup assistant…"), () => OnboardingWindow.Show(this)));
-        list.Add(new MenuEntry(L("Dene", "Try it"), Children: new List<MenuEntry?>
+        list.Add(new MenuEntry(L("Ayarlar", "Settings"), () => SettingsWindow.Show(this), Icon: "\uE713"));
+        list.Add(new MenuEntry(L("Kurulum sihirbazı", "Setup assistant"), () => OnboardingWindow.Show(this), Icon: "\uE82F"));
+        list.Add(new MenuEntry(L("Dene", "Try it"), Icon: "\uE768", Children: new List<MenuEntry?>
         {
-            new(L("Claude: kısa bir görev", "Claude: a short task"), Demos.Claude(this)),
-            new(L("GPT: onay beklesin", "GPT: wait for approval"), Demos.GptWaiting(this)),
-            new(L("Claude: kota uyarısı", "Claude: quota alert"), () => Manager.Handle(Demos.Quota())),
-            new(L("İki oturum aynı anda", "Two sessions at once"), Demos.Parallel(this)),
+            new(L("Claude: kısa bir görev", "Claude: a short task"), Demos.Claude(this), Dot: Themes.Shared.Theme("claude").Color),
+            new(L("GPT: onay beklesin", "GPT: wait for approval"), Demos.GptWaiting(this), Dot: Themes.Shared.Theme("gpt").Color),
+            new(L("Claude: kota uyarısı", "Claude: quota alert"), () => Manager.Handle(Demos.Quota()), Icon: "\uEBA7"),
+            new(L("İki oturum aynı anda", "Two sessions at once"), Demos.Parallel(this), Icon: "\uE716"),
             null,
-            new(L("Test bildirimi gönder", "Send a test notification"), SettingsWindow.SendTest),
+            new(L("Test bildirimi gönder", "Send a test notification"), SettingsWindow.SendTest, Icon: "\uEA8F"),
         }));
-        list.Add(new MenuEntry(L("Yardım", "Help"), Children: new List<MenuEntry?>
+        list.Add(new MenuEntry(L("Yardım", "Help"), Icon: "\uE897", Children: new List<MenuEntry?>
         {
-            new(L("Hata bildir…", "Report a problem…"), ReportBug),
-            new(L("Teşhis…", "Diagnostics…"), OpenDiagnostics),
-            new(L("Algılama günlüğünü aç", "Open detection log"), () => Shell.Open(AppInfo.DebugFile), Enabled: System.IO.File.Exists(AppInfo.DebugFile)),
-            new(L("Ayar klasörünü aç", "Open settings folder"), () => Shell.Open(AppInfo.SupportDir)),
-            new(L("Renkleri ve kostümleri yeniden yükle", "Reload colors and skins"), Manager.ReloadAppearance),
+            new(L("Hata bildir", "Report a problem"), ReportBug, Icon: "\uEBE8"),
+            new(L("Teşhis", "Diagnostics"), OpenDiagnostics, Icon: "\uE9D9"),
+            new(L("Algılama günlüğünü aç", "Open detection log"), () => Shell.Open(AppInfo.DebugFile), Enabled: System.IO.File.Exists(AppInfo.DebugFile), Icon: "\uE8A5"),
+            new(L("Ayar klasörünü aç", "Open settings folder"), () => Shell.Open(AppInfo.SupportDir), Icon: "\uE838"),
+            new(L("Renkleri ve kostümleri yeniden yükle", "Reload colors and skins"), Manager.ReloadAppearance, Icon: "\uE72C"),
             null,
-            new(L("TelepAIth'i kaldır…", "Uninstall TelepAIth…"), Uninstall),
+            new(L("TelepAIth'i kaldır", "Uninstall TelepAIth"), Uninstall, Icon: "\uE74D"),
         }));
-        list.Add(new MenuEntry(Updater.Shared.IsBusy ? L("Güncelleme indiriliyor…", "Downloading update…") : L("Güncellemeleri denetle…", "Check for updates…"),
-            CheckUpdates, Enabled: !Updater.Shared.IsBusy));
+        list.Add(new MenuEntry(Updater.Shared.IsBusy ? L("Güncelleme indiriliyor…", "Downloading update…") : L("Güncellemeleri denetle", "Check for updates"),
+            CheckUpdates, Enabled: !Updater.Shared.IsBusy, Icon: "\uE895"));
         list.Add(null);
-        list.Add(new MenuEntry(L("Çıkış", "Quit"), () => Application.Current.Shutdown()));
+        list.Add(new MenuEntry(L("Çıkış", "Quit"), () => Application.Current.Shutdown(), Icon: "\uE7E8"));
         return list;
     }
 
@@ -165,13 +170,13 @@ internal sealed class AppController : ISettingsHost
         void After() { Manager.FocusChanged(); Changed(); }
         return new List<MenuEntry?>
         {
-            new(FocusMode.StatusText, Enabled: false),
+            new(FocusMode.StatusText, Header: true),
             null,
-            new(L("1 saat", "1 hour"), () => { FocusMode.TurnOn(3600); After(); }),
-            new(L("Kapatana kadar", "Until I turn it off"), () => { FocusMode.TurnOn(null); After(); }),
-            new(L("Kapat", "Turn off"), () => { FocusMode.TurnOff(); After(); }, Enabled: FocusMode.ManualActive),
+            new(L("1 saat", "1 hour"), () => { FocusMode.TurnOn(3600); After(); }, Icon: "\uE916"),
+            new(L("Kapatana kadar", "Until I turn it off"), () => { FocusMode.TurnOn(null); After(); }, Icon: "\uE708"),
+            new(L("Kapat", "Turn off"), () => { FocusMode.TurnOff(); After(); }, Enabled: FocusMode.ManualActive, Icon: "\uE711"),
             null,
-            new(L("Toplantıda kendiliğinden aç", "Automatically in meetings"), () => { Prefs.AutoFocusInMeetings = !Prefs.AutoFocusInMeetings; After(); }, Prefs.AutoFocusInMeetings),
+            new(L("Toplantıda kendiliğinden aç", "Automatically in meetings"), () => { Prefs.AutoFocusInMeetings = !Prefs.AutoFocusInMeetings; After(); }, Prefs.AutoFocusInMeetings, Icon: "\uE720"),
         };
     }
 
@@ -181,23 +186,23 @@ internal sealed class AppController : ISettingsHost
         var current = Manager.Current;
         var entries = new List<MenuEntry?>
         {
-            new(L("Son olayları göster", "Show recent events"), () => { if (current != null) Manager.ShowHistory(current.Source); }),
+            new(L("Son olayları göster", "Show recent events"), () => { if (current != null) Manager.ShowHistory(current.Source); }, Icon: "\uE81C"),
             null,
-            new(Prefs.RobotLocked ? L("🔓 Kilidi aç", "🔓 Unlock") : L("🔒 Kilitle (yerinde kalsın)", "🔒 Lock (stay here)"), () =>
+            new(Prefs.RobotLocked ? L("Kilidi aç", "Unlock") : L("Kilitle (yerinde kalsın)", "Lock (stay here)"), () =>
             {
                 var on = !Prefs.RobotLocked;
                 Manager.SetLocked(on);
                 Manager.Current?.Say(on ? WithEmoji("🔒", L("Kilitlendim, yerimden kıpırdamıyorum.", "Locked. I'm staying right here."))
                                         : WithEmoji("🔓", L("Kilidim açıldı, yine Claude ve GPT'nin peşinden gelirim.", "Unlocked. I'll follow Claude and GPT again.")), 4);
-            }),
-            new(L("📌 Her zaman üstte", "📌 Always on top"), () =>
+            }, Icon: Prefs.RobotLocked ? "\uE785" : "\uE72E"),
+            new(L("Her zaman üstte", "Always on top"), () =>
             {
                 var on = !Prefs.AlwaysOnTop;
                 Manager.SetAlwaysOnTop(on);
                 Manager.Current?.Say(on ? WithEmoji("📌", L("Her zaman en üstteyim.", "I'll stay on top of everything."))
                                         : WithEmoji("🪟", L("Artık diğer pencerelerin arkasında kalabilirim.", "Other windows can cover me now.")), 4);
-            }, Prefs.AlwaysOnTop),
-            new(FocusMode.ManualActive ? L("🌙 Odak modunu kapat", "🌙 Turn off focus mode") : L("🌙 Odak modu (1 saat)", "🌙 Focus mode (1 hour)"), () =>
+            }, Prefs.AlwaysOnTop, Icon: "\uE718"),
+            new(FocusMode.ManualActive ? L("Odak modunu kapat", "Turn off focus mode") : L("Odak modu (1 saat)", "Focus mode (1 hour)"), () =>
             {
                 if (FocusMode.ManualActive)
                 {
@@ -211,24 +216,46 @@ internal sealed class AppController : ISettingsHost
                 }
                 Manager.FocusChanged();
                 Changed();
-            }),
-            new(L("📊 Bugünün özeti", "📊 Today's summary"), Manager.ShowSummary),
+            }, Icon: "\uE708"),
+            new(L("Bugünün özeti", "Today's summary"), Manager.ShowSummary, Icon: "\uE787"),
             null,
-            new(L("Ayarlar…", "Settings…"), () => SettingsWindow.Show(this)),
-            new(L("Teşhis…", "Diagnostics…"), OpenDiagnostics),
-            new(L("Hata bildir…", "Report a problem…"), ReportBug),
+            new(L("Ayarlar", "Settings"), () => SettingsWindow.Show(this), Icon: "\uE713"),
+            new(L("Teşhis", "Diagnostics"), OpenDiagnostics, Icon: "\uE9D9"),
+            new(L("Hata bildir", "Report a problem"), ReportBug, Icon: "\uEBE8"),
             null,
-            new(L("Robotu gizle", "Hide robot"), () => Manager.Visible = false),
+            new(L("Robotu gizle", "Hide robot"), () => Manager.Visible = false, Icon: "\uED1A"),
         };
-        var menu = new ContextMenu();
-        foreach (var e in entries) menu.Items.Add(ToWpf(e));
-        return menu;
+        // En üstte: robotun şu an gösterdiği AI ve ne yaptığı
+        if (current != null)
+        {
+            entries.Insert(0, null);
+            entries.Insert(0, new MenuEntry(current.Theme.DisplayName + " — " + current.StatusLine, Header: true, Dot: current.Theme.Color));
+        }
+        return BuildMenu(entries);
     }
 
     private static object ToWpf(MenuEntry? e)
     {
         if (e == null) return new Separator();
-        var item = new MenuItem { Header = e.Title, IsEnabled = e.Enabled, IsCheckable = false, IsChecked = e.Checked == true };
+        var header = new TextBlock { VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis, MaxWidth = 380 }.WithText(e.Title);
+        if (e.Header)
+        {
+            header.FontWeight = FontWeights.SemiBold;
+            header.FontSize = 12;
+        }
+        var item = new MenuItem { Header = header, IsEnabled = e.Enabled && !e.Header, IsCheckable = false, IsChecked = e.Checked == true };
+        if (e.Dot is { } dot)
+        {
+            item.Icon = new System.Windows.Shapes.Ellipse
+            {
+                Width = 9, Height = 9, Margin = new Thickness(3, 0, 0, 0),
+                Fill = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(dot.R, dot.G, dot.B)),
+            };
+        }
+        else if (e.Icon != null)
+        {
+            item.Icon = new TextBlock { Text = e.Icon, FontFamily = new System.Windows.Media.FontFamily(Theme.Icons), FontSize = 15, VerticalAlignment = VerticalAlignment.Center };
+        }
         if (e.Children != null)
             foreach (var c in e.Children) item.Items.Add(ToWpf(c));
         else if (e.Act is { } act)
@@ -236,22 +263,89 @@ internal sealed class AppController : ISettingsHost
         return item;
     }
 
-    private void FillTray()
+    private Window? _menuHost;
+    private ContextMenu? _trayMenu;
+
+    /// <summary>
+    /// Tepsi menüsü: robotun sağ tık menüsüyle aynı (Windows 11 görünümlü WPF menüsü). Dışarı tıklayınca kapanması için
+    /// görünmez küçük bir pencere öne alınır (tepsi menülerinin bilinen kuralı).
+    /// </summary>
+    public void ShowTrayMenu()
     {
-        var strip = _tray!.ContextMenuStrip!;
-        strip.Items.Clear();
-        foreach (var e in TrayEntries()) strip.Items.Add(ToWinForms(e));
+        if (_menuHost == null)
+        {
+            _menuHost = new Window
+            {
+                WindowStyle = WindowStyle.None, AllowsTransparency = true, Background = System.Windows.Media.Brushes.Transparent,
+                ShowInTaskbar = false, Width = 1, Height = 1, Left = -100, Top = -100, Topmost = true, Title = "TelepAIth menu",
+            };
+        }
+        _menuHost.Show();
+        _menuHost.Activate();
+        var menu = BuildMenu(TrayEntries());
+        menu.PlacementTarget = _menuHost;
+        menu.Placement = System.Windows.Controls.Primitives.PlacementMode.MousePoint;
+        menu.HorizontalOffset = -10;
+        menu.VerticalOffset = -6;
+        menu.Closed += (_, _) => _menuHost?.Hide();
+        _trayMenu = menu;
+        menu.IsOpen = true;
     }
 
-    private static WinForms.ToolStripItem ToWinForms(MenuEntry? e)
+    public static ContextMenu BuildMenu(IEnumerable<MenuEntry?> entries)
     {
-        if (e == null) return new WinForms.ToolStripSeparator();
-        var item = new WinForms.ToolStripMenuItem(e.Title.Replace("&", "&&")) { Enabled = e.Enabled, Checked = e.Checked == true };
-        if (e.Children != null)
-            foreach (var c in e.Children) item.DropDownItems.Add(ToWinForms(c));
-        else if (e.Act is { } act)
-            item.Click += (_, _) => Application.Current.Dispatcher.BeginInvoke(act);
-        return item;
+        Theme.Apply();
+        var menu = new ContextMenu();
+        foreach (var e in entries) menu.Items.Add(ToWpf(e));
+        return menu;
+    }
+
+    // MARK: Test kancaları (sadece TELEPAITH_HOOK_DEBUG=1)
+
+    private ContextMenu? _debugMenu;
+
+    private string Debug(string path, Dictionary<string, string> query)
+    {
+        try
+        {
+            switch (path)
+            {
+                case "/debug/emoji":
+                {
+                    var (ok, colored, opaque) = Emoji.Probe(query.TryGetValue("e", out var e) ? e : "🎉");
+                    return $"{{\"ok\":{(ok ? "true" : "false")},\"colored\":{colored},\"opaque\":{opaque},\"error\":\"{Emoji.LastError?.Replace("\"", "'")}\"}}";
+                }
+                case "/debug/ui":
+                {
+                    var what = query.TryGetValue("open", out var o) ? o : "";
+                    _debugMenu?.SetCurrentValue(ContextMenu.IsOpenProperty, false);
+                    _trayMenu?.SetCurrentValue(ContextMenu.IsOpenProperty, false);
+                    switch (what)
+                    {
+                        case "settings": SettingsWindow.Show(this, query.TryGetValue("page", out var pg) && int.TryParse(pg, out var pi) ? pi : 0); break;
+                        case "onboarding": OnboardingWindow.Show(this); break;
+                        case "diagnostics": OpenDiagnostics(); break;
+                        case "traymenu": ShowTrayMenu(); break;
+                        case "robotmenu":
+                            _debugMenu = BuildRobotMenu();
+                            _debugMenu.Placement = System.Windows.Controls.Primitives.PlacementMode.MousePoint;
+                            _debugMenu.IsOpen = true;
+                            break;
+                        case "close":
+                            SettingsWindow.Close();
+                            OnboardingWindow.Close();
+                            DiagnosticsWindow.Close();
+                            break;
+                    }
+                    return "ok";
+                }
+            }
+            return "unknown";
+        }
+        catch (Exception ex)
+        {
+            return "error: " + ex;
+        }
     }
 
     // MARK: Eylemler

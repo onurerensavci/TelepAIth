@@ -27,6 +27,9 @@ internal sealed class RobotView : FrameworkElement
     public Rect BubbleRect { get; private set; } = Rect.Empty;
     public Rect HeadRect { get; private set; } = Rect.Empty;
 
+    private RichLayout? _body;
+    private string? _bodyKey;
+
     public RobotView(RobotAvatar avatar)
     {
         _avatar = avatar;
@@ -60,8 +63,8 @@ internal sealed class RobotView : FrameworkElement
     private static readonly Color Bolt = C(0.74, 0.71, 0.84);
     private static readonly Color Orange = C(1.0, 0.6, 0.2);
     private static readonly Color Muted = C(0.55, 0.52, 0.66);
-    private static readonly Typeface Ui = new(new FontFamily("Segoe UI, Segoe UI Emoji"), FontStyles.Normal, FontWeights.Normal, FontStretches.Normal);
-    private static readonly Typeface UiSemi = new(new FontFamily("Segoe UI, Segoe UI Emoji"), FontStyles.Normal, FontWeights.SemiBold, FontStretches.Normal);
+    private static readonly Typeface Ui = new(new FontFamily("Segoe UI Variable Text, Segoe UI"), FontStyles.Normal, FontWeights.Normal, FontStretches.Normal);
+    private static readonly Typeface UiSemi = new(new FontFamily("Segoe UI Variable Text, Segoe UI"), FontStyles.Normal, FontWeights.SemiBold, FontStretches.Normal);
     private static readonly Typeface UiBold = new(new FontFamily("Segoe UI"), FontStyles.Normal, FontWeights.Black, FontStretches.Normal);
 
     private static T Frozen<T>(T f) where T : Freezable { f.Freeze(); return f; }
@@ -161,12 +164,16 @@ internal sealed class RobotView : FrameworkElement
         var maxCardH = H - 2 * M - Head - Gap - TailH;
         var innerMax = BubbleMaxW - 2 * padX;
 
-        var body = new FormattedText(text, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, Ui, 11, B(primary), dpi)
+        // Gövde: kelime kaydırmalı, renkli emojili yerleşim (yazı değişmedikçe yeniden hesaplanmaz)
+        var maxBodyH = Math.Max(15, maxCardH - 2 * padY - titleH - 2);
+        var key = $"{text}|{dark}|{dpi}|{Prefs.RobotScale}";
+        if (_bodyKey != key || _body == null)
         {
-            MaxTextWidth = innerMax,
-            MaxTextHeight = Math.Max(15, maxCardH - 2 * padY - titleH - 2),
-            Trimming = TextTrimming.CharacterEllipsis,
-        };
+            var lineH = 15.0;
+            _body = RichLayout.Create(text, Ui, 11, B(primary), innerMax, Math.Max(1, (int)(maxBodyH / lineH)), dpi * Prefs.RobotScale);
+            _bodyKey = key;
+        }
+        var body = _body;
         var title = new FormattedText(model.Theme.DisplayName, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, UiSemi, 10, B(color), dpi);
         FormattedText? sub = null;
         if (model.BubbleSubtitle is { } s)
@@ -179,7 +186,7 @@ internal sealed class RobotView : FrameworkElement
             };
         }
         var titleW = 11 + title.Width + (sub != null ? 4 + sub.WidthIncludingTrailingWhitespace : 0) + (clickable ? 16 : 0);
-        var innerW = Math.Min(innerMax, Math.Max(body.WidthIncludingTrailingWhitespace, titleW));
+        var innerW = Math.Min(innerMax, Math.Max(body.Width, titleW));
         var cardW = Math.Max(innerW + 2 * padX, 2 * 50 + 4);
         var cardH = padY + titleH + 2 + body.Height + padY;
 
@@ -238,7 +245,7 @@ internal sealed class RobotView : FrameworkElement
             dc.DrawLine(pen, new Point(ix + 6, iy - 1), new Point(ix + 9, iy - 1));
             dc.DrawLine(pen, new Point(ix + 9, iy - 1), new Point(ix + 9, iy + 2));
         }
-        dc.DrawText(body, new Point(tx, ty + titleH + 2));
+        body.Draw(dc, new Point(tx, ty + titleH + 2));
 
         var full = card;
         full.Union(below ? new Point(tailCx, cardY - TailH) : new Point(tailCx, cardY + cardH + TailH));

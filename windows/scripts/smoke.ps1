@@ -167,6 +167,28 @@ Start-Sleep 2
 $st = State
 for ($i = 1; $i -le 15; $i++) { if (-not ($st.sessions -contains "ai$i/r$i=Thinking")) { $lost += "ai$i" } }
 Check ($lost.Count -eq 0) ("POST ardından ilk hook olayları ulaştı (kayıp: " + ($lost -join ",") + ")")
+# Renkli emoji: Windows'un çizicisiyle renkli mi çiziliyor?
+$port = (Get-Content (Join-Path $home2 "port")).Trim()
+function Dbg($q) { (Invoke-WebRequest -UseBasicParsing "http://127.0.0.1:$port/debug/$q").Content }
+$em = Dbg "emoji" | ConvertFrom-Json
+Write-Host "emoji: $(Dbg 'emoji')"
+Check ($em.ok -and $em.colored -gt 80) "emoji renkli çiziliyor ($($em.colored) renkli piksel)"
+$em2 = Dbg ("emoji?e=" + [uri]::EscapeDataString("✋")) | ConvertFrom-Json
+Check ($em2.ok -and $em2.colored -gt 40) "✋ de renkli"
+Post '{"agent":"claude","session":"emo","state":"waiting","text":"🎉 Bitti! 🔒 Kilit 📌 Üstte 🧪 Test 👀"}'
+Start-Sleep 1
+Shot "8-emoji-bubble"
+
+# Yeni görünüm: menüler ve pencereler açılıp hatasız çiziliyor mu?
+foreach ($ui in @("robotmenu", "traymenu", "settings&page=0", "settings&page=1", "settings&page=2", "settings&page=3", "onboarding", "diagnostics")) {
+  $r = Dbg ("ui?open=" + $ui)
+  Check ($r -eq "ok") "açıldı: $ui"
+  Start-Sleep -Milliseconds 900
+  Shot ("9-" + ($ui -replace '[&=]', '-'))
+  Dbg "ui?open=close" | Out-Null
+  Start-Sleep -Milliseconds 300
+}
+Check (-not (Test-Path (Join-Path $home2 "error.log"))) "hata günlüğü boş"
 Start-Sleep 2
 if ($p.HasExited) { Get-Content (Join-Path $home2 "error.log") -ErrorAction SilentlyContinue; throw "Uygulama çöktü (kod $($p.ExitCode))" }
 if (Test-Path (Join-Path $home2 "error.log")) { Write-Host "--- error.log ---"; Get-Content (Join-Path $home2 "error.log") }
