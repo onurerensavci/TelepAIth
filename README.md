@@ -6,6 +6,7 @@
 
 <p align="center">
   <a href="https://github.com/onurerensavci/TelepAIth/releases/latest"><img src="https://img.shields.io/badge/%E2%AC%87%20%C4%B0ndir-macOS%2013%2B-D97757?style=for-the-badge" alt="İndir"></a>
+  <a href="https://github.com/onurerensavci/TelepAIth/releases/latest/download/Windows-TelepAIth-x64.zip"><img src="https://img.shields.io/badge/%E2%AC%87%20Windows-deneysel-3B82F6?style=for-the-badge" alt="Windows (deneysel)"></a>
 </p>
 
 <p align="center">
@@ -89,6 +90,17 @@
 Hook'lar ayar dosyalarının yedeğini alır, sadece kendi kayıtlarına dokunur ve olayı arka planda gönderir, yani Claude Code'u ya da Codex'i yavaşlatmaz. Ayarlar'dan kapatınca kaldırılır.
 
 İlk deneme için menü → **Dene → Claude: kısa bir görev**. Robotun düşünüp, okuyup, düzenleyip zıpladığını görürsün.
+
+### Windows (deneysel)
+
+Windows 10 ve 11 için ilk deneme sürümü. Mac'tekinin aynısı: robot, Claude/ChatGPT masaüstü uygulamalarını izleme, pencereye uçma, odak modu, minik kafalar, günün özeti.
+
+1. **[Windows paketini indir](https://github.com/onurerensavci/TelepAIth/releases/latest/download/Windows-TelepAIth-x64.zip)**, zip'i bir klasöre çıkar, `TelepAIth.exe`'ye çift tıkla.
+2. Windows **"Bilgisayarınız korundu"** derse: **Ek bilgi → Yine de çalıştır**. (Uygulama imzalı değil, bu uyarı bir kere çıkar.)
+3. TelepAIth kendini `%LOCALAPPDATA%\Programs\TelepAIth` klasörüne kurar, Başlat menüsüne ekler, Windows açılınca başlar. İndirdiğin klasörü sonra silebilirsin.
+4. Kurulum sihirbazı açılır. Robot, görev çubuğunun sağındaki simgede yaşar: sağ tık → **Ayarlar**. Windows'ta ayrı bir izin gerekmez.
+
+Bir şey ters giderse robota sağ tıkla → **Hata bildir…**: teşhis raporuyla dolu bir GitHub kaydı açılır. Kaldırmak için: tepsi simgesi → **Yardım → TelepAIth'i kaldır…**.
 
 ## Robotla konuşmak
 

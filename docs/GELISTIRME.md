@@ -31,6 +31,21 @@ swift test                    # birim testleri
 | `Updater.swift` | GitHub Releases'tan güncelleme |
 | `Diagnostics.swift` | Teşhis paneli |
 
+## Windows sürümü
+
+`windows/` klasöründe, .NET 8 ile:
+
+| Proje | Ne |
+|---|---|
+| `TelepAIth.Core` | Mac mantığının C# karşılığı (olay ayrıştırma, robot modeli, hook kurulumu, masaüstü uygulama izleme mantığı). Platformdan bağımsız, Linux/Mac'te de derlenir. |
+| `TelepAIth.Core.Tests` | NuGet gerektirmeyen küçük test koşucusu: `dotnet run --project windows/TelepAIth.Core.Tests` |
+| `TelepAIthHook` | Hook'ların çağırdığı yardımcı (`hook`, `shield`, `mcp` modları). Native AOT ile yayınlanır, ~3 MB, anında açılır. `TELEPAITH_HOOK_DEBUG=1` ile gönderemediği olayın nedenini stderr'e yazar. |
+| `TelepAIth` | WPF uygulaması: robot penceresi (saydam, odak çalmaz), tepsi simgesi, UI Automation ile Claude/ChatGPT izleme, ayarlar, kurulum, güncelleme. Sadece Windows'ta derlenir. |
+
+CI'da (`build.yml` → `windows` işi) testler, derleme, AOT yayını ve bir duman testi (`windows/scripts/smoke.ps1`) çalışır: uygulamayı açar, olay gönderir, `GET /state` ile durumu, ekran görüntüsünden robotun çizildiğini, sürükle-bırak ile köşeye yapışmayı ve tıklamayı denetler.
+
+Sürüm yayınlanınca `release.yml`'deki `windows` işi `Windows-TelepAIth-x64.zip`'i (tek dosya `TelepAIth.exe` + `TelepAIthHook.exe` + `OKUBENI.txt`) aynı sürüme ekler. Mac güncelleyicisi adında "windows" geçen dosyayı asla seçmez; Windows güncelleyicisi sadece bu dosyayı indirir.
+
 ## Sürüm yayınlama
 
 1. `VERSION` dosyasındaki numarayı artır (ör. `0.9.3`) ve main'e gönder.

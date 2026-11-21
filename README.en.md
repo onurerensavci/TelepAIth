@@ -6,6 +6,7 @@
 
 <p align="center">
   <a href="https://github.com/onurerensavci/TelepAIth/releases/latest"><img src="https://img.shields.io/badge/%E2%AC%87%20Download-macOS%2013%2B-D97757?style=for-the-badge" alt="Download"></a>
+  <a href="https://github.com/onurerensavci/TelepAIth/releases/latest/download/Windows-TelepAIth-x64.zip"><img src="https://img.shields.io/badge/%E2%AC%87%20Windows-experimental-3B82F6?style=for-the-badge" alt="Windows (experimental)"></a>
 </p>
 
 <p align="center">
@@ -89,6 +90,17 @@
 Hooks back up your settings files, only touch their own entries and send events in the background, so they don't slow Claude Code or Codex down. Turn them off in Settings to remove them.
 
 To try it out: menu → **Try it → Claude: a short task**. You'll see the robot think, read, edit and hop.
+
+### Windows (experimental)
+
+The first trial build for Windows 10 and 11. Same as on the Mac: the robot, watching the Claude/ChatGPT desktop apps, flying to their window, focus mode, mini heads, daily summary.
+
+1. **[Download the Windows package](https://github.com/onurerensavci/TelepAIth/releases/latest/download/Windows-TelepAIth-x64.zip)**, unzip it into a folder and double-click `TelepAIth.exe`.
+2. If Windows says **"Windows protected your PC"**: **More info → Run anyway**. (The app isn't signed; you'll see this once.)
+3. TelepAIth installs itself to `%LOCALAPPDATA%\Programs\TelepAIth`, adds a Start menu entry and starts with Windows. You can delete the downloaded folder afterwards.
+4. The setup assistant opens. The robot lives in the taskbar tray icon: right-click → **Settings**. No extra permission is needed on Windows.
+
+If something goes wrong, right-click the robot → **Report a problem…**: it opens a GitHub issue filled with diagnostics. To uninstall: tray icon → **Help → Uninstall TelepAIth…**.
 
 ## Talking to the robot
 
