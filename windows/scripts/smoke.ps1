@@ -8,15 +8,31 @@ $env:TELEPAITH_PORTABLE = "1"
 $env:TELEPAITH_HOME = $home2
 
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+Add-Type -ReferencedAssemblies System.Drawing, System.Drawing.Primitives, System.Windows.Forms -TypeDefinition @"
+using System;
+using System.Drawing;
+using System.Runtime.InteropServices;
+public static class Snap {
+  [DllImport("user32.dll")] static extern IntPtr GetDC(IntPtr h);
+  [DllImport("user32.dll")] static extern int ReleaseDC(IntPtr h, IntPtr dc);
+  [DllImport("gdi32.dll")] static extern bool BitBlt(IntPtr dst, int x, int y, int w, int h, IntPtr src, int sx, int sy, int rop);
+  public static void Save(string path) {
+    var b = System.Windows.Forms.SystemInformation.VirtualScreen;
+    using (var bmp = new Bitmap(b.Width, b.Height))
+    using (var g = Graphics.FromImage(bmp)) {
+      IntPtr screen = GetDC(IntPtr.Zero);
+      IntPtr hdc = g.GetHdc();
+      BitBlt(hdc, 0, 0, b.Width, b.Height, screen, b.Left, b.Top, 0x00CC0020 | 0x40000000);
+      g.ReleaseHdc(hdc);
+      ReleaseDC(IntPtr.Zero, screen);
+      bmp.Save(path, System.Drawing.Imaging.ImageFormat.Png);
+    }
+  }
+}
+"@
 function Shot($name) {
-  $b = [System.Windows.Forms.SystemInformation]::VirtualScreen
-  $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
-  $g = [System.Drawing.Graphics]::FromImage($bmp)
-  $op = [System.Drawing.CopyPixelOperation]::SourceCopy -bor [System.Drawing.CopyPixelOperation]::CaptureBlt
-  $g.CopyFromScreen($b.Left, $b.Top, 0, 0, $bmp.Size, $op)
-  $bmp.Save((Join-Path $Out "$name.png"), [System.Drawing.Imaging.ImageFormat]::Png)
-  $g.Dispose(); $bmp.Dispose()
-  Write-Host "shot $name ($($b.Width)x$($b.Height))"
+  [Snap]::Save((Join-Path (Resolve-Path $Out) "$name.png"))
+  Write-Host "shot $name"
 }
 function Post($json) {
   $port = (Get-Content (Join-Path $home2 "port")).Trim()
