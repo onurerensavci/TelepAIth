@@ -246,6 +246,21 @@ public static class Tests
         A.Eq(RobotState.Thinking, minis[0].State);
     }
 
+    public static void HookToMinis()
+    {
+        var q = new Dictionary<string, string> { ["source"] = "gpt", ["ppid"] = "123" };
+        var e1 = EventParser.Parse("/event", q, """{"hook_event_name":"UserPromptSubmit","session_id":"g1","cwd":"C:\\proj\\api","prompt":"testleri düzelt"}""");
+        A.True(e1 != null, "UserPromptSubmit");
+        A.Eq("gpt", e1!.Source);
+        A.Eq(123, e1.HookParentPid);
+        var q2 = new Dictionary<string, string> { ["source"] = "claude" };
+        var e2 = EventParser.Parse("/event", q2, """{"hook_event_name":"PreToolUse","session_id":"s2","cwd":"C:\\proj\\mobile","tool_name":"Bash","tool_input":{"command":"npm test"}}""");
+        A.True(e2 != null, "PreToolUse");
+        var g = new RobotModel("gpt");
+        g.Apply(e1);
+        A.Eq(1, g.MiniSessions(null, DateTime.Now).Count);
+    }
+
     public static void ModelStopNotice()
     {
         var m = new RobotModel("claude");

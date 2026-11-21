@@ -1,7 +1,7 @@
 ﻿# CI duman testi: uygulamayı açar, olay gönderir, ekran görüntüsü alır, çökmediğini doğrular.
 param([string]$Exe, [string]$Hook, [string]$Out = "shots")
 $ErrorActionPreference = "Stop"
-$OutputEncoding = [Text.Encoding]::UTF8
+$OutputEncoding = New-Object System.Text.UTF8Encoding $false
 New-Item -ItemType Directory -Force $Out | Out-Null
 $home2 = Join-Path $env:RUNNER_TEMP "tp-home"
 New-Item -ItemType Directory -Force $home2 | Out-Null
@@ -41,7 +41,12 @@ function State() {
   Write-Host "state: $raw"
   return ($raw | ConvertFrom-Json)
 }
-function Check($cond, $msg) { if (-not $cond) { throw "BAŞARISIZ: $msg" } else { Write-Host "  ok: $msg" } }
+function Check($cond, $msg) {
+  if ($cond) { Write-Host "  ok: $msg"; return }
+  $log = Join-Path $home2 "error.log"
+  if (Test-Path $log) { Write-Host "--- error.log ---"; Get-Content $log | Write-Host }
+  throw "BAŞARISIZ: $msg"
+}
 # Robotun penceresi gerçekten çiziliyor mu? Kafanın olduğu yerde masaüstünden farklı renkli piksel say
 function PixelCheck($st, $name) {
   Add-Type -AssemblyName System.Drawing
@@ -60,11 +65,14 @@ function PixelCheck($st, $name) {
   Write-Host "  pixels $name : $diff / $total farklı, $dark koyu (vizör)"
   return $diff / [Math]::Max(1, $total)
 }
-function Post($json) {
+function Post($json, $query = "") {
   $port = (Get-Content (Join-Path $home2 "port")).Trim()
-  Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:$port/event" -Body ([Text.Encoding]::UTF8.GetBytes($json)) -ContentType "application/json; charset=utf-8" | Out-Null
+  Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:$port/event$query" -Body ([Text.Encoding]::UTF8.GetBytes($json)) -ContentType "application/json; charset=utf-8" | Out-Null
 }
-function HookEvent($source, $json) { $json | & $Hook hook $source }
+function HookEvent($source, $json) {
+  $json | & $Hook hook $source
+  Write-Host "  hook $source -> exit $LASTEXITCODE"
+}
 
 $p = Start-Process -FilePath $Exe -PassThru
 Start-Sleep 8
@@ -91,6 +99,12 @@ HookEvent "claude" '{"hook_event_name":"PreToolUse","session_id":"s2","cwd":"C:\
 Start-Sleep 3
 Shot "3-waiting-minis"
 $st = State
+if ($st.minis -lt 2) {
+  Write-Host "  hook yolu minik kafa üretmedi; aynı olaylar doğrudan POST ediliyor (teşhis)"
+  Post '{"hook_event_name":"UserPromptSubmit","session_id":"g9","cwd":"C:\\proj\\api","prompt":"x"}' "?source=gpt"
+  Start-Sleep 2
+  State | Out-Null
+}
 Check ($st.state -eq "Waiting") "onay bekliyor"
 Check ($st.bubble -like "*npm install*") "balonda komut yazıyor"
 Check ($st.minis -ge 2) "diğer oturumlar minik kafa"
