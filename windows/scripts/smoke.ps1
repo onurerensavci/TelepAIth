@@ -55,8 +55,10 @@ function State() {
 }
 function Check($cond, $msg) {
   if ($cond) { Write-Host "  ok: $msg"; return }
-  $log = Join-Path $home2 "error.log"
-  if (Test-Path $log) { Write-Host "--- error.log ---"; Get-Content $log | Write-Host }
+  foreach ($f in @("error.log", "watch-debug.txt")) {
+    $log = Join-Path $home2 $f
+    if (Test-Path $log) { Write-Host "--- $f ---"; Get-Content $log -Encoding UTF8 | Write-Host }
+  }
   throw "BAŞARISIZ: $msg"
 }
 # Robotun penceresi gerçekten çiziliyor mu? Kafanın olduğu yerde masaüstünden farklı renkli piksel say
@@ -82,8 +84,9 @@ function Post($json, $query = "") {
   Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:$port/event$query" -Body ([Text.Encoding]::UTF8.GetBytes($json)) -ContentType "application/json; charset=utf-8" | Out-Null
 }
 function HookEvent($source, $json) {
-  $json | & $Hook hook $source
-  Write-Host "  hook $source -> exit $LASTEXITCODE"
+  $ErrorActionPreference = "Continue"
+  $out = ($json | & $Hook hook $source 2>&1 | ForEach-Object { "$_" }) -join " "
+  Write-Host "  hook $source -> exit $LASTEXITCODE $out"
 }
 
 $p = Start-Process -FilePath $Exe -PassThru

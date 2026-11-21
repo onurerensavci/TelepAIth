@@ -98,7 +98,10 @@ static class Local
             var buf = new byte[64];
             var n = stream.Read(buf, 0, buf.Length);
             var reply = n > 0 ? Encoding.ASCII.GetString(buf, 0, n) : "";
-            return reply.Contains(" 200 ") || Fail("reply: " + reply.Split('\r')[0]);
+            var ok = reply.Contains(" 200 ");
+            if (ok && Environment.GetEnvironmentVariable("TELEPAITH_HOOK_DEBUG") == "1")
+                Console.Error.WriteLine($"TelepAIthHook: ok :{port} {pathAndQuery} ({payload.Length} B)");
+            return ok || Fail("reply: " + reply.Split('\r')[0]);
         }
         catch (Exception ex)
         {

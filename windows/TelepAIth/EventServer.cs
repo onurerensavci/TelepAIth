@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
@@ -113,6 +114,7 @@ internal sealed class EventServer
                 }
                 if (request.Method != "POST") { await Respond(stream, 405, "method not allowed"); return; }
                 var e = EventParser.Parse(request.Path, request.Query, request.Body);
+                if (Debug) Log($"{request.Method} {request.Path} q={string.Join("&", request.Query.Select(kv => kv.Key + "=" + kv.Value))} body={request.Body.Length} → {(e == null ? "400" : e.Source + "/" + e.SessionId + " " + e.Kind)}");
                 if (e == null) { await Respond(stream, 400, "unrecognized event"); return; }
                 await Respond(stream, 200, "ok");
                 EventReceived?.Invoke(e);
@@ -122,6 +124,13 @@ internal sealed class EventServer
                 // Bozuk istek: sessizce kapat
             }
         }
+    }
+
+    private static readonly bool Debug = Environment.GetEnvironmentVariable("TELEPAITH_HOOK_DEBUG") == "1";
+
+    private static void Log(string s)
+    {
+        try { lock (typeof(EventServer)) File.AppendAllText(AppInfo.DebugFile, $"{DateTime.Now:HH:mm:ss.fff} server: {s}\n"); } catch { }
     }
 
     private static async Task Respond(NetworkStream stream, int code, string body)
