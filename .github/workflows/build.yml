@@ -40,9 +40,16 @@ jobs:
           '{"hook_event_name":"Stop","session_id":"ci"}' | ./out/hook/TelepAIthHook.exe hook claude
           ./out/hook/TelepAIthHook.exe shield
           Get-Item out/hook/TelepAIthHook.exe | Select-Object Name, Length
+      - name: Tek dosya paket (sürümdeki gibi)
+        shell: pwsh
+        run: |
+          dotnet publish windows/TelepAIth/TelepAIth.csproj -c Release -r win-x64 --self-contained true `
+            -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true `
+            -p:DebugType=none -o out/pkg
+          if ($LASTEXITCODE -ne 0) { exit 1 }
       - name: Duman testi (aç, olay gönder, ekran görüntüsü al)
         shell: powershell
-        run: ./windows/scripts/smoke.ps1 -Exe windows/TelepAIth/bin/Release/net8.0-windows/TelepAIth.exe -Hook out/hook/TelepAIthHook.exe -Out shots
+        run: ./windows/scripts/smoke.ps1 -Exe out/pkg/TelepAIth.exe -Hook out/hook/TelepAIthHook.exe -Out shots
       - uses: actions/upload-artifact@v4
         if: always()
         with:
