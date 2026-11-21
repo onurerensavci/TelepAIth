@@ -40,13 +40,16 @@ jobs:
           '{"hook_event_name":"Stop","session_id":"ci"}' | ./out/hook/TelepAIthHook.exe hook claude
           ./out/hook/TelepAIthHook.exe shield
           Get-Item out/hook/TelepAIthHook.exe | Select-Object Name, Length
-      - name: Tek dosya paket (sürümdeki gibi)
+      - name: Paket (sürümdeki gibi, klasör düzeni)
         shell: pwsh
         run: |
-          dotnet publish windows/TelepAIth/TelepAIth.csproj -c Release -r win-x64 --self-contained true `
-            -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true `
-            -p:DebugType=none -o out/pkg
+          dotnet publish windows/TelepAIth/TelepAIth.csproj -c Release -r win-x64 --self-contained true -p:DebugType=none -o out/pkg
           if ($LASTEXITCODE -ne 0) { exit 1 }
+          foreach ($f in @("TelepAIth.exe", "TelepAIth.dll", "TelepAIth.Core.dll", "TelepAIth.deps.json", "TelepAIth.runtimeconfig.json", "System.Private.CoreLib.dll", "PresentationFramework.dll")) {
+            if (-not (Test-Path (Join-Path out/pkg $f))) { Write-Host "Eksik: $f"; exit 1 }
+          }
+          $size = (Get-ChildItem out/pkg -Recurse | Measure-Object Length -Sum).Sum / 1MB
+          Write-Host ("Paket: {0:N1} MB, {1} dosya" -f $size, (Get-ChildItem out/pkg -Recurse -File).Count)
       - name: Duman testi (aç, olay gönder, ekran görüntüsü al)
         shell: powershell
         run: ./windows/scripts/smoke.ps1 -Exe out/pkg/TelepAIth.exe -Hook out/hook/TelepAIthHook.exe -Out shots

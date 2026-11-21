@@ -261,6 +261,15 @@ public static class Tests
         A.Eq(1, g.MiniSessions(null, DateTime.Now).Count);
     }
 
+    public static void UpdatePlanChoosesPackage()
+    {
+        A.True(UpdatePlan.UseSmall("8.0.11|8.0.11", "8.0.11|8.0.11\n", true), "aynı çalışma zamanı: küçük paket");
+        A.True(!UpdatePlan.UseSmall("8.0.10|8.0.10", "8.0.11|8.0.11", true), "çalışma zamanı değişti: tam paket");
+        A.True(!UpdatePlan.UseSmall(null, "8.0.11|8.0.11", true), "eski tek dosya kurulum: tam paket");
+        A.True(!UpdatePlan.UseSmall("8.0.11|8.0.11", "8.0.11|8.0.11", false), "küçük paket yoksa: tam paket");
+        A.Eq("1.5 / 60.0 MB", UpdatePlan.Progress(1572864, 62914560));
+    }
+
     public static void ModelStopNotice()
     {
         var m = new RobotModel("claude");

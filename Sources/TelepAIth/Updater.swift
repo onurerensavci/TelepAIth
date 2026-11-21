@@ -22,6 +22,10 @@ final class Updater {
     private(set) var available: Release?
     private(set) var isBusy = false
     var onChange: (() -> Void)?
+    /// İndirme durumu (ana iş parçacığında): robot balonda söyler
+    var onProgress: ((String) -> Void)?
+    private var progressObservation: NSKeyValueObservation?
+    private var lastProgressReport = Date.distantPast
     private var timer: Timer?
 
     var repo: String? {
@@ -185,7 +189,8 @@ final class Updater {
 
         isBusy = true
         onChange?()
-        URLSession.shared.downloadTask(with: release.assetURL) { tempURL, _, error in
+        onProgress?(withEmoji("⬇️", loc("Güncelleme indiriliyor…", "Downloading the update…")))
+        let task = URLSession.shared.downloadTask(with: release.assetURL) { tempURL, _, error in
             // İndirilen dosya bu blok bitince silinir; hemen taşı.
             var zipURL: URL?
             if let tempURL = tempURL {
@@ -194,9 +199,23 @@ final class Updater {
                 if (try? FileManager.default.moveItem(at: tempURL, to: dest)) != nil { zipURL = dest }
             }
             DispatchQueue.main.async {
+                self.progressObservation = nil
                 self.finishInstall(zip: zipURL, error: error, appURL: appURL)
             }
-        }.resume()
+        }
+        // İlerleme: "İndiriliyor %42 · 0.4 / 0.9 MB"
+        progressObservation = task.progress.observe(\.fractionCompleted) { [weak self] progress, _ in
+            DispatchQueue.main.async {
+                guard let self = self, Date().timeIntervalSince(self.lastProgressReport) > 0.4 else { return }
+                self.lastProgressReport = Date()
+                let done = Double(progress.completedUnitCount) / 1_048_576
+                let total = Double(progress.totalUnitCount) / 1_048_576
+                let size = total > 0 ? String(format: " · %.1f / %.1f MB", done, total) : ""
+                self.onProgress?(withEmoji("⬇️", loc("Güncelleme indiriliyor", "Downloading the update")
+                    + " %\(Int(progress.fractionCompleted * 100))" + size))
+            }
+        }
+        task.resume()
     }
 
     private func finishInstall(zip: URL?, error: Error?, appURL: URL) {
@@ -206,6 +225,7 @@ final class Updater {
             alert(loc("İndirilemedi", "Download failed"), error?.localizedDescription ?? loc("Dosya indirilemedi.", "The file couldn't be downloaded."))
             return
         }
+        onProgress?(withEmoji("📦", loc("Kuruluyor, birazdan dönerim…", "Installing, back in a moment…")))
         let work = FileManager.default.temporaryDirectory
             .appendingPathComponent("\(AppInfo.name)-update-\(UUID().uuidString)", isDirectory: true)
         do {

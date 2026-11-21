@@ -166,12 +166,13 @@ internal static class Installer
                 finally { p.Dispose(); }
             }
             Directory.CreateDirectory(InstallDir);
-            var src = AppContext.BaseDirectory;
-            foreach (var file in Directory.GetFiles(src))
+            var src = AppContext.BaseDirectory.TrimEnd('\\');
+            foreach (var file in Directory.GetFiles(src, "*", SearchOption.AllDirectories))
             {
-                var name = Path.GetFileName(file);
-                if (name.EndsWith(".pdb", StringComparison.OrdinalIgnoreCase)) continue;
-                File.Copy(file, Path.Combine(InstallDir, name), true);
+                if (file.EndsWith(".pdb", StringComparison.OrdinalIgnoreCase)) continue;
+                var dest = Path.Combine(InstallDir, Path.GetRelativePath(src, file));
+                Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
+                File.Copy(file, dest, true);
             }
             CreateShortcut();
             SetAutostart(Prefs.StartWithWindows);
@@ -249,25 +250,28 @@ internal static class Installer
     }
 }
 
-/// <summary>GitHub Releases üzerinden güncelleme (Windows paketi: Windows-TelepAIth-x64.zip).</summary>
+/// <summary>
+/// GitHub Releases üzerinden güncelleme. .NET çalışma zamanı aynıysa sadece uygulama dosyaları (birkaç MB),
+/// değiştiyse tam paket iner. İndirirken robot ilerlemeyi söyler.
+/// </summary>
 internal sealed class Updater
 {
-    public const string AssetName = "Windows-TelepAIth-x64.zip";
     public static Updater Shared { get; } = new();
 
-    public sealed record Release(string Version, string Notes, string AssetUrl, string? PageUrl);
+    public sealed record Release(string Version, string Notes, string FullUrl, string? SmallUrl, string? RuntimeUrl, long FullSize, long SmallSize, string? PageUrl);
 
     public Release? Available { get; private set; }
     public bool IsBusy { get; private set; }
     public event Action? Changed;
+    /// <summary>İndirme durumu (UI iş parçacığında): metin</summary>
+    public event Action<string>? Progress;
 
     private static readonly HttpClient Http = CreateClient();
 
     private static HttpClient CreateClient()
     {
-        var c = new HttpClient { Timeout = TimeSpan.FromSeconds(60) };
+        var c = new HttpClient { Timeout = System.Threading.Timeout.InfiniteTimeSpan };
         c.DefaultRequestHeaders.UserAgent.ParseAdd("TelepAIth-Windows/" + AppInfo.Version);
-        c.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
         return c;
     }
 
@@ -284,14 +288,17 @@ internal sealed class Updater
         });
     }
 
-    /// <summary>Denetler; kullanıcı istediyse sonucu söyler (UI iş parçacığında çağrılan geri bildirimle).</summary>
+    /// <summary>Denetler; kullanıcı istediyse sonucu metin olarak döner.</summary>
     public async Task<string?> CheckAsync(bool userInitiated)
     {
         if (IsBusy) return null;
         try
         {
-            var json = await Http.GetStringAsync($"https://api.github.com/repos/{AppInfo.Repo}/releases/latest");
-            if (JsonNode.Parse(json) is not JsonObject root) return L("GitHub'dan anlamsız cevap geldi.", "Unexpected reply from GitHub.");
+            using var req = new HttpRequestMessage(HttpMethod.Get, $"https://api.github.com/repos/{AppInfo.Repo}/releases/latest");
+            req.Headers.Accept.ParseAdd("application/vnd.github+json");
+            using var res = await Http.SendAsync(req);
+            res.EnsureSuccessStatusCode();
+            if (JsonNode.Parse(await res.Content.ReadAsStringAsync()) is not JsonObject root) return L("GitHub'dan anlamsız cevap geldi.", "Unexpected reply from GitHub.");
             var tag = root["tag_name"]?.GetValue<string>() ?? "";
             var version = tag.TrimStart('v');
             if (!VersionCompare.IsNewer(version, AppInfo.Version))
@@ -300,13 +307,18 @@ internal sealed class Updater
                 Raise();
                 return userInitiated ? L($"Güncelsin ({AppInfo.Version}).", $"You're up to date ({AppInfo.Version}).") : null;
             }
-            var asset = (root["assets"] as JsonArray)?.OfType<JsonObject>()
-                .FirstOrDefault(a => string.Equals(a["name"]?.GetValue<string>(), AssetName, StringComparison.OrdinalIgnoreCase));
-            var url = asset?["browser_download_url"]?.GetValue<string>();
+            var assets = (root["assets"] as JsonArray)?.OfType<JsonObject>().ToList() ?? new();
+            JsonObject? Asset(string name) => assets.FirstOrDefault(a => string.Equals(a["name"]?.GetValue<string>(), name, StringComparison.OrdinalIgnoreCase));
+            var full = Asset(UpdatePlan.FullAsset);
+            var small = Asset(UpdatePlan.SmallAsset);
+            var runtime = Asset(UpdatePlan.RuntimeAsset);
+            var url = full?["browser_download_url"]?.GetValue<string>();
             if (url == null)
                 return userInitiated ? L($"{version} yayınlanmış ama Windows paketi henüz yok.", $"{version} is out but the Windows package isn't ready yet.") : null;
             var isNew = Available?.Version != version;
-            Available = new Release(version, root["body"]?.GetValue<string>() ?? "", url, root["html_url"]?.GetValue<string>());
+            Available = new Release(version, root["body"]?.GetValue<string>() ?? "", url,
+                small?["browser_download_url"]?.GetValue<string>(), runtime?["browser_download_url"]?.GetValue<string>(),
+                full?["size"]?.GetValue<long>() ?? 0, small?["size"]?.GetValue<long>() ?? 0, root["html_url"]?.GetValue<string>());
             Raise();
             if (!userInitiated && isNew)
                 Notifier.Notify("⬆️ " + L($"TelepAIth {version} hazır", $"TelepAIth {version} is ready"),
@@ -321,9 +333,11 @@ internal sealed class Updater
 
     private void Raise() => System.Windows.Application.Current?.Dispatcher.BeginInvoke(() => Changed?.Invoke());
 
+    private void Report(string text) => System.Windows.Application.Current?.Dispatcher.BeginInvoke(() => Progress?.Invoke(text));
+
     public void PromptInstall()
     {
-        if (Available is not { } r) return;
+        if (Available is not { } r || IsBusy) return;
         var notes = r.Notes.Length > 600 ? r.Notes[..600] + "…" : r.Notes;
         var answer = System.Windows.MessageBox.Show(
             L($"TelepAIth {r.Version} hazır (şu an: {AppInfo.Version}).\n\n", $"TelepAIth {r.Version} is ready (current: {AppInfo.Version}).\n\n") + notes +
@@ -332,18 +346,58 @@ internal sealed class Updater
         if (answer == System.Windows.MessageBoxResult.Yes) _ = InstallAsync(r);
     }
 
+    private static string? LocalRuntime()
+    {
+        try
+        {
+            var f = Path.Combine(AppContext.BaseDirectory, UpdatePlan.RuntimeFile);
+            return File.Exists(f) ? File.ReadAllText(f) : null;
+        }
+        catch { return null; }
+    }
+
     private async Task InstallAsync(Release r)
     {
         IsBusy = true;
         Raise();
         try
         {
+            // Çalışma zamanı aynıysa küçük paket yeter
+            string? remoteRuntime = null;
+            if (r.RuntimeUrl != null && r.SmallUrl != null)
+            {
+                try { remoteRuntime = await Http.GetStringAsync(r.RuntimeUrl); } catch { }
+            }
+            var small = UpdatePlan.UseSmall(LocalRuntime(), remoteRuntime, r.SmallUrl != null);
+            var url = small ? r.SmallUrl! : r.FullUrl;
+
             var work = Path.Combine(Path.GetTempPath(), "TelepAIth-update-" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(work);
-            var zip = Path.Combine(work, AssetName);
-            await using (var s = await Http.GetStreamAsync(r.AssetUrl))
-            await using (var f = File.Create(zip))
-                await s.CopyToAsync(f);
+            var zip = Path.Combine(work, "update.zip");
+            Report("⬇️ " + L("Güncelleme indiriliyor…", "Downloading the update…"));
+            using (var res = await Http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead))
+            {
+                res.EnsureSuccessStatusCode();
+                var total = res.Content.Headers.ContentLength ?? (small ? r.SmallSize : r.FullSize);
+                await using var s = await res.Content.ReadAsStreamAsync();
+                await using var f = File.Create(zip);
+                var buffer = new byte[256 * 1024];
+                long done = 0;
+                var lastReport = DateTime.MinValue;
+                int n;
+                while ((n = await s.ReadAsync(buffer)) > 0)
+                {
+                    await f.WriteAsync(buffer.AsMemory(0, n));
+                    done += n;
+                    if ((DateTime.Now - lastReport).TotalMilliseconds > 400)
+                    {
+                        lastReport = DateTime.Now;
+                        var pct = total > 0 ? $" %{done * 100 / total}" : "";
+                        Report("⬇️ " + L("Güncelleme indiriliyor", "Downloading the update") + pct + " · " + UpdatePlan.Progress(done, total));
+                    }
+                }
+            }
+            Report("📦 " + L("Kuruluyor, birazdan dönerim…", "Installing, back in a moment…"));
             var extracted = Path.Combine(work, "new");
             ZipFile.ExtractToDirectory(zip, extracted);
             var exe = Directory.GetFiles(extracted, "TelepAIth.exe", SearchOption.AllDirectories).FirstOrDefault()
@@ -356,7 +410,8 @@ internal sealed class Updater
                 "@echo off\r\n" +
                 $":wait\r\ntasklist /fi \"PID eq {Environment.ProcessId}\" | find \"{Environment.ProcessId}\" >nul && (timeout /t 1 /nobreak >nul & goto wait)\r\n" +
                 $"robocopy \"{from}\" \"{to}\" /e /r:5 /w:1 >nul\r\n" +
-                $"start \"\" \"{Path.Combine(to, "TelepAIth.exe")}\"\r\n", Encoding.ASCII);
+                $"start \"\" \"{Path.Combine(to, "TelepAIth.exe")}\"\r\n" +
+                $"rmdir /s /q \"{work}\"\r\n", Encoding.ASCII);
             Process.Start(new ProcessStartInfo("cmd.exe", $"/c \"{script}\"") { CreateNoWindow = true, UseShellExecute = false, WindowStyle = ProcessWindowStyle.Hidden });
             System.Windows.Application.Current.Dispatcher.Invoke(() => System.Windows.Application.Current.Shutdown());
         }
@@ -364,6 +419,7 @@ internal sealed class Updater
         {
             IsBusy = false;
             Raise();
+            Report("⚠️ " + L("Güncellenemedi: ", "Update failed: ") + ex.Message);
             System.Windows.Application.Current.Dispatcher.Invoke(() =>
                 System.Windows.MessageBox.Show(L("Güncellenemedi: ", "Update failed: ") + ex.Message, AppInfo.Name));
         }

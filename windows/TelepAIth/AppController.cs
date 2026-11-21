@@ -48,6 +48,7 @@ internal sealed class AppController : ISettingsHost
         _serverError = _server.Error;
 
         Updater.Shared.Changed += Changed;
+        Updater.Shared.Progress += text => Manager.Current?.Say(text, 30);
         Updater.Shared.StartAutomaticChecks();
 
         // Kurulu hook'ları güncel yolla yenile (uygulama taşınınca/güncellenince eski komut kalmasın)
@@ -366,6 +367,7 @@ internal sealed class AppController : ISettingsHost
             $"{L("Sürüm", "Version")}: {AppInfo.Version}",
             $"Windows: {Environment.OSVersion.VersionString} ({(Environment.Is64BitOperatingSystem ? "x64" : "x86")})",
             $"{L("Konum", "Location")}: {AppContext.BaseDirectory}",
+            $".NET: {System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription}",
             $"{L("Sunucu", "Server")}: {(_server.Port > 0 ? "127.0.0.1:" + _server.Port : _serverError ?? "—")}",
             $"{L("Masaüstü izleme", "Desktop watching")}: {(Prefs.WatchApps ? L("açık", "on") : L("kapalı", "off"))}",
             $"{L("Bildirimler", "Notifications")}: {(Prefs.NotificationsEnabled ? L("açık", "on") : L("kapalı", "off"))}{(Notifier.SystemDisabled ? L(" (Windows'ta kapalı)", " (off in Windows)") : "")}",

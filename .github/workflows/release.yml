@@ -136,8 +136,8 @@ jobs:
         env:
           V: ${{ steps.v.outputs.version }}
         run: |
+          # Klasör düzeni (tek dosya değil): güncellemede sadece uygulama dosyaları iner
           dotnet publish windows/TelepAIth/TelepAIth.csproj -c Release -r win-x64 --self-contained true `
-            -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true `
             -p:DebugType=none -p:Version=$env:V -o out/pkg
           if ($LASTEXITCODE -ne 0) { exit 1 }
           dotnet publish windows/TelepAIthHook/TelepAIthHook.csproj -c Release -r win-x64 -p:PublishAot=true `
@@ -150,12 +150,23 @@ jobs:
           }
           Copy-Item out/hook/TelepAIthHook.exe out/pkg/
           Copy-Item windows/OKUBENI.txt out/pkg/
-          Get-ChildItem out/pkg | Select-Object Name, Length
+          # Çalışma zamanı kimliği: aynıysa güncelleyici küçük paketi indirir
+          $rt = "{0}|{1}" -f (Get-Item out/pkg/System.Private.CoreLib.dll).VersionInfo.ProductVersion, (Get-Item out/pkg/PresentationFramework.dll).VersionInfo.ProductVersion
+          Set-Content -Path out/pkg/runtime.txt -Value $rt -NoNewline -Encoding ascii
+          Copy-Item out/pkg/runtime.txt Windows-TelepAIth-runtime.txt
+          Write-Host "runtime: $rt"
           Compress-Archive -Path out/pkg/* -DestinationPath Windows-TelepAIth-x64.zip -Force
+          # Küçük güncelleme paketi: sadece uygulamanın kendi dosyaları
+          New-Item -ItemType Directory -Force out/small | Out-Null
+          foreach ($f in @("TelepAIth.exe", "TelepAIth.dll", "TelepAIth.Core.dll", "TelepAIth.deps.json", "TelepAIth.runtimeconfig.json", "TelepAIthHook.exe", "OKUBENI.txt", "runtime.txt")) {
+            Copy-Item (Join-Path out/pkg $f) out/small/
+          }
+          Compress-Archive -Path out/small/* -DestinationPath Windows-TelepAIth-x64-update.zip -Force
+          Get-Item Windows-TelepAIth-*.zip, Windows-TelepAIth-runtime.txt | Select-Object Name, Length
 
       - name: Sürüme ekle
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.v.outputs.tag }}
-        run: gh release upload "$TAG" Windows-TelepAIth-x64.zip --clobber
+        run: gh release upload "$TAG" Windows-TelepAIth-x64.zip Windows-TelepAIth-x64-update.zip Windows-TelepAIth-runtime.txt --clobber

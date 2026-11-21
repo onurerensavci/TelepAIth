@@ -44,7 +44,15 @@ swift test                    # birim testleri
 
 CI'da (`build.yml` → `windows` işi) testler, derleme, AOT yayını ve bir duman testi (`windows/scripts/smoke.ps1`) çalışır: uygulamayı açar, olay gönderir, `GET /state` ile durumu, ekran görüntüsünden robotun çizildiğini, sürükle-bırak ile köşeye yapışmayı ve tıklamayı denetler.
 
-Sürüm yayınlanınca `release.yml`'deki `windows` işi `Windows-TelepAIth-x64.zip`'i (tek dosya `TelepAIth.exe` + `TelepAIthHook.exe` + `OKUBENI.txt`) aynı sürüme ekler. Mac güncelleyicisi adında "windows" geçen dosyayı asla seçmez; Windows güncelleyicisi sadece bu dosyayı indirir.
+Sürüm yayınlanınca `release.yml`'deki `windows` işi aynı sürüme üç dosya ekler:
+
+| Dosya | Ne |
+|---|---|
+| `Windows-TelepAIth-x64.zip` | Tam paket (klasör düzeni: uygulama + .NET çalışma zamanı + `TelepAIthHook.exe` + `OKUBENI.txt` + `runtime.txt`). İlk kurulum için. |
+| `Windows-TelepAIth-x64-update.zip` | Küçük güncelleme: sadece uygulamanın kendi dosyaları (birkaç MB). |
+| `Windows-TelepAIth-runtime.txt` | Paketteki .NET çalışma zamanının kimliği. |
+
+Windows güncelleyicisi kurulu `runtime.txt` ile sürümdekini karşılaştırır: aynıysa küçük paketi, değilse (ya da eski tek dosya kurulumsa) tam paketi indirir; indirirken robot ilerlemeyi söyler. Mac güncelleyicisi adında "windows" geçen dosyayı asla seçmez.
 
 ## Sürüm yayınlama
 

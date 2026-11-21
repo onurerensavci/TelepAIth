@@ -54,6 +54,7 @@ final class AppController: NSObject {
         server.start(preferredPort: AppInfo.defaultPort)
 
         Updater.shared.onChange = { [weak self] in self?.rebuildMenu() }
+        Updater.shared.onProgress = { [weak self] text in self?.manager.say(text, for: 30) }
         Updater.shared.startAutomaticChecks()
 
         // Kurulu hook'ları güncel komutla yenile (uygulama güncellenince eski komut kalmasın)

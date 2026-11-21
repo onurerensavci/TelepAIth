@@ -295,3 +295,23 @@ public static class VersionCompare
         return false;
     }
 }
+
+/// <summary>
+/// Windows güncellemesi: .NET çalışma zamanı değişmediyse sadece uygulama dosyalarını (küçük paket) indir,
+/// değiştiyse ya da bilinmiyorsa tam paketi.
+/// </summary>
+public static class UpdatePlan
+{
+    public const string FullAsset = "Windows-TelepAIth-x64.zip";
+    public const string SmallAsset = "Windows-TelepAIth-x64-update.zip";
+    public const string RuntimeAsset = "Windows-TelepAIth-runtime.txt";
+    public const string RuntimeFile = "runtime.txt";
+
+    public static bool UseSmall(string? localRuntime, string? remoteRuntime, bool smallAvailable) =>
+        smallAvailable && !string.IsNullOrWhiteSpace(localRuntime) && !string.IsNullOrWhiteSpace(remoteRuntime)
+        && string.Equals(localRuntime.Trim(), remoteRuntime.Trim(), StringComparison.Ordinal);
+
+    /// <summary>"12.3 / 61.8 MB" gibi</summary>
+    public static string Progress(long done, long? total) =>
+        total is > 0 ? $"{done / 1048576.0:0.0} / {total.Value / 1048576.0:0.0} MB" : $"{done / 1048576.0:0.0} MB";
+}

@@ -227,6 +227,11 @@ final class RobotManager {
         })
     }
 
+    /// Robota bir şey söylet (güncelleme ilerlemesi gibi)
+    func say(_ text: String, for seconds: TimeInterval) {
+        avatar?.current.say(text, for: seconds)
+    }
+
     /// Bugünün özetini robota söylet (menüden ya da akşam kendiliğinden).
     func showSummary() {
         guard let avatar = avatar else { return }
