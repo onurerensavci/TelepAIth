@@ -1,0 +1,577 @@
+using static TelepAIth.Core.Text;
+
+namespace TelepAIth.Core;
+
+/// <summary>
+/// Bir AI'ın (kaynağın) durumu: oturumları takip eder, robotun ne söyleyeceğini hesaplar.
+/// Ekrandaki tek robot, o an gösterilen kaynağın modelini çizer. (Mac sürümündeki RobotModel'in aynısı.)
+/// </summary>
+public sealed class RobotModel
+{
+    private sealed class Session
+    {
+        public RobotState State = RobotState.Idle;
+        public string? Text;
+        public string? Emoji;
+        public string? Project;
+        public DateTime Updated;
+        public DateTime? TurnStart;
+        public DateTime? LastWaitNotice;
+        public int Tools, Edits, Errors, ErrorRun;
+        public AppTarget? Target;
+        public DateTime? WaitingSince;
+        public bool Reminded;
+    }
+
+    public sealed record Notice(string Title, string Body, bool Important = false, AppTarget? Target = null);
+
+    /// <summary>Robotun yanındaki minik kafalar: aynı anda çalışan diğer oturumlar.</summary>
+    public sealed record MiniSession(string Id, string Source, RobotState State, string Label);
+
+    /// <summary>Ses çal (uygulama doldurur): "Glass", "Ping", "Basso", "Hero"</summary>
+    public static Action<string>? PlaySound;
+
+    public string Source { get; }
+    public SourceTheme Theme { get; private set; }
+    public RobotState State { get; private set; } = RobotState.Idle;
+    public string? BubbleText { get; private set; }
+    public string? BubbleSubtitle { get; private set; }
+    public DateTime? CelebrateStart { get; private set; }
+    public DateTime? ErrorStart { get; private set; }
+    public Mood? Mood { get; private set; }
+    public AppTarget? Target { get; private set; }
+    public DateTime? WaitingSince { get; private set; }
+    public int? QuotaLeft { get; private set; }
+    public bool BubbleIsExplicit { get; private set; }
+    public string? BestSessionId { get; private set; }
+    public DateTime? LastRealEvent { get; private set; }
+    public List<Notice> PendingNotices { get; } = new();
+    public IReadOnlyList<string> History => _history;
+
+    public event Action? StateChanged;
+
+    private readonly Dictionary<string, Session> _sessions = new();
+    private readonly List<string> _history = new();
+    private DateTime? _quotaAt;
+    private DateTime? _explicitUntil;
+    private DateTime? _moodUntil;
+    private DateTime _lastEventAt = DateTime.Now;
+    private DateTime _lastCleanup = DateTime.Now;
+    private string? _overrideText;
+    private DateTime? _overrideUntil;
+    private DateTime _nextIdleThought = DateTime.Now.AddSeconds(Random.Shared.Next(60, 120));
+
+    public RobotModel(string source)
+    {
+        Source = source;
+        Theme = Themes.Shared.Theme(source);
+    }
+
+    public void ReloadTheme() => Theme = Themes.Shared.Theme(Source);
+
+    public string StatusLine => Clip(BubbleText ?? WithEmoji(State.Emoji(), State.Label()), 48);
+
+    private static string DonePhrase()
+    {
+        var phrases = Lang.Current == Language.Tr
+            ? new[] { "Bitti!", "Tamamdır!", "Hallettim!", "İş bitti!" }
+            : new[] { "Done!", "All set!", "Finished!", "Nailed it!" };
+        return phrases[Random.Shared.Next(phrases.Length)];
+    }
+
+    private static string DoneEmoji()
+    {
+        var e = new[] { "🎉", "✨", "✅", "🪄" };
+        return e[Random.Shared.Next(e.Length)];
+    }
+
+    private void SetMood(Mood mood, double seconds, DateTime now)
+    {
+        Mood = mood;
+        _moodUntil = now.AddSeconds(seconds);
+    }
+
+    private static void Play(string name)
+    {
+        if (!Prefs.Sounds || FocusMode.IsActive) return;
+        PlaySound?.Invoke(name);
+    }
+
+    private static string IdleThought()
+    {
+        var thoughts = new (string, string, string)[]
+        {
+            ("🪄", "Bir büyü yapalım mı?", "Shall we cast a spell?"),
+            ("✨", "Hazırım, ne yapıyoruz?", "Ready when you are."),
+            ("🔮", "Kristal küreme bakıyorum…", "Gazing into my crystal ball…"),
+            ("🙂", "Buradayım.", "I'm right here."),
+            ("📚", "Yeni bir şey öğrenmek isterdim.", "I'd love to learn something new."),
+            ("☕️", "Kahve molası mı?", "Coffee break?"),
+            ("👀", "Noktalarım parlıyor mu?", "Are my dots glowing?"),
+        };
+        var pick = thoughts[Random.Shared.Next(thoughts.Length)];
+        return WithEmoji(pick.Item1, L(pick.Item2, pick.Item3));
+    }
+
+    public Notice? Apply(AgentEvent e) => Apply(e, DateTime.Now);
+
+    public Notice? Apply(AgentEvent e, DateTime now)
+    {
+        _lastEventAt = now;
+        if (e.Kind != EventKind.Heartbeat && e.Kind != EventKind.ToolDone) LastRealEvent = now;
+        if (!string.IsNullOrEmpty(e.Text)) Remember(WithEmoji(e.Emoji, e.Text), now);
+        if (e.Mood is { } m) SetMood(m, e.MoodSeconds, now);
+        Notice? notice = null;
+
+        switch (e.Kind)
+        {
+            case EventKind.Quota:
+            {
+                var text = WithEmoji(e.Emoji, e.Text ?? "");
+                ShowOverride(text, 10, now);
+                if (e.State == RobotState.Error) ErrorStart = now;
+                if (e.QuotaLeft is { } left)
+                {
+                    QuotaLeft = Math.Clamp(left, 0, 100);
+                    _quotaAt = now;
+                }
+                else if (e.State == RobotState.Error)
+                {
+                    QuotaLeft = 0;
+                    _quotaAt = now;
+                }
+                if (e.ForceNotify)
+                    notice = new Notice(Theme.DisplayName + L(" kota", " quota"), text,
+                                        e.State == RobotState.Error || (e.QuotaLeft ?? 100) <= 10);
+                break;
+            }
+            case EventKind.Heartbeat:
+                if (_sessions.TryGetValue(e.SessionId, out var hb)) hb.Updated = now;
+                break;
+
+            case EventKind.Say:
+                ShowOverride(WithEmoji(e.Emoji, e.Text ?? ""), 4, now);
+                break;
+
+            case EventKind.ToolDone:
+            {
+                if (_sessions.TryGetValue(e.SessionId, out var s))
+                {
+                    if (s.State == RobotState.Waiting)
+                    {
+                        s.State = RobotState.Thinking;
+                        s.Text = L("Devam ediyor…", "Back to work…");
+                        s.Emoji = "🔮";
+                        s.WaitingSince = null;
+                        s.Reminded = false;
+                    }
+                    if (e.State == RobotState.Error)
+                    {
+                        s.Errors++;
+                        s.ErrorRun++;
+                        if (s.ErrorRun >= 3)
+                        {
+                            SetMood(Core.Mood.Dizzy, 6, now);
+                            ShowOverride(WithEmoji("😵‍💫", L($"Üst üste {s.ErrorRun} hata", $"{s.ErrorRun} errors in a row")), 5, now);
+                            Play("Basso");
+                        }
+                    }
+                    else
+                    {
+                        s.ErrorRun = 0;
+                    }
+                    s.Updated = now;
+                }
+                var run = _sessions.TryGetValue(e.SessionId, out var s2) ? s2.ErrorRun : 0;
+                if (e.Text != null && !(e.State == RobotState.Error && run >= 3))
+                {
+                    ShowOverride(WithEmoji(e.Emoji, e.Text), 4, now);
+                    if (e.Mood == Core.Mood.Party) Play("Hero");
+                }
+                break;
+            }
+            case EventKind.SessionEnd:
+                _sessions.Remove(e.SessionId);
+                break;
+
+            default:
+            {
+                if (!_sessions.TryGetValue(e.SessionId, out var s))
+                {
+                    s = new Session { Project = e.Project, Updated = now };
+                    _sessions[e.SessionId] = s;
+                }
+                if (e.State is { } st) s.State = st;
+                if (e.Text != null)
+                {
+                    s.Text = e.Text;
+                    s.Emoji = e.Emoji ?? s.State.Emoji();
+                }
+                if (e.Project != null) s.Project = e.Project;
+                var pid = e.AppPid ?? e.QuietIfForegroundPid;
+                if (pid != null) s.Target = new AppTarget(pid, null);
+                else if (!string.IsNullOrEmpty(e.AppProcess)) s.Target = new AppTarget(null, e.AppProcess);
+                if (s.State == RobotState.Waiting)
+                {
+                    s.WaitingSince ??= now;
+                }
+                else
+                {
+                    s.WaitingSince = null;
+                    s.Reminded = false;
+                }
+                s.Updated = now;
+                if (e.Kind == EventKind.Prompt)
+                {
+                    s.TurnStart = now;
+                    s.Tools = s.Edits = s.Errors = s.ErrorRun = 0;
+                }
+                if (s.State.IsWorking() && s.TurnStart == null) s.TurnStart = now;
+                if (e.Kind == EventKind.Tool)
+                {
+                    s.Tools++;
+                    if (s.State == RobotState.Editing) s.Edits++;
+                }
+                var place = s.Project != null ? " · " + s.Project : "";
+
+                switch (e.Kind)
+                {
+                    case EventKind.Stop:
+                    {
+                        var duration = s.TurnStart != null ? (now - s.TurnStart.Value).TotalSeconds : 0;
+                        var parts = new List<string> { DonePhrase() };
+                        if (duration >= 1) parts.Add(FormatDuration(duration));
+                        if (s.Tools > 0) parts.Add(L($"{s.Tools} araç", $"{s.Tools} tools"));
+                        if (s.Edits > 0) parts.Add(L($"{s.Edits} düzenleme", $"{s.Edits} edits"));
+                        var text = e.Text ?? string.Join(" · ", parts);
+                        if (!string.IsNullOrEmpty(e.LastMessage)) text += "\n" + Clip(e.LastMessage, 110);
+                        s.Text = text;
+                        if (duration > 180 || s.Tools > 25)
+                        {
+                            s.Emoji = e.Emoji ?? "😮‍💨";
+                            SetMood(Core.Mood.Tired, 6, now);
+                        }
+                        else if (s.Edits > 0 && s.Errors == 0)
+                        {
+                            s.Emoji = e.Emoji ?? DoneEmoji();
+                            SetMood(Core.Mood.Proud, 6, now);
+                        }
+                        else
+                        {
+                            s.Emoji = e.Emoji ?? DoneEmoji();
+                        }
+                        if (duration >= 1 || s.Tools > 0)
+                            DailyStats.Shared.RecordTurn(Source, duration, s.Tools, s.Edits, now);
+                        s.TurnStart = null;
+                        CelebrateStart = now;
+                        Play("Glass");
+                        Remember(WithEmoji(s.Emoji, text), now);
+                        // Anlatıcının "bitti"si bildirim atmaz (izleyici ya da hook zaten haber veriyor)
+                        if (e.SessionId != "mcp" && (e.ForceNotify || duration >= Prefs.LongTurnSeconds))
+                        {
+                            var body = (s.Project ?? L("Görev", "Task")) + " — " + FormatDuration(duration);
+                            if (!string.IsNullOrEmpty(e.LastMessage)) body += "\n" + Clip(e.LastMessage, 140);
+                            notice = new Notice(WithEmoji(s.Emoji, Theme.DisplayName + L(" bitirdi", " is done")), body, false, s.Target);
+                        }
+                        break;
+                    }
+                    case EventKind.Waiting:
+                    {
+                        var canNotify = s.LastWaitNotice == null || (now - s.LastWaitNotice.Value).TotalSeconds > 20;
+                        if (canNotify)
+                        {
+                            s.LastWaitNotice = now;
+                            DailyStats.Shared.RecordWait(Source, now);
+                            Play("Ping");
+                            notice = new Notice(WithEmoji(s.Emoji, Theme.DisplayName + L(" seni bekliyor", " needs you") + place),
+                                                s.Text ?? L("Cevabını bekliyor", "Waiting for your reply"), true, s.Target);
+                        }
+                        break;
+                    }
+                    case EventKind.Failure:
+                        ErrorStart = now;
+                        Play("Basso");
+                        notice = new Notice(WithEmoji(s.Emoji, Theme.DisplayName + L(" hata verdi", " hit an error") + place),
+                                            s.Text ?? "", true, s.Target);
+                        break;
+                    case EventKind.Interrupt:
+                        s.TurnStart = null;
+                        break;
+                }
+                // Uygulama işi bitirdiyse anlatıcının son cümlesi ekranda asılı kalmasın
+                if (e.Kind == EventKind.Stop && e.SessionId != "mcp") _sessions.Remove("mcp");
+                break;
+            }
+        }
+
+        Refresh(now);
+        return notice;
+    }
+
+    /// <summary>Robotun balonda bir şey söylemesi (güncelleme haberi, uyarı…). Odak modunda da görünür.</summary>
+    public void Say(string text, double seconds = 8)
+    {
+        var now = DateTime.Now;
+        ShowOverride(text, seconds, now);
+        _explicitUntil = now.AddSeconds(seconds);
+        Refresh(now);
+    }
+
+    public void ShowHistory()
+    {
+        var lines = _history.TakeLast(5).ToList();
+        ShowOverride(lines.Count == 0 ? L("Henüz bir şey olmadı", "Nothing has happened yet") : string.Join("\n", lines), 6, DateTime.Now);
+        Refresh(DateTime.Now);
+    }
+
+    private void Remember(string text, DateTime now)
+    {
+        var shortText = Clip(text, 60);
+        if (_history.Count > 0 && _history[^1].EndsWith(shortText, StringComparison.Ordinal)) return;
+        _history.Add($"{now:HH:mm}  {shortText}");
+        if (_history.Count > 30) _history.RemoveRange(0, _history.Count - 30);
+    }
+
+    private void ShowOverride(string text, double seconds, DateTime now)
+    {
+        _overrideText = text;
+        _overrideUntil = now.AddSeconds(seconds);
+        _explicitUntil = null;
+    }
+
+    /// <summary>Durum hesaplama (saniyede birkaç kez çağrılır)</summary>
+    public void Refresh(DateTime now)
+    {
+        if (_moodUntil is { } mu && mu <= now)
+        {
+            _moodUntil = null;
+            Mood = null;
+        }
+        if ((now - _lastCleanup).TotalSeconds > 5)
+        {
+            _lastCleanup = now;
+            foreach (var id in _sessions.Where(kv => (now - kv.Value.Updated).TotalSeconds >= 3600).Select(kv => kv.Key).ToList())
+                _sessions.Remove(id);
+            // Kota bilgisi 6 saatte eskir
+            if (_quotaAt is { } qa && (now - qa).TotalHours > 6)
+            {
+                _quotaAt = null;
+                QuotaLeft = null;
+            }
+            // Uzun süre onay bekleyen oturum: 2 dakika sonra bir kez daha hatırlat
+            if (Prefs.WaitReminders)
+            {
+                foreach (var s in _sessions.Values)
+                {
+                    if (s.State != RobotState.Waiting || s.Reminded || s.WaitingSince == null) continue;
+                    if ((now - s.WaitingSince.Value).TotalSeconds < 120) continue;
+                    s.Reminded = true;
+                    var place = s.Project != null ? " · " + s.Project : "";
+                    PendingNotices.Add(new Notice(WithEmoji("⏰", Theme.DisplayName + L(" hâlâ seni bekliyor", " is still waiting for you") + place),
+                                                  s.Text ?? L("Cevabını bekliyor", "Waiting for your reply"), true, s.Target));
+                    ShowOverride(WithEmoji("⏰", L("Hâlâ onayını bekliyorum!", "Still waiting for your OK!")), 6, now);
+                }
+            }
+        }
+
+        Session? best = null;
+        string? bestId = null;
+        var bestState = RobotState.Idle;
+        foreach (var (id, s) in _sessions)
+        {
+            var st = EffectiveState(s, id, now);
+            if (best == null || st.Priority() > bestState.Priority() || (st.Priority() == bestState.Priority() && s.Updated > best.Updated))
+            {
+                best = s;
+                bestId = id;
+                bestState = st;
+            }
+        }
+        BestSessionId = bestId;
+        Target = best?.Target;
+        WaitingSince = bestState == RobotState.Waiting ? best?.WaitingSince : null;
+
+        var newState = best == null ? RobotState.Idle : bestState;
+        if (newState == RobotState.Idle && (now - _lastEventAt).TotalSeconds > 600) newState = RobotState.Sleeping;
+
+        // Boştayken ara sıra laf at
+        if (newState == RobotState.Idle && Prefs.IdleChatter && !FocusMode.IsActive && _overrideUntil == null && now >= _nextIdleThought)
+        {
+            ShowOverride(IdleThought(), 5, now);
+            _nextIdleThought = now.AddSeconds(Random.Shared.Next(150, 360));
+        }
+
+        string? text = null;
+        string? subtitle = null;
+        if (_overrideUntil is { } ou && ou > now && _overrideText != null)
+        {
+            text = _overrideText;
+        }
+        else
+        {
+            _overrideText = null;
+            _overrideUntil = null;
+            if (best != null && newState != RobotState.Idle && newState != RobotState.Sleeping)
+            {
+                text = best.Text != null ? WithEmoji(best.Emoji, best.Text) : WithEmoji(newState.Emoji(), newState.Label());
+                subtitle = best.Project;
+                if (newState == RobotState.Done && (now - best.Updated).TotalSeconds > 15)
+                {
+                    text = null;
+                    subtitle = null;
+                }
+            }
+        }
+
+        if (newState != State)
+        {
+            State = newState;
+            StateChanged?.Invoke();
+        }
+        BubbleIsExplicit = _explicitUntil is { } eu && eu > now && text != null;
+        BubbleText = text;
+        BubbleSubtitle = subtitle;
+    }
+
+    /// <summary>Bu AI'ın, ekranda gösterilen dışında kalan çalışan/bekleyen oturumları.</summary>
+    public List<MiniSession> MiniSessions(string? excluded, DateTime now)
+    {
+        var list = new List<MiniSession>();
+        foreach (var (id, s) in _sessions)
+        {
+            if (id == excluded) continue;
+            var st = EffectiveState(s, id, now);
+            if (!st.IsWorking() && st != RobotState.Waiting) continue;
+            var label = string.Join(" · ", new[] { Theme.DisplayName, s.Project, s.Text != null ? Clip(s.Text, 40) : null }.Where(x => x != null));
+            list.Add(new MiniSession(Source + "/" + id, Source, st, label));
+        }
+        return list.OrderBy(m => m.Id, StringComparer.Ordinal).ToList();
+    }
+
+    private static RobotState EffectiveState(Session s, string id, DateTime now)
+    {
+        var age = (now - s.Updated).TotalSeconds;
+        if (id == "mcp" && s.State.IsWorking() && age > 90) return RobotState.Idle;   // anlatıcı sustuysa
+        if (s.State == RobotState.Done && age > 90) return RobotState.Idle;
+        if (s.State == RobotState.Error && age > 60) return RobotState.Idle;
+        if (s.State.IsWorking() && age > 300) return RobotState.Idle;   // takılı kalan oturum
+        return s.State;
+    }
+}
+
+/// <summary>Günlük özet için sayaçlar (~/.telepaith/daily-stats.json, son 14 gün).</summary>
+public sealed class DailyStats
+{
+    public static DailyStats Shared { get; } = new(AppInfo.StatsFile);
+
+    public sealed class Day
+    {
+        public int Turns { get; set; }
+        public double Seconds { get; set; }
+        public int Tools { get; set; }
+        public int Edits { get; set; }
+        public int Waits { get; set; }
+    }
+
+    private readonly string? _file;
+    private readonly Dictionary<string, Dictionary<string, Day>> _days = new();
+    private readonly object _gate = new();
+
+    public DailyStats(string? file)
+    {
+        _file = file;
+        if (file == null || !File.Exists(file)) return;
+        try
+        {
+            if (System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(file)) is not System.Text.Json.Nodes.JsonObject root) return;
+            foreach (var (day, sources) in root)
+            {
+                if (sources is not System.Text.Json.Nodes.JsonObject so) continue;
+                var map = new Dictionary<string, Day>();
+                foreach (var (src, node) in so)
+                {
+                    map[src] = new Day
+                    {
+                        Turns = (int)(node.Num("turns") ?? 0),
+                        Seconds = node.Num("seconds") ?? 0,
+                        Tools = (int)(node.Num("tools") ?? 0),
+                        Edits = (int)(node.Num("edits") ?? 0),
+                        Waits = (int)(node.Num("waits") ?? 0),
+                    };
+                }
+                _days[day] = map;
+            }
+        }
+        catch { /* bozuk dosya */ }
+    }
+
+    public static string DayKey(DateTime d) => d.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
+
+    public void RecordTurn(string source, double seconds, int tools, int edits, DateTime at) =>
+        Update(source, at, d => { d.Turns++; d.Seconds += Math.Max(0, seconds); d.Tools += tools; d.Edits += edits; });
+
+    public void RecordWait(string source, DateTime at) => Update(source, at, d => d.Waits++);
+
+    private void Update(string source, DateTime at, Action<Day> change)
+    {
+        lock (_gate)
+        {
+            var key = DayKey(at);
+            if (!_days.TryGetValue(key, out var map)) _days[key] = map = new();
+            if (!map.TryGetValue(source, out var day)) map[source] = day = new Day();
+            change(day);
+            foreach (var old in _days.Keys.OrderBy(k => k, StringComparer.Ordinal).Take(Math.Max(0, _days.Count - 14)).ToList())
+                _days.Remove(old);
+            Save();
+        }
+    }
+
+    private void Save()
+    {
+        if (_file == null) return;
+        try
+        {
+            var root = new System.Text.Json.Nodes.JsonObject();
+            foreach (var (day, map) in _days)
+            {
+                var so = new System.Text.Json.Nodes.JsonObject();
+                foreach (var (src, d) in map)
+                    so[src] = new System.Text.Json.Nodes.JsonObject
+                    {
+                        ["turns"] = d.Turns, ["seconds"] = d.Seconds, ["tools"] = d.Tools, ["edits"] = d.Edits, ["waits"] = d.Waits,
+                    };
+                root[day] = so;
+            }
+            File.WriteAllText(_file, root.ToJsonString());
+        }
+        catch { /* yazılamadı */ }
+    }
+
+    public Dictionary<string, Day> Today(DateTime date)
+    {
+        lock (_gate) return _days.TryGetValue(DayKey(date), out var m) ? new Dictionary<string, Day>(m) : new();
+    }
+
+    /// <summary>"Claude: 14 iş, 2 sa 10 dk, 31 düzenleme"</summary>
+    public string? Summary(Func<string, string> names, DateTime date)
+    {
+        var entries = Today(date).Where(kv => kv.Value.Turns > 0).OrderByDescending(kv => kv.Value.Seconds).ToList();
+        if (entries.Count == 0) return null;
+        return string.Join("\n", entries.Select(kv =>
+        {
+            var d = kv.Value;
+            var parts = new List<string> { L($"{d.Turns} iş", $"{d.Turns} task{(d.Turns == 1 ? "" : "s")}") };
+            if (d.Seconds >= 60) parts.Add(FormatDuration(d.Seconds));
+            if (d.Edits > 0) parts.Add(L($"{d.Edits} düzenleme", $"{d.Edits} edit{(d.Edits == 1 ? "" : "s")}"));
+            if (d.Waits > 0) parts.Add(L($"{d.Waits} kez seni bekledi", $"waited for you {d.Waits}×"));
+            return names(kv.Key) + ": " + string.Join(", ", parts);
+        }));
+    }
+
+    /// <summary>Bugünün özeti zaten söylendi mi?</summary>
+    public bool ShownToday
+    {
+        get => Prefs.GetString("dailySummaryShown") == DayKey(DateTime.Now);
+        set => Prefs.Set("dailySummaryShown", value ? DayKey(DateTime.Now) : "");
+    }
+}

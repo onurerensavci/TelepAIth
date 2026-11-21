@@ -99,7 +99,11 @@ final class Updater {
         }
 
         let assets = json["assets"] as? [[String: Any]] ?? []
-        let zips = assets.filter { (($0["name"] as? String) ?? "").hasSuffix(".zip") }
+        // Windows paketi (Windows-TelepAIth-x64.zip) aynı sürümde durur; Mac onu asla seçmesin
+        let zips = assets.filter {
+            let name = (($0["name"] as? String) ?? "")
+            return name.hasSuffix(".zip") && !name.lowercased().contains("windows")
+        }
         let zip = zips.first(where: { (($0["name"] as? String) ?? "").hasPrefix(AppInfo.name) }) ?? zips.first
 
         guard let urlString = zip?["browser_download_url"] as? String, let assetURL = URL(string: urlString) else {

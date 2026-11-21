@@ -103,3 +103,59 @@ jobs:
             --target "$GITHUB_SHA" \
             --title "TelepAIth ${TAG}" \
             --generate-notes
+
+  windows:
+    needs: release
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Sürümü belirle
+        id: v
+        shell: bash
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            V="${INPUT_VERSION:-$(cat VERSION)}"
+          else
+            V="${GITHUB_REF_NAME#v}"
+          fi
+          V="${V#v}"
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          echo "tag=v$V" >> "$GITHUB_OUTPUT"
+
+      - name: Çekirdek testleri
+        run: dotnet run --project windows/TelepAIth.Core.Tests -c Release
+
+      - name: Uygulamayı ve hook yardımcısını yayınla
+        shell: pwsh
+        env:
+          V: ${{ steps.v.outputs.version }}
+        run: |
+          dotnet publish windows/TelepAIth/TelepAIth.csproj -c Release -r win-x64 --self-contained true `
+            -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true `
+            -p:DebugType=none -p:Version=$env:V -o out/pkg
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          dotnet publish windows/TelepAIthHook/TelepAIthHook.csproj -c Release -r win-x64 -p:PublishAot=true `
+            -p:DebugType=none -p:Version=$env:V -o out/hook
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "AOT olmadı, tek dosya olarak yayınlanıyor"
+            dotnet publish windows/TelepAIthHook/TelepAIthHook.csproj -c Release -r win-x64 --self-contained true `
+              -p:PublishSingleFile=true -p:PublishTrimmed=true -p:DebugType=none -p:Version=$env:V -o out/hook
+            if ($LASTEXITCODE -ne 0) { exit 1 }
+          }
+          Copy-Item out/hook/TelepAIthHook.exe out/pkg/
+          Copy-Item windows/OKUBENI.txt out/pkg/
+          Get-ChildItem out/pkg | Select-Object Name, Length
+          Compress-Archive -Path out/pkg/* -DestinationPath Windows-TelepAIth-x64.zip -Force
+
+      - name: Sürüme ekle
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.v.outputs.tag }}
+        run: gh release upload "$TAG" Windows-TelepAIth-x64.zip --clobber

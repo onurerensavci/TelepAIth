@@ -1,0 +1,473 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
+using System.Windows;
+using System.Windows.Controls;
+using TelepAIth.Core;
+using static TelepAIth.Core.Text;
+using WinForms = System.Windows.Forms;
+
+namespace TelepAIth;
+
+/// <summary>Menüde bir satır: başlık, eylem, işaret, alt menü. null = ayraç.</summary>
+internal sealed record MenuEntry(string Title, Action? Act = null, bool? Checked = null, bool Enabled = true, List<MenuEntry?>? Children = null);
+
+/// <summary>Tepsi simgesi, sunucu ve robotu birbirine bağlar.</summary>
+internal sealed class AppController : ISettingsHost
+{
+    public RobotManager Manager { get; } = new();
+    private readonly EventServer _server = new();
+    private WinForms.NotifyIcon? _tray;
+    private string? _serverError;
+
+    public void Start()
+    {
+        try { System.IO.Directory.CreateDirectory(AppInfo.SkinsDir); } catch { }
+        try { Themes.WriteExampleConfigIfMissing(); } catch { }
+        Themes.Shared.Reload();
+
+        _tray = new WinForms.NotifyIcon { Icon = AppIcon.TrayIcon(), Text = "TelepAIth", Visible = true };
+        _tray.MouseUp += (_, e) =>
+        {
+            if (e.Button == WinForms.MouseButtons.Left) Manager.Visible = !Manager.Visible;
+        };
+        _tray.ContextMenuStrip = new WinForms.ContextMenuStrip();
+        _tray.ContextMenuStrip.Opening += (_, _) => FillTray();
+        Notifier.Attach(_tray);
+
+        Manager.Changed += Changed;
+        Manager.BuildRobotMenu = BuildRobotMenu;
+        Manager.Start();
+
+        _server.EventReceived += e => Application.Current.Dispatcher.BeginInvoke(() => Manager.Handle(e));
+        _server.Start();
+        _serverError = _server.Error;
+
+        Updater.Shared.Changed += Changed;
+        Updater.Shared.StartAutomaticChecks();
+
+        // Kurulu hook'ları güncel yolla yenile (uygulama taşınınca/güncellenince eski komut kalmasın)
+        foreach (var t in new[] { HookTarget.Claude, HookTarget.Codex })
+        {
+            try { if (HookInstaller.IsInstalled(t)) HookInstaller.Install(t, Installer.HookExe, Prefs.Shield && t == HookTarget.Claude); } catch { }
+        }
+        if (Installer.IsInstalledCopy && Prefs.StartWithWindows && !Installer.AutostartEnabled) Installer.SetAutostart(true);
+        Changed();
+
+        if (!Prefs.OnboardingDone)
+            Application.Current.Dispatcher.BeginInvoke(async () =>
+            {
+                await Task.Delay(1000);
+                OnboardingWindow.Show(this);
+            });
+    }
+
+    public void Stop()
+    {
+        Manager.Stop();
+        _server.Stop();
+        if (_tray != null)
+        {
+            _tray.Visible = false;
+            _tray.Dispose();
+        }
+    }
+
+    public void Changed()
+    {
+        var (health, text) = CurrentHealth();
+        Manager.SetHealth(health, text);
+        if (_tray != null)
+        {
+            var waiting = Manager.AllModels.Any(m => m.State == RobotState.Waiting);
+            var tip = waiting ? "TelepAIth · " + L("seni bekliyor", "waiting for you") : "TelepAIth " + AppInfo.Version;
+            _tray.Text = tip.Length > 63 ? tip[..63] : tip;
+        }
+    }
+
+    // MARK: Sağlık ışığı
+
+    private (Health, string) CurrentHealth()
+    {
+        if (_serverError != null) return (Health.Broken, L("Sunucu açılamadı: ", "Server failed: ") + Clip(_serverError, 40));
+        var anyHook = HookInstaller.IsInstalled(HookTarget.Claude) || HookInstaller.IsInstalled(HookTarget.Codex);
+        if (!anyHook && !Prefs.WatchApps)
+            return (Health.Broken, L("Hiçbir AI'a bağlı değilim. Ayarlar → Bağlantılar'dan bağla.", "I'm not connected to any AI. Connect one in Settings → Connections."));
+        if (Updater.Shared.Available is { } r) return (Health.Update, r.Version);
+        return (Health.Ok, "");
+    }
+
+    // MARK: Menüler
+
+    private List<MenuEntry?> TrayEntries()
+    {
+        var list = new List<MenuEntry?>();
+        var header = _server.Port > 0 ? $"TelepAIth {AppInfo.Version} · 127.0.0.1:{_server.Port}" : "TelepAIth · " + (_serverError ?? L("başlatılıyor…", "starting…"));
+        list.Add(new MenuEntry(header, Enabled: false));
+        var (health, htext) = CurrentHealth();
+        list.Add(new MenuEntry(health switch
+        {
+            Health.Broken => "🔴 " + Clip(htext, 70),
+            Health.Update => "🟠 " + L($"Güncelleme var: {htext}", $"Update available: {htext}"),
+            _ => "🟢 " + (FocusMode.IsActive ? L("Odak modu ", "Focus mode ") + FocusMode.StatusText : L("Her şey yolunda", "All good")),
+        }, Enabled: false));
+        if (Updater.Shared.Available is { } rel)
+            list.Add(new MenuEntry("⬆ " + L($"Güncelle: {rel.Version} hazır", $"Update: {rel.Version} is ready"), Updater.Shared.PromptInstall, Enabled: !Updater.Shared.IsBusy));
+        list.Add(null);
+        foreach (var m in Manager.AllModels)
+        {
+            var source = m.Source;
+            list.Add(new MenuEntry($"● {m.Theme.DisplayName} — {m.StatusLine}", () => Manager.ShowHistory(source)));
+        }
+        if (Prefs.WatchApps)
+            foreach (var (name, status) in Manager.WatcherStatus)
+                list.Add(new MenuEntry($"    👀 {name}: {status}", Enabled: false));
+        if (Notifier.SystemDisabled)
+            list.Add(new MenuEntry("⚠ " + L("Bildirimler Windows'ta kapalı — aç…", "Notifications are off in Windows — turn on…"), Notifier.OpenSystemSettings));
+        list.Add(null);
+        list.Add(new MenuEntry(L("Robotu göster", "Show robot"), () => Manager.Visible = !Manager.Visible, Manager.Visible));
+        list.Add(new MenuEntry(L("Robotu bu masaüstüne getir", "Bring robot to this desktop"), Manager.BringHere));
+        list.Add(new MenuEntry(L("Odak modu", "Focus mode"), Children: FocusEntries()));
+        list.Add(new MenuEntry(L("Bugünün özeti", "Today's summary"), Manager.ShowSummary));
+        list.Add(null);
+        list.Add(new MenuEntry(L("Ayarlar…", "Settings…"), () => SettingsWindow.Show(this)));
+        list.Add(new MenuEntry(L("Kurulum sihirbazı…", "Setup assistant…"), () => OnboardingWindow.Show(this)));
+        list.Add(new MenuEntry(L("Dene", "Try it"), Children: new List<MenuEntry?>
+        {
+            new(L("Claude: kısa bir görev", "Claude: a short task"), Demos.Claude(this)),
+            new(L("GPT: onay beklesin", "GPT: wait for approval"), Demos.GptWaiting(this)),
+            new(L("Claude: kota uyarısı", "Claude: quota alert"), () => Manager.Handle(Demos.Quota())),
+            new(L("İki oturum aynı anda", "Two sessions at once"), Demos.Parallel(this)),
+            null,
+            new(L("Test bildirimi gönder", "Send a test notification"), SettingsWindow.SendTest),
+        }));
+        list.Add(new MenuEntry(L("Yardım", "Help"), Children: new List<MenuEntry?>
+        {
+            new(L("Hata bildir…", "Report a problem…"), ReportBug),
+            new(L("Teşhis…", "Diagnostics…"), OpenDiagnostics),
+            new(L("Algılama günlüğünü aç", "Open detection log"), () => Shell.Open(AppInfo.DebugFile), Enabled: System.IO.File.Exists(AppInfo.DebugFile)),
+            new(L("Ayar klasörünü aç", "Open settings folder"), () => Shell.Open(AppInfo.SupportDir)),
+            new(L("Renkleri ve kostümleri yeniden yükle", "Reload colors and skins"), Manager.ReloadAppearance),
+            null,
+            new(L("TelepAIth'i kaldır…", "Uninstall TelepAIth…"), Uninstall),
+        }));
+        list.Add(new MenuEntry(Updater.Shared.IsBusy ? L("Güncelleme indiriliyor…", "Downloading update…") : L("Güncellemeleri denetle…", "Check for updates…"),
+            CheckUpdates, Enabled: !Updater.Shared.IsBusy));
+        list.Add(null);
+        list.Add(new MenuEntry(L("Çıkış", "Quit"), () => Application.Current.Shutdown()));
+        return list;
+    }
+
+    private List<MenuEntry?> FocusEntries()
+    {
+        void After() { Manager.FocusChanged(); Changed(); }
+        return new List<MenuEntry?>
+        {
+            new(FocusMode.StatusText, Enabled: false),
+            null,
+            new(L("1 saat", "1 hour"), () => { FocusMode.TurnOn(3600); After(); }),
+            new(L("Kapatana kadar", "Until I turn it off"), () => { FocusMode.TurnOn(null); After(); }),
+            new(L("Kapat", "Turn off"), () => { FocusMode.TurnOff(); After(); }, Enabled: FocusMode.ManualActive),
+            null,
+            new(L("Toplantıda kendiliğinden aç", "Automatically in meetings"), () => { Prefs.AutoFocusInMeetings = !Prefs.AutoFocusInMeetings; After(); }, Prefs.AutoFocusInMeetings),
+        };
+    }
+
+    /// <summary>Robota sağ tık</summary>
+    private ContextMenu BuildRobotMenu()
+    {
+        var current = Manager.Current;
+        var entries = new List<MenuEntry?>
+        {
+            new(L("Son olayları göster", "Show recent events"), () => { if (current != null) Manager.ShowHistory(current.Source); }),
+            null,
+            new(Prefs.RobotLocked ? L("🔓 Kilidi aç", "🔓 Unlock") : L("🔒 Kilitle (yerinde kalsın)", "🔒 Lock (stay here)"), () =>
+            {
+                var on = !Prefs.RobotLocked;
+                Manager.SetLocked(on);
+                Manager.Current?.Say(on ? WithEmoji("🔒", L("Kilitlendim, yerimden kıpırdamıyorum.", "Locked. I'm staying right here."))
+                                        : WithEmoji("🔓", L("Kilidim açıldı, yine Claude ve GPT'nin peşinden gelirim.", "Unlocked. I'll follow Claude and GPT again.")), 4);
+            }),
+            new(L("📌 Her zaman üstte", "📌 Always on top"), () =>
+            {
+                var on = !Prefs.AlwaysOnTop;
+                Manager.SetAlwaysOnTop(on);
+                Manager.Current?.Say(on ? WithEmoji("📌", L("Her zaman en üstteyim.", "I'll stay on top of everything."))
+                                        : WithEmoji("🪟", L("Artık diğer pencerelerin arkasında kalabilirim.", "Other windows can cover me now.")), 4);
+            }, Prefs.AlwaysOnTop),
+            new(FocusMode.ManualActive ? L("🌙 Odak modunu kapat", "🌙 Turn off focus mode") : L("🌙 Odak modu (1 saat)", "🌙 Focus mode (1 hour)"), () =>
+            {
+                if (FocusMode.ManualActive)
+                {
+                    FocusMode.TurnOff();
+                    Manager.Current?.Say(WithEmoji("☀️", L("Odak modu kapandı, yine konuşuyorum.", "Focus mode off, I'm chatty again.")), 4);
+                }
+                else
+                {
+                    FocusMode.TurnOn(3600);
+                    Manager.Current?.Say(WithEmoji("🌙", L("Bir saat sessizim; sadece seni bekleyen şeyleri söylerim.", "Quiet for an hour; I'll only tell you what needs you.")), 4);
+                }
+                Manager.FocusChanged();
+                Changed();
+            }),
+            new(L("📊 Bugünün özeti", "📊 Today's summary"), Manager.ShowSummary),
+            null,
+            new(L("Ayarlar…", "Settings…"), () => SettingsWindow.Show(this)),
+            new(L("Teşhis…", "Diagnostics…"), OpenDiagnostics),
+            new(L("Hata bildir…", "Report a problem…"), ReportBug),
+            null,
+            new(L("Robotu gizle", "Hide robot"), () => Manager.Visible = false),
+        };
+        var menu = new ContextMenu();
+        foreach (var e in entries) menu.Items.Add(ToWpf(e));
+        return menu;
+    }
+
+    private static object ToWpf(MenuEntry? e)
+    {
+        if (e == null) return new Separator();
+        var item = new MenuItem { Header = e.Title, IsEnabled = e.Enabled, IsCheckable = false, IsChecked = e.Checked == true };
+        if (e.Children != null)
+            foreach (var c in e.Children) item.Items.Add(ToWpf(c));
+        else if (e.Act is { } act)
+            item.Click += (_, _) => act();
+        return item;
+    }
+
+    private void FillTray()
+    {
+        var strip = _tray!.ContextMenuStrip!;
+        strip.Items.Clear();
+        foreach (var e in TrayEntries()) strip.Items.Add(ToWinForms(e));
+    }
+
+    private static WinForms.ToolStripItem ToWinForms(MenuEntry? e)
+    {
+        if (e == null) return new WinForms.ToolStripSeparator();
+        var item = new WinForms.ToolStripMenuItem(e.Title.Replace("&", "&&")) { Enabled = e.Enabled, Checked = e.Checked == true };
+        if (e.Children != null)
+            foreach (var c in e.Children) item.DropDownItems.Add(ToWinForms(c));
+        else if (e.Act is { } act)
+            item.Click += (_, _) => Application.Current.Dispatcher.BeginInvoke(act);
+        return item;
+    }
+
+    // MARK: Eylemler
+
+    private async void CheckUpdates()
+    {
+        var message = await Updater.Shared.CheckAsync(true);
+        if (Updater.Shared.Available != null) Updater.Shared.PromptInstall();
+        else if (message != null) MessageBox.Show(message, AppInfo.Name);
+        Changed();
+    }
+
+    public string ReportText(bool includeTexts)
+    {
+        var lines = new List<string>
+        {
+            $"TelepAIth (Windows) teşhis raporu — {DateTime.Now:yyyy-MM-dd HH:mm:ss}",
+            $"{L("Sürüm", "Version")}: {AppInfo.Version}",
+            $"Windows: {Environment.OSVersion.VersionString} ({(Environment.Is64BitOperatingSystem ? "x64" : "x86")})",
+            $"{L("Konum", "Location")}: {AppContext.BaseDirectory}",
+            $"{L("Sunucu", "Server")}: {(_server.Port > 0 ? "127.0.0.1:" + _server.Port : _serverError ?? "—")}",
+            $"{L("Masaüstü izleme", "Desktop watching")}: {(Prefs.WatchApps ? L("açık", "on") : L("kapalı", "off"))}",
+            $"{L("Bildirimler", "Notifications")}: {(Prefs.NotificationsEnabled ? L("açık", "on") : L("kapalı", "off"))}{(Notifier.SystemDisabled ? L(" (Windows'ta kapalı)", " (off in Windows)") : "")}",
+            $"Claude Code: {(HookInstaller.IsInstalled(HookTarget.Claude) ? L("bağlı", "connected") : L("bağlı değil", "not connected"))}",
+            $"Codex: {(HookInstaller.IsInstalled(HookTarget.Codex) ? L("bağlı", "connected") : L("bağlı değil", "not connected"))}",
+            $"{L("Anlatıcı", "Narrator")}: {(NarratorInstaller.IsInstalled() ? L("ekli", "added") : L("ekli değil", "not added"))}",
+            $"{L("Odak modu", "Focus mode")}: {FocusMode.StatusText}",
+            $"{L("Ekranlar", "Displays")}: {string.Join("; ", Native.Monitors().Select(m => $"{m.Device} {m.Bounds.Width}x{m.Bounds.Height} @{m.Scale * 100:0}%"))}",
+            $"{L("Robot", "Robot")}: {Manager.Current?.Source} · {Manager.Current?.State} · {L("boyut", "size")} {Prefs.RobotScale * 100:0}%",
+        };
+        var diag = Manager.WatcherDiagnostics;
+        lines.Add("");
+        lines.Add("== " + L("İzlenen uygulamalar", "Watched apps") + " ==");
+        lines.Add(string.IsNullOrEmpty(diag) ? L("Claude/ChatGPT uygulaması açık değil (ya da izleme kapalı).", "No Claude/ChatGPT app open (or watching is off).") : diag);
+        if (!includeTexts) return string.Join("\n", lines);
+        return string.Join("\n", lines);
+    }
+
+    private void OpenDiagnostics() => DiagnosticsWindow.Show(() => ReportText(true));
+
+    /// <summary>Tek tıkla hata raporu: bilgilerle dolu bir GitHub issue'su açar, tam raporu panoya kopyalar.</summary>
+    private void ReportBug()
+    {
+        var full = ReportText(true);
+        try { Clipboard.SetText(full); } catch { }
+        var report = ReportText(false);
+        if (report.Length > 5000) report = report[..5000] + "\n…";
+        var body = L(
+            "**Ne oldu?**\n<!-- Ne yapıyordun, ne bekliyordun, ne oldu? -->\n\n\n**Ortam**\n- Windows: " + Environment.OSVersion.VersionString +
+            "\n\n<details><summary>Teşhis raporu</summary>\n\n```\n" + report + "\n```\n</details>\n",
+            "**What happened?**\n<!-- What were you doing, what did you expect, what happened? -->\n\n\n**Environment**\n- Windows: " + Environment.OSVersion.VersionString +
+            "\n\n<details><summary>Diagnostics</summary>\n\n```\n" + report + "\n```\n</details>\n");
+        var title = "[Windows] " + L("Sorun: ", "Problem: ");
+        var url = $"https://github.com/{AppInfo.Repo}/issues/new?labels=windows&title={Uri.EscapeDataString(title)}&body={Uri.EscapeDataString(body)}";
+        if (url.Length > 7500) url = url[..7500];
+        Shell.Open(url);
+        Notifier.Notify("🐞 " + L("Hata raporu açıldı", "Bug report opened"),
+            L("Tam teşhis raporu panoya kopyalandı; gerekirse yapıştır.", "The full diagnostics report is on your clipboard; paste it if needed."));
+    }
+
+    private void Uninstall()
+    {
+        var answer = MessageBox.Show(
+            L("TelepAIth kaldırılsın mı?\n\nClaude Code/Codex bağlantıları, otomatik başlatma, kısayol ve program dosyaları silinir. Ayarların (~/.telepaith) kalır.",
+              "Uninstall TelepAIth?\n\nClaude Code/Codex connections, autostart, the shortcut and program files will be removed. Your settings (~/.telepaith) stay."),
+            AppInfo.Name, MessageBoxButton.YesNo, MessageBoxImage.Question);
+        if (answer != MessageBoxResult.Yes) return;
+        Installer.Uninstall();
+        Application.Current.Shutdown();
+    }
+
+    // MARK: ISettingsHost
+
+    public void SetHook(HookTarget target, bool on, bool quiet)
+    {
+        try
+        {
+            if (!on)
+            {
+                if (HookInstaller.IsInstalled(target)) HookInstaller.Uninstall(target);
+            }
+            else if (!HookInstaller.IsInstalled(target))
+            {
+                HookInstaller.Install(target, Installer.HookExe, Prefs.Shield && target == HookTarget.Claude);
+                Manager.Model(HookInstaller.Source(target));
+                if (!quiet)
+                {
+                    var info = target == HookTarget.Claude
+                        ? L("Yeni açacağın Claude Code oturumları robota haber verecek. Açık oturumlar yeniden başlatılınca bağlanır.\n\nAyarların yedeği: %USERPROFILE%\\.claude\\settings.json.telepaith-backup",
+                            "New Claude Code sessions will report to the robot. Open sessions connect after a restart.\n\nBackup of your settings: %USERPROFILE%\\.claude\\settings.json.telepaith-backup")
+                        : L("Codex yeni hook'lar için onay istiyor: Codex'i bir sonraki açışında /hooks yazıp TelepAIth hook'larını onayla.",
+                            "Codex asks you to approve new hooks: next time you open Codex, type /hooks and approve the TelepAIth hooks.");
+                    MessageBox.Show(info, HookInstaller.DisplayName(target) + L(" bağlandı", " connected"));
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(ex.Message, L("Bağlanamadı", "Couldn't connect"));
+        }
+        Changed();
+    }
+
+    public void SetShield(bool on)
+    {
+        Prefs.Shield = on;
+        if (HookInstaller.IsInstalled(HookTarget.Claude))
+        {
+            try { HookInstaller.Install(HookTarget.Claude, Installer.HookExe, on); } catch { }
+        }
+        Changed();
+    }
+
+    public void SetNarrator(bool on)
+    {
+        try
+        {
+            if (!on)
+            {
+                if (NarratorInstaller.IsInstalled()) NarratorInstaller.Uninstall();
+            }
+            else if (!NarratorInstaller.IsInstalled())
+            {
+                NarratorInstaller.Install(Installer.HookExe);
+                var cmd = NarratorInstaller.ClaudeCodeCommand(Installer.HookExe);
+                var text = L("1) Claude uygulamasını kapatıp yeniden aç.\n2) Claude'un ne zaman haber vereceğini bilmesi için bu talimatı Claude → Ayarlar → Profil'deki tercihlere ekle (Evet'e basınca panoya kopyalanır):\n\n",
+                               "1) Quit and reopen the Claude app.\n2) Add this to Claude → Settings → Profile preferences so Claude knows when to report (press Yes to copy it):\n\n")
+                           + NarratorInstaller.SuggestedInstruction
+                           + L("\n\nClaude Code için terminalde bir kere:\n", "\n\nFor Claude Code, run once in a terminal:\n") + cmd;
+                if (MessageBox.Show(text, L("Anlatıcı eklendi", "Narrator added"), MessageBoxButton.YesNo) == MessageBoxResult.Yes)
+                {
+                    try { Clipboard.SetText(NarratorInstaller.SuggestedInstruction); } catch { }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(ex.Message, L("Anlatıcı eklenemedi", "Couldn't add the narrator"));
+        }
+        Changed();
+    }
+
+    public void ShowClaudeBarHelp()
+    {
+        var url = $"http://localhost:{(_server.Port > 0 ? _server.Port : AppInfo.DefaultPort)}/claudebar";
+        var text = L($"ClaudeBar → Settings → Sync & Alerts → Webhooks → Add Webhook:\n\nURL: {url}\nChannel: JSON\nSends: Quota alerts ve Status alerts\n\nEvet'e basınca URL panoya kopyalanır.",
+                     $"ClaudeBar → Settings → Sync & Alerts → Webhooks → Add Webhook:\n\nURL: {url}\nChannel: JSON\nSends: Quota alerts and Status alerts\n\nPress Yes to copy the URL.");
+        if (MessageBox.Show(text, "ClaudeBar", MessageBoxButton.YesNo) == MessageBoxResult.Yes)
+        {
+            try { Clipboard.SetText(url); } catch { }
+        }
+    }
+}
+
+/// <summary>Menüdeki "Dene" örnekleri</summary>
+internal static class Demos
+{
+    private static string Id() => "demo-" + Random.Shared.Next(1000, 9999);
+
+    private static void Play(AppController c, params (double Delay, AgentEvent Event)[] steps)
+    {
+        foreach (var (delay, e) in steps)
+        {
+            var ev = e;
+            _ = Application.Current.Dispatcher.InvokeAsync(async () =>
+            {
+                await Task.Delay(TimeSpan.FromSeconds(delay));
+                c.Manager.Handle(ev);
+            });
+        }
+    }
+
+    private static AgentEvent E(string source, string session, EventKind kind, RobotState? state = null, string? text = null, string? project = null,
+        string? emoji = null, string? lastMessage = null, bool force = false) =>
+        new(source, session, kind, state, text, emoji: emoji) { Project = project, LastMessage = lastMessage, ForceNotify = force };
+
+    public static Action Claude(AppController c) => () =>
+    {
+        var s = Id();
+        const string p = "demo-app";
+        Play(c,
+            (0, E("claude", s, EventKind.Prompt, RobotState.Thinking, L("Düşünüyor…", "Thinking…"), p, "🔮")),
+            (2, E("claude", s, EventKind.Tool, RobotState.Reading, L("Okuyor: ", "Reading ") + "App.cs", p, "📖")),
+            (5, E("claude", s, EventKind.Tool, RobotState.Editing, L("Düzenliyor: ", "Editing ") + "App.cs", p, "✍️")),
+            (8, E("claude", s, EventKind.Tool, RobotState.Running, L("Komut: ", "Command: ") + "dotnet test", p, "🧪")),
+            (12, E("claude", s, EventKind.Stop, RobotState.Done, project: p, lastMessage: L("Testler geçti, değişiklik hazır.", "Tests pass, the change is ready."), force: true)));
+    };
+
+    public static Action GptWaiting(AppController c) => () =>
+    {
+        var s = Id();
+        const string p = "web-app";
+        Play(c,
+            (0, E("gpt", s, EventKind.Prompt, RobotState.Thinking, L("Düşünüyor…", "Thinking…"), p, "🔮")),
+            (2, E("gpt", s, EventKind.Tool, RobotState.Searching, L("Arıyor: ", "Searching for ") + "useEffect", p, "🔍")),
+            (5, E("gpt", s, EventKind.Waiting, RobotState.Waiting, L("Onayını bekliyor: ", "Needs your approval: ") + "PowerShell — npm install", p, "✋")),
+            (11, E("gpt", s, EventKind.ToolDone)),
+            (12, E("gpt", s, EventKind.Tool, RobotState.Running, L("Komut: ", "Command: ") + "npm install", p, "📦")),
+            (15, E("gpt", s, EventKind.Stop, RobotState.Done, project: p)));
+    };
+
+    public static AgentEvent Quota() =>
+        E("claude", "claudebar", EventKind.Quota, text: L("Kalan kota: %18 (demo)", "Quota left: 18% (demo)"), emoji: "🔋", force: true);
+
+    public static Action Parallel(AppController c) => () =>
+    {
+        var a = Id();
+        var b = Id();
+        Play(c,
+            (0, E("claude", a, EventKind.Prompt, RobotState.Thinking, L("Düşünüyor…", "Thinking…"), "api", "🔮")),
+            (1, E("claude", b, EventKind.Prompt, RobotState.Thinking, L("Düşünüyor…", "Thinking…"), "web", "🔮")),
+            (2, E("gpt", b + "g", EventKind.Tool, RobotState.Running, L("Komut: ", "Command: ") + "npm test", "mobile", "🧪")),
+            (4, E("claude", a, EventKind.Tool, RobotState.Editing, L("Düzenliyor: ", "Editing ") + "server.ts", "api", "✍️")),
+            (6, E("claude", b, EventKind.Waiting, RobotState.Waiting, L("Onayını bekliyor: ", "Needs your approval: ") + "Remove-Item dist", "web", "✋")),
+            (12, E("claude", b, EventKind.ToolDone)),
+            (13, E("gpt", b + "g", EventKind.Stop, RobotState.Done, project: "mobile")),
+            (15, E("claude", a, EventKind.Stop, RobotState.Done, project: "api")),
+            (16, E("claude", b, EventKind.Stop, RobotState.Done, project: "web")));
+    };
+}

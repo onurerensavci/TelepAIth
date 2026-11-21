@@ -20,3 +20,23 @@ jobs:
           scripts/build-app.sh
           test -f build/TelepAIth.app/Contents/Resources/AppIcon.icns
           /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" build/TelepAIth.app/Contents/Info.plist
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Çekirdek testleri
+        run: dotnet run --project windows/TelepAIth.Core.Tests -c Release
+      - name: Uygulamayı derle
+        run: dotnet build windows/TelepAIth/TelepAIth.csproj -c Release
+      - name: Hook yardımcısı (Native AOT)
+        shell: pwsh
+        run: |
+          dotnet publish windows/TelepAIthHook/TelepAIthHook.csproj -c Release -r win-x64 -p:PublishAot=true -o out/hook
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          '{"hook_event_name":"Stop","session_id":"ci"}' | ./out/hook/TelepAIthHook.exe hook claude
+          ./out/hook/TelepAIthHook.exe shield
+          Get-Item out/hook/TelepAIthHook.exe | Select-Object Name, Length

@@ -1,0 +1,30 @@
+TelepAIth for Windows (deneysel / experimental)
+================================================
+
+TÜRKÇE
+------
+1. Bu klasördeki TelepAIth.exe'ye çift tıkla.
+2. Windows "Bilgisayarınız korundu" (SmartScreen) derse: "Ek bilgi" → "Yine de çalıştır".
+   (Uygulama imzalı değil; bu uyarı ilk açılışta bir kere çıkar.)
+3. TelepAIth kendini %LOCALAPPDATA%\Programs\TelepAIth klasörüne kurar, Başlat menüsüne ekler
+   ve Windows açılınca başlar. Bu indirdiğin klasörü sonra silebilirsin.
+4. Kurulum sihirbazı açılır: Claude Code / Codex bağlantılarını oradan aç.
+
+- Robot görev çubuğunun sağındaki simgede (tepsi) yaşar: sağ tık → Ayarlar.
+- Bir sorun olursa robota sağ tıkla → "Hata bildir…". Teşhis raporu kendiliğinden eklenir.
+- Kaldırmak için: tepsi simgesi → Yardım → "TelepAIth'i kaldır…".
+
+ENGLISH
+-------
+1. Double-click TelepAIth.exe in this folder.
+2. If Windows says "Windows protected your PC" (SmartScreen): "More info" → "Run anyway".
+   (The app isn't signed; you'll see this once.)
+3. TelepAIth installs itself to %LOCALAPPDATA%\Programs\TelepAIth, adds a Start menu entry
+   and starts with Windows. You can delete this downloaded folder afterwards.
+4. The setup assistant opens: connect Claude Code / Codex from there.
+
+- The robot lives in the taskbar tray icon: right-click → Settings.
+- If something goes wrong, right-click the robot → "Report a problem…". Diagnostics are attached.
+- To uninstall: tray icon → Help → "Uninstall TelepAIth…".
+
+https://github.com/onurerensavci/TelepAIth

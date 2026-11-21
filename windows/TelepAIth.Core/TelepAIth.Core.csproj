@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Platformdan bağımsız mantık: olay ayrıştırma, robot durumu, hook ayarları, MCP. Linux'ta da derlenir ve test edilir. -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>TelepAIth.Core</RootNamespace>
+  </PropertyGroup>
+</Project>

@@ -1,0 +1,506 @@
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Linq;
+using System.Windows;
+using System.Windows.Threading;
+using TelepAIth.Core;
+using static TelepAIth.Core.Text;
+
+namespace TelepAIth;
+
+/// <summary>AI başına durum modeli tutar, ekrandaki tek robotun hangisini göstereceğine karar verir.</summary>
+internal sealed class RobotManager
+{
+    private readonly Dictionary<string, RobotModel> _models = new();
+    private readonly List<string> _order = new();
+    private RobotAvatar? _avatar;
+    private RobotWindow? _window;
+    private string? _pinnedSource;
+    private IntPtr _dockWindow;            // robotun peşinden gittiği AI penceresi
+    private IntPtr _lastForeground;
+    private readonly DispatcherTimer _timer = new(DispatcherPriority.Render) { Interval = TimeSpan.FromMilliseconds(33) };
+    private readonly Stopwatch _clock = Stopwatch.StartNew();
+    private double _lastTick, _lastForegroundCheck, _lastDockCheck, _lastMiniCheck, _lastSlowCheck, _lastUpdateAnnounce = -1e9;
+    private bool _wasFocused = FocusMode.IsActive;
+    private readonly AppWatcher _watcher = new();
+    private readonly Dictionary<int, (int? Pid, DateTime At)> _ancestorCache = new();
+
+    public Dictionary<string, string> WatcherStatus { get; private set; } = new();
+    public string WatcherDiagnostics => _watcher.Diagnostics;
+
+    public event Action? Changed;
+    public Action? OpenSettings, ReportBug, OpenDiagnostics;
+    public Func<System.Windows.Controls.ContextMenu>? BuildRobotMenu;
+
+    private bool _visible = Prefs.RobotsVisible;
+
+    public bool Visible
+    {
+        get => _visible;
+        set
+        {
+            _visible = value;
+            Prefs.RobotsVisible = value;
+            if (_window == null) return;
+            if (value) _window.Show(); else _window.Hide();
+            Changed?.Invoke();
+        }
+    }
+
+    public IEnumerable<RobotModel> AllModels => _order.Select(s => _models[s]);
+    public RobotModel? Current => _avatar?.Current;
+    public bool IsLocked => Prefs.RobotLocked;
+
+    private double Now => _clock.Elapsed.TotalSeconds;
+
+    // MARK: Başlat
+
+    public void Start()
+    {
+        var known = KnownSources;
+        if (known.Count == 0) known.Add("claude");
+        foreach (var s in known) Model(s);
+
+        var avatar = new RobotAvatar(Model(known[0]));
+        avatar.UserMoved += () => _dockWindow = IntPtr.Zero;
+        avatar.Focus = FocusMode.IsActive;
+        _avatar = avatar;
+
+        var window = new RobotWindow(avatar);
+        window.Clicked += RobotClicked;
+        window.DoubleClicked += OpenCurrentApp;
+        window.BubbleClicked += BubbleClicked;
+        window.BuildMenu = () => BuildRobotMenu!();
+        _window = window;
+
+        RobotModel.PlaySound = name => Application.Current.Dispatcher.BeginInvoke(() => Sounds.Play(name));
+        Notifier.OnClick = Activate;
+
+        _watcher.EventFound += e => Application.Current.Dispatcher.BeginInvoke(() => Handle(e));
+        _watcher.StatusChanged += st => Application.Current.Dispatcher.BeginInvoke(() =>
+        {
+            WatcherStatus = st;
+            Changed?.Invoke();
+        });
+        if (Prefs.WatchApps) _watcher.Start();
+
+        Microsoft.Win32.SystemEvents.DisplaySettingsChanged += (_, _) => Application.Current.Dispatcher.BeginInvoke(() =>
+        {
+            if (_dockWindow != IntPtr.Zero) RefreshDock(); else _avatar?.GoHome();
+        });
+
+        _timer.Tick += (_, _) => Tick();
+        _timer.Start();
+
+        if (_visible) window.Show();
+        ForegroundChanged(Native.GetForegroundWindow());
+    }
+
+    public void Stop()
+    {
+        _watcher.Stop();
+        _timer.Stop();
+    }
+
+    private static List<string> KnownSources
+    {
+        get => (Prefs.GetString("knownSources") ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries).ToList();
+        set => Prefs.Set("knownSources", string.Join(",", value));
+    }
+
+    public RobotModel Model(string source)
+    {
+        if (_models.TryGetValue(source, out var existing)) return existing;
+        var m = new RobotModel(source);
+        m.StateChanged += () =>
+        {
+            ChooseDisplay();
+            Changed?.Invoke();
+        };
+        _models[source] = m;
+        _order.Add(source);
+        var known = KnownSources;
+        if (!known.Contains(source))
+        {
+            known.Add(source);
+            KnownSources = known;
+        }
+        return m;
+    }
+
+    public void SetWatchApps(bool on)
+    {
+        Prefs.WatchApps = on;
+        if (on) _watcher.Start(); else _watcher.Stop();
+        if (!on) WatcherStatus = new();
+        Changed?.Invoke();
+    }
+
+    // MARK: Olaylar
+
+    public void Handle(AgentEvent e)
+    {
+        // Terminaldeki Claude Code / Codex: hook'u çalıştıran sürecin penceresi olan atası (terminal, VS Code…)
+        if (e.AppPid == null && e.HookParentPid is { } ppid) e.AppPid = WindowedAncestor(ppid);
+        var m = Model(e.Source);
+        if (m.Apply(e) is { } notice) Deliver(notice, e.QuietIfForegroundPid);
+        ChooseDisplay();
+        Changed?.Invoke();
+    }
+
+    private int? WindowedAncestor(int pid)
+    {
+        if (_ancestorCache.TryGetValue(pid, out var c) && (DateTime.Now - c.At).TotalMinutes < 10) return c.Pid;
+        var found = Native.WindowedAncestor(pid);
+        if (_ancestorCache.Count > 200) _ancestorCache.Clear();
+        _ancestorCache[pid] = (found, DateTime.Now);
+        return found;
+    }
+
+    /// <summary>Bildirimi gönderir: odak modunda sadece önemliler, kullanıcı o pencereye bakıyorsa hiç (ayara göre).</summary>
+    private void Deliver(RobotModel.Notice notice, int? quietPid)
+    {
+        if (FocusMode.IsActive && !notice.Important) return;
+        if (!Prefs.NotifyWhenFrontmost && quietPid is { } pid && Native.WindowPid(Native.GetForegroundWindow()) == pid) return;
+        Notifier.Notify(notice.Title, notice.Body, notice.Target);
+        if (!FocusMode.IsActive) Speech.Say(notice.Title);
+    }
+
+    /// <summary>Bir uygulamayı öne getirir (süreç kimliğiyle ya da süreç adıyla).</summary>
+    public static void Activate(AppTarget target)
+    {
+        try
+        {
+            if (target.Pid is { } pid)
+            {
+                using var p = Process.GetProcessById(pid);
+                if (p.MainWindowHandle != IntPtr.Zero)
+                {
+                    Native.Activate(p.MainWindowHandle);
+                    return;
+                }
+            }
+        }
+        catch { }
+        if (string.IsNullOrEmpty(target.ProcessName)) return;
+        foreach (var p in Process.GetProcessesByName(target.ProcessName.Replace(".exe", "")))
+        {
+            using (p)
+            {
+                if (p.MainWindowHandle == IntPtr.Zero) continue;
+                Native.Activate(p.MainWindowHandle);
+                return;
+            }
+        }
+    }
+
+    private void BubbleClicked()
+    {
+        if (_avatar?.Current.Target is { IsEmpty: false } t) Activate(t);
+        else OpenCurrentApp();
+    }
+
+    /// <summary>Robota çift tıklayınca: gösterdiği AI'ın uygulamasını öne getir (açık değilse aç).</summary>
+    private void OpenCurrentApp()
+    {
+        if (_avatar == null) return;
+        var source = _avatar.Current.Source;
+        foreach (var p in Process.GetProcesses())
+        {
+            using (p)
+            {
+                try
+                {
+                    if (p.Id == Environment.ProcessId || p.MainWindowHandle == IntPtr.Zero) continue;
+                    if (AppMatcher.Source(p.ProcessName) != source) continue;
+                    Native.Activate(p.MainWindowHandle);
+                    return;
+                }
+                catch { }
+            }
+        }
+        // Açık değil: kurulu uygulamayı başlatmayı dene
+        var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        var candidates = source switch
+        {
+            "claude" => new[] { System.IO.Path.Combine(local, "AnthropicClaude", "claude.exe"), "claude:" },
+            "gpt" => new[] { "chatgpt:" },
+            _ => Array.Empty<string>(),
+        };
+        foreach (var c in candidates)
+        {
+            if (c.EndsWith(".exe") && !System.IO.File.Exists(c)) continue;
+            Shell.Open(c);
+            return;
+        }
+    }
+
+    /// <summary>Robota tıklayınca: güncelleme varsa kur, bir sorun varsa söyle, yoksa son olayları göster.</summary>
+    private void RobotClicked()
+    {
+        if (_avatar == null) return;
+        switch (_avatar.Health)
+        {
+            case Health.Update:
+                Updater.Shared.PromptInstall();
+                break;
+            case Health.Broken:
+                _avatar.Current.Say(WithEmoji("🔴", _avatar.HealthText), 8);
+                break;
+            default:
+                _avatar.Current.ShowHistory();
+                break;
+        }
+    }
+
+    public void ShowHistory(string source)
+    {
+        if (!_models.TryGetValue(source, out var m) || _avatar == null) return;
+        _avatar.Show(m);
+        m.ShowHistory();
+    }
+
+    // MARK: Sağlık ışığı
+
+    public void SetHealth(Health health, string text)
+    {
+        if (_avatar == null) return;
+        var wasUpdate = _avatar.Health == Health.Update;
+        if (_avatar.Health == health && _avatar.HealthText == text) return;
+        _avatar.SetHealth(health, text);
+        if (health == Health.Update && !wasUpdate) AnnounceUpdate(text);
+    }
+
+    private void AnnounceUpdate(string version)
+    {
+        _lastUpdateAnnounce = Now;
+        var text = L($"Güncelleme var: {version}! Bana tıkla, kurayım.", $"Update available: {version}! Click me to install.");
+        _avatar?.Current.Say(WithEmoji("⬆️", text), 10);
+        Speech.Say(text);
+    }
+
+    // MARK: Ayarlar
+
+    public void SetRobotScale(double value)
+    {
+        Prefs.RobotScale = value;
+        if (_avatar is { IsDragging: false } a)
+        {
+            if (_dockWindow != IntPtr.Zero) RefreshDock(); else a.GoHome();
+        }
+        Changed?.Invoke();
+    }
+
+    public void SetAlwaysOnTop(bool on)
+    {
+        _window?.SetAlwaysOnTop(on);
+        Changed?.Invoke();
+    }
+
+    public void SetLocked(bool on)
+    {
+        Prefs.RobotLocked = on;
+        if (on) _dockWindow = IntPtr.Zero;
+        else
+        {
+            _lastForeground = IntPtr.Zero;
+            ForegroundChanged(Native.GetForegroundWindow());
+        }
+        Changed?.Invoke();
+    }
+
+    public void FollowSettingChanged()
+    {
+        if (Prefs.FollowAppWindow)
+        {
+            _lastForeground = IntPtr.Zero;
+            ForegroundChanged(Native.GetForegroundWindow());
+        }
+        else
+        {
+            _dockWindow = IntPtr.Zero;
+            _avatar?.GoHome();
+        }
+    }
+
+    /// <summary>Robotu şu anki masaüstüne ve ekrana getir.</summary>
+    public void BringHere()
+    {
+        if (!Visible) Visible = true;
+        _window?.MoveToDesktopOf(Native.GetForegroundWindow());
+        _avatar?.GoHome();
+    }
+
+    public void ReloadAppearance()
+    {
+        Themes.Shared.Reload();
+        Skins.Reload();
+        foreach (var m in _models.Values) m.ReloadTheme();
+    }
+
+    // MARK: Odak modu ve günlük özet
+
+    public void FocusChanged()
+    {
+        var on = FocusMode.IsActive;
+        if (_avatar != null) _avatar.Focus = on;
+        if (on != _wasFocused)
+        {
+            _wasFocused = on;
+            Changed?.Invoke();
+        }
+    }
+
+    private void UpdateMeeting()
+    {
+        var fg = Native.GetForegroundWindow();
+        var name = AppMatcher.ProcessName(Native.WindowPid(fg));
+        var frontIsAI = AppMatcher.Source(name) != null;
+        var meeting = FocusMode.IsMeetingProcess(name) ||
+                      (!frontIsAI && Native.MicrophoneInUse(app => app.Contains("TelepAIth", StringComparison.OrdinalIgnoreCase)));
+        FocusMode.MeetingActive = meeting;
+        FocusChanged();
+    }
+
+    public string? TodaySummaryText() =>
+        DailyStats.Shared.Summary(s => _models.TryGetValue(s, out var m) ? m.Theme.DisplayName : Themes.Shared.Theme(s).DisplayName, DateTime.Now);
+
+    public void ShowSummary()
+    {
+        if (_avatar == null) return;
+        if (!Visible) Visible = true;
+        if (TodaySummaryText() is { } text)
+            _avatar.Current.Say(WithEmoji("📊", L("Bugün:\n", "Today:\n") + text), 14);
+        else
+            _avatar.Current.Say(WithEmoji("📊", L("Bugün henüz bitmiş bir iş yok.", "No finished tasks yet today.")), 5);
+    }
+
+    private void CheckDailySummary()
+    {
+        if (!Prefs.DailySummary || DailyStats.Shared.ShownToday || FocusMode.IsActive || DateTime.Now.Hour < Prefs.DailySummaryHour) return;
+        if (TodaySummaryText() is not { } text) return;
+        DailyStats.Shared.ShownToday = true;
+        _avatar?.Current.Say(WithEmoji("📊", L("Günün özeti:\n", "Your day:\n") + text), 14);
+        Notifier.Notify(WithEmoji("📊", L("TelepAIth · günün özeti", "TelepAIth · your day")), text);
+    }
+
+    // MARK: Hangi AI gösterilsin?
+
+    private void ForegroundChanged(IntPtr hwnd)
+    {
+        if (hwnd == IntPtr.Zero || hwnd == _lastForeground) return;
+        if (_window != null && hwnd == _window.Handle) return;
+        _lastForeground = hwnd;
+        var pid = Native.WindowPid(hwnd);
+        if (pid == Environment.ProcessId) return;   // kendi pencerelerimiz (ayarlar, menü)
+        var name = AppMatcher.ProcessName(pid);
+        _pinnedSource = AppMatcher.Source(name);
+        if (_pinnedSource != null) Model(_pinnedSource);
+        ChooseDisplay();
+        if (Prefs.WatchApps) _watcher.Kick(pid);
+
+        // Sadece AI uygulamasına geçince robot o pencerenin sağ-alt köşesine uçsun; başka yerde olduğu yerde kalsın.
+        if (_pinnedSource != null && Prefs.FollowAppWindow && !Prefs.RobotLocked)
+        {
+            _dockWindow = hwnd;
+            RefreshDock();
+        }
+        else
+        {
+            _dockWindow = IntPtr.Zero;
+        }
+        // AI başka bir sanal masaüstündeyse robot da oraya geçsin
+        if (_pinnedSource != null && Visible && !Prefs.RobotLocked && _window is { IsOnCurrentDesktop: false })
+            _window.MoveToDesktopOf(hwnd);
+    }
+
+    private void RefreshDock()
+    {
+        if (_dockWindow == IntPtr.Zero || _avatar == null) return;
+        if (Native.IsWindowVisible(_dockWindow) && !Native.IsIconic(_dockWindow) &&
+            Native.WindowFrame(_dockWindow) is { } frame && frame.Width >= 320 && frame.Height >= 240)
+            _avatar.Dock(frame);
+        else
+            _avatar.GoHome();   // pencere küçültülmüş ya da kapalı
+    }
+
+    /// <summary>Öndeki uygulama bir AI'sa onu göster. Değilse en acil olanı (seni bekleyen > çalışan), eşitlikte en son hareket edeni.</summary>
+    private void ChooseDisplay()
+    {
+        if (_avatar == null) return;
+        if (_pinnedSource != null && _models.TryGetValue(_pinnedSource, out var pinned))
+        {
+            _avatar.Show(pinned);
+            return;
+        }
+        var current = _avatar.Current;
+        RobotModel? best = null;
+        foreach (var m in AllModels)
+        {
+            if (m.LastRealEvent is not { } last) continue;
+            if (best?.LastRealEvent is { } bLast)
+            {
+                if (m.State.Priority() > best.State.Priority() || (m.State.Priority() == best.State.Priority() && last > bLast)) best = m;
+            }
+            else best = m;
+        }
+        if (best == null || ReferenceEquals(best, current)) return;
+        var higher = best.State.Priority() > current.State.Priority();
+        var sameButNewer = best.State.Priority() == current.State.Priority()
+                           && best.State.Priority() >= RobotState.Thinking.Priority()
+                           && (best.LastRealEvent ?? DateTime.MinValue) > (current.LastRealEvent ?? DateTime.MinValue);
+        if (higher || sameButNewer) _avatar.Show(best);
+    }
+
+    // MARK: Döngü
+
+    private void Tick()
+    {
+        var now = Now;
+        var dt = Math.Min(0.1, now - _lastTick);
+        _lastTick = now;
+        var date = DateTime.Now;
+        foreach (var m in _models.Values) m.Refresh(date);
+
+        // Öndeki pencere değişti mi? (saniyede 10 kez)
+        if (now - _lastForegroundCheck > 0.1)
+        {
+            _lastForegroundCheck = now;
+            ForegroundChanged(Native.GetForegroundWindow());
+        }
+        // Takip edilen pencere taşındı mı? (saniyede 5 kez)
+        if (_dockWindow != IntPtr.Zero && now - _lastDockCheck > 0.2)
+        {
+            _lastDockCheck = now;
+            RefreshDock();
+        }
+        // Güncelleme hâlâ bekliyorsa, robot boştayken arada bir hatırlatsın
+        if (_avatar is { Health: Health.Update } a && now - _lastUpdateAnnounce > 45 * 60 && a.Current.State == RobotState.Idle)
+            AnnounceUpdate(a.HealthText);
+        // Bekleme hatırlatmaları gibi zamanlayıcı bildirimleri
+        foreach (var m in _models.Values.Where(m => m.PendingNotices.Count > 0))
+        {
+            var notices = m.PendingNotices.ToList();
+            m.PendingNotices.Clear();
+            foreach (var n in notices) Deliver(n, n.Target?.Pid);
+        }
+        // Minik kafalar: gösterilenin dışında çalışan/bekleyen tüm oturumlar
+        if (now - _lastMiniCheck > 0.5 && _avatar != null)
+        {
+            _lastMiniCheck = now;
+            var minis = new List<RobotModel.MiniSession>();
+            foreach (var m in AllModels)
+                minis.AddRange(m.MiniSessions(ReferenceEquals(m, _avatar.Current) ? m.BestSessionId : null, date));
+            _avatar.Minis = minis;
+        }
+        // Toplantı, odak süresi, günlük özet (5 sn'de bir)
+        if (now - _lastSlowCheck > 5)
+        {
+            _lastSlowCheck = now;
+            UpdateMeeting();
+            CheckDailySummary();
+        }
+        _window?.Frame(dt);
+    }
+}

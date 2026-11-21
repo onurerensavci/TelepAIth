@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Claude Code / Codex hook'larının çağırdığı küçük yardımcı: olayı okur, TelepAIth'e iletir, hemen çıkar.
+    Windows'ta Native AOT ile yayınlanır (çok hızlı açılır, hook'ları yavaşlatmaz).
+    Modlar: hook (olay iletme), shield (kalkan), mcp (anlatıcı sunucusu).
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <AssemblyName>TelepAIthHook</AssemblyName>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\TelepAIth.Core\TelepAIth.Core.csproj" />
+  </ItemGroup>
+</Project>
