@@ -452,6 +452,32 @@ internal sealed class RobotManager
         if (higher || sameButNewer) _avatar.Show(best);
     }
 
+    /// <summary>Robotun o anki durumu (JSON) — teşhis ve otomatik testler için</summary>
+    public string StateJson()
+    {
+        var o = new System.Text.Json.Nodes.JsonObject
+        {
+            ["visible"] = Visible,
+            ["windowVisible"] = _window?.IsVisible ?? false,
+            ["source"] = _avatar?.Current.Source,
+            ["state"] = _avatar?.Current.State.ToString(),
+            ["bubble"] = _avatar?.Current.BubbleText,
+            ["subtitle"] = _avatar?.Current.BubbleSubtitle,
+            ["minis"] = _avatar?.Minis.Count ?? 0,
+            ["health"] = _avatar?.Health.ToString(),
+            ["alignLeft"] = _avatar?.AlignLeft,
+            ["bubbleBelow"] = _avatar?.BubbleBelow,
+            ["focus"] = FocusMode.IsActive,
+        };
+        if (_avatar != null)
+        {
+            var r = _avatar.WindowRect;
+            o["window"] = new System.Text.Json.Nodes.JsonObject { ["x"] = r.X, ["y"] = r.Y, ["w"] = r.W, ["h"] = r.H };
+            o["head"] = new System.Text.Json.Nodes.JsonObject { ["x"] = Math.Round(_avatar.HeadX), ["y"] = Math.Round(_avatar.HeadY), ["size"] = Math.Round(_avatar.HeadPx) };
+        }
+        return o.ToJsonString();
+    }
+
     // MARK: Döngü
 
     private void Tick()

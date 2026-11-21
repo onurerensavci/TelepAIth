@@ -41,6 +41,7 @@ internal sealed class AppController : ISettingsHost
         Manager.Start();
 
         _server.EventReceived += e => Application.Current.Dispatcher.BeginInvoke(() => Manager.Handle(e));
+        _server.StateProvider = () => Application.Current.Dispatcher.Invoke(Manager.StateJson);
         _server.Start();
         _serverError = _server.Error;
 

@@ -21,6 +21,9 @@ internal sealed class EventServer
     /// <summary>Gelen olay (arka plan iş parçacığında çağrılır)</summary>
     public event Action<AgentEvent>? EventReceived;
 
+    /// <summary>GET /state: robotun o anki durumu (teşhis ve otomatik testler için)</summary>
+    public Func<string>? StateProvider;
+
     public void Start()
     {
         for (var port = AppInfo.DefaultPort; port < AppInfo.DefaultPort + 20; port++)
@@ -101,6 +104,11 @@ internal sealed class EventServer
                 if (request.Method == "GET" && (request.Path == "/" || request.Path == "/health"))
                 {
                     await Respond(stream, 200, "{\"app\":\"TelepAIth\",\"version\":\"" + AppInfo.Version + "\"}");
+                    return;
+                }
+                if (request.Method == "GET" && request.Path == "/state" && StateProvider != null)
+                {
+                    await Respond(stream, 200, StateProvider());
                     return;
                 }
                 if (request.Method != "POST") { await Respond(stream, 405, "method not allowed"); return; }
