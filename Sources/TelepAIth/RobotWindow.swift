@@ -95,6 +95,29 @@ final class RobotAvatar: ObservableObject {
         return screens.min { distance(p, $0.frame) < distance(p, $1.frame) }
     }
 
+    /// Kafanın kenara uzaklığı: robotun penceresi de ekranın dışına (komşu ekrana) taşmasın
+    private static var inset: CGFloat { Swift.max(Layout.edgeInset, Layout.margin) }
+
+    /// Bir dikdörtgenin en çok üstünde durduğu ekran (iki ekrana yayılan pencere için)
+    private static func screen(for rect: NSRect) -> NSScreen? {
+        NSScreen.screens.max { a, b in
+            let ia = a.frame.intersection(rect), ib = b.frame.intersection(rect)
+            return ia.width * ia.height < ib.width * ib.height
+        } ?? screen(containing: CGPoint(x: rect.midX, y: rect.midY))
+    }
+
+    /// Balon tarafı ekranın dışına taşacaksa öbür yöne aç (Cocoa: y yukarı doğru)
+    private static func fitSides(_ p: CGPoint, left: Bool, below: Bool, in frame: NSRect) -> (Bool, Bool) {
+        let size = Layout.windowSize
+        let near = Layout.margin + Layout.headSize.width / 2
+        var left = left, below = below
+        if left && p.x - near + size.width > frame.maxX { left = false }
+        else if !left && p.x + near - size.width < frame.minX { left = true }
+        if below && p.y + near - size.height < frame.minY { below = false }
+        else if !below && p.y - near + size.height > frame.maxY { below = true }
+        return (left, below)
+    }
+
     private static func distance(_ p: CGPoint, _ r: NSRect) -> CGFloat {
         let dx = Swift.max(r.minX - p.x, 0, p.x - r.maxX)
         let dy = Swift.max(r.minY - p.y, 0, p.y - r.maxY)
@@ -110,8 +133,8 @@ final class RobotAvatar: ObservableObject {
     }
 
     private static func cornerPoint(_ corner: Corner, in frame: NSRect) -> CGPoint {
-        let hw = Layout.headSize.width / 2 + Layout.edgeInset
-        let hh = Layout.headSize.height / 2 + Layout.edgeInset
+        let hw = Layout.headSize.width / 2 + inset
+        let hh = Layout.headSize.height / 2 + inset
         switch corner {
         case .bottomLeft: return CGPoint(x: frame.minX + hw, y: frame.minY + hh)
         case .bottomRight: return CGPoint(x: frame.maxX - hw, y: frame.minY + hh)
@@ -121,8 +144,8 @@ final class RobotAvatar: ObservableObject {
     }
 
     private static func clamp(_ p: CGPoint, to frame: NSRect) -> CGPoint {
-        let hw = Layout.headSize.width / 2 + Layout.edgeInset
-        let hh = Layout.headSize.height / 2 + Layout.edgeInset
+        let hw = Layout.headSize.width / 2 + inset
+        let hh = Layout.headSize.height / 2 + inset
         let x = Swift.min(Swift.max(p.x, frame.minX + hw), frame.maxX - hw)
         let y = Swift.min(Swift.max(p.y, frame.minY + hh), frame.maxY - hh)
         return CGPoint(x: x, y: y)
@@ -153,8 +176,11 @@ final class RobotAvatar: ObservableObject {
     func goHome() {
         guard !isDragging else { return }
         if locked {
-            // Kilitliyken yerinde kalır; sadece ekran söküldüyse görünür bir yere taşınır
-            if !NSScreen.screens.contains(where: { $0.frame.contains(head) }) { moveTo(homePoint) }
+            // Kilitliyken yerinde kalır; sadece ekran söküldüyse görünür bir yere taşınır, iki ekrana taşıyorsa içeri alınır
+            if !NSScreen.screens.contains(where: { $0.frame.contains(head) }) { moveTo(homePoint); return }
+            let frame = RobotAvatar.screen(containing: head)?.visibleFrame ?? RobotAvatar.fallbackFrame
+            let p = RobotAvatar.clamp(head, to: frame)
+            if hypot(p.x - head.x, p.y - head.y) > 0.5 { moveTo(p) }
             return
         }
         moveTo(homePoint)
@@ -166,12 +192,14 @@ final class RobotAvatar: ObservableObject {
         var p = CGPoint(x: window.maxX - RobotAvatar.dockOffset.x, y: window.minY + RobotAvatar.dockOffset.y)
         p.x = Swift.max(p.x, window.minX + Layout.headSize.width / 2)
         p.y = Swift.min(p.y, window.maxY - Layout.headSize.height / 2)
+        // Pencere iki ekrana yayılmışsa çoğunun durduğu ekran; robot hep o ekranın içinde kalır
+        let frame = RobotAvatar.screen(for: window)?.visibleFrame ?? RobotAvatar.fallbackFrame
+        p = RobotAvatar.clamp(p, to: frame)
+        // Balon pencerenin içine doğru açılsın (sağ-alt köşede: yukarı ve sola); ekrandan taşacaksa öbür yöne
+        let (left, below) = RobotAvatar.fitSides(p, left: p.x < window.midX, below: p.y > window.midY, in: frame)
         let reference = target ?? head
-        if hypot(reference.x - p.x, reference.y - p.y) < 1 { return }
+        if hypot(reference.x - p.x, reference.y - p.y) < 1 && left == alignLeft && below == bubbleBelow { return }
         target = p
-        // Balon pencerenin içine doğru açılsın (sağ-alt köşede: yukarı ve sola)
-        let left = p.x < window.midX
-        let below = p.y > window.midY
         if alignLeft != left { alignLeft = left }
         if bubbleBelow != below { bubbleBelow = below }
     }
@@ -182,9 +210,10 @@ final class RobotAvatar: ObservableObject {
     }
 
     private func updateSides(for p: CGPoint) {
-        let frame = RobotAvatar.screen(containing: p)?.frame ?? RobotAvatar.fallbackFrame
-        let left = p.x < frame.midX
-        let below = p.y > frame.midY
+        let screen = RobotAvatar.screen(containing: p)
+        let frame = screen?.frame ?? RobotAvatar.fallbackFrame
+        let (left, below) = RobotAvatar.fitSides(p, left: p.x < frame.midX, below: p.y > frame.midY,
+                                                 in: screen?.visibleFrame ?? RobotAvatar.fallbackFrame)
         if alignLeft != left { alignLeft = left }
         if bubbleBelow != below { bubbleBelow = below }
     }

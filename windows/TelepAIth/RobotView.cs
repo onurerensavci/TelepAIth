@@ -94,7 +94,9 @@ internal sealed class RobotView : FrameworkElement
 
     protected override void OnRender(DrawingContext dc)
     {
-        var scale = Prefs.RobotScale;
+        // Pencere hangi ekranın ölçeğiyle çiziliyorsa ona göre: robot, kafanın bulunduğu ekranın ölçeğinde görünsün
+        // (iki farklı ölçekli ekran arasında geçerken kesilmesin)
+        var scale = _avatar.PixelScale / VisualTreeHelper.GetDpi(this).DpiScaleX;
         dc.PushTransform(new ScaleTransform(scale, scale));
         // Görünmez zemin yok: boş alanlar tamamen saydam (tıklamalar alttaki pencereye geçer)
 
@@ -166,11 +168,11 @@ internal sealed class RobotView : FrameworkElement
 
         // Gövde: kelime kaydırmalı, renkli emojili yerleşim (yazı değişmedikçe yeniden hesaplanmaz)
         var maxBodyH = Math.Max(15, maxCardH - 2 * padY - titleH - 2);
-        var key = $"{text}|{dark}|{dpi}|{Prefs.RobotScale}";
+        var key = $"{text}|{dark}|{_avatar.PixelScale}";
         if (_bodyKey != key || _body == null)
         {
             var lineH = 15.0;
-            _body = RichLayout.Create(text, Ui, 11, B(primary), innerMax, Math.Max(1, (int)(maxBodyH / lineH)), dpi * Prefs.RobotScale);
+            _body = RichLayout.Create(text, Ui, 11, B(primary), innerMax, Math.Max(1, (int)(maxBodyH / lineH)), _avatar.PixelScale);
             _bodyKey = key;
         }
         var body = _body;

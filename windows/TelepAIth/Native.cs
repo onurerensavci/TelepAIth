@@ -111,6 +111,17 @@ internal static class Native
         return list;
     }
 
+    [DllImport("user32.dll")] private static extern IntPtr MonitorFromRect(ref RECT rect, uint flags);
+
+    /// <summary>Bir dikdörtgenin en çok üstünde durduğu ekran (iki ekrana yayılan pencere için).</summary>
+    public static Monitor MonitorOf(RECT r)
+    {
+        var handle = MonitorFromRect(ref r, MONITOR_DEFAULTTONEAREST);
+        var info = new MONITORINFOEX { cbSize = Marshal.SizeOf<MONITORINFOEX>() };
+        GetMonitorInfo(handle, ref info);
+        return new Monitor(handle, info.rcMonitor, info.rcWork, info.szDevice, ScaleOf(handle));
+    }
+
     public static Monitor MonitorAt(int x, int y)
     {
         var handle = MonitorFromPoint(new POINT { X = x, Y = y }, MONITOR_DEFAULTTONEAREST);

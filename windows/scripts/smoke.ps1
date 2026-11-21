@@ -1,4 +1,4 @@
-﻿# CI duman testi: uygulamayı açar, olay gönderir, ekran görüntüsü alır, çökmediğini doğrular.
+# CI duman testi: uygulamayı açar, olay gönderir, ekran görüntüsü alır, çökmediğini doğrular.
 param([string]$Exe, [string]$Hook, [string]$Out = "shots")
 $ErrorActionPreference = "Stop"
 $OutputEncoding = New-Object System.Text.UTF8Encoding $false
@@ -136,8 +136,10 @@ for ($i = 1; $i -le 20; $i++) {
 Shot "5-dragged"
 $st = State
 $wa = [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea
-Check ([Math]::Abs($st.head.x - ($wa.Left + 64)) -le 3 -and [Math]::Abs($st.head.y - ($wa.Top + 64)) -le 3) "sürükle-bırak: sol üst köşeye yapıştı"
+Check ([Math]::Abs($st.head.x - ($wa.Left + 66)) -le 3 -and [Math]::Abs($st.head.y - ($wa.Top + 66)) -le 3) "sürükle-bırak: sol üst köşeye yapıştı"
 Check ($st.alignLeft -and $st.bubbleBelow) "balon köşeye göre yön değiştirdi"
+$sb = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+Check ($st.window.x -ge $sb.Left -and $st.window.y -ge $sb.Top -and ($st.window.x + $st.window.w) -le $sb.Right -and ($st.window.y + $st.window.h) -le $sb.Bottom) "robot penceresi ekranın dışına taşmıyor"
 # Tıkla → son olaylar
 [Mouse]::SetCursorPos([int]$st.head.x, [int]$st.head.y); Start-Sleep -Milliseconds 300
 [Mouse]::Down(); Start-Sleep -Milliseconds 60; [Mouse]::Up(); Start-Sleep -Milliseconds 800

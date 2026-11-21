@@ -88,10 +88,12 @@ internal sealed class RobotAvatar
 
     private static Native.Monitor MonitorFor(double x, double y) => Native.MonitorAt((int)x, (int)y);
 
+    /// <summary>Kafanın merkezi ekran kenarından en az bu kadar içeride: robotun penceresi de ekranın dışına taşmaz.</summary>
+    private static double Inset(Native.Monitor m) => (BaseHead / 2 + Math.Max(EdgeInset, BaseMargin)) * m.Scale * Prefs.RobotScale;
+
     private static (double X, double Y) CornerPoint(Corner c, Native.Monitor m)
     {
-        var s = m.Scale * Prefs.RobotScale;
-        var hw = (BaseHead / 2 + EdgeInset) * s;
+        var hw = Inset(m);
         var w = m.Work;
         return c switch
         {
@@ -104,7 +106,7 @@ internal sealed class RobotAvatar
 
     private static (double X, double Y) Clamp(double x, double y, Native.Monitor m)
     {
-        var hw = (BaseHead / 2 + EdgeInset) * m.Scale * Prefs.RobotScale;
+        var hw = Inset(m);
         var w = m.Work;
         return (Math.Min(Math.Max(x, w.Left + hw), w.Right - hw), Math.Min(Math.Max(y, w.Top + hw), w.Bottom - hw));
     }
@@ -141,9 +143,11 @@ internal sealed class RobotAvatar
         if (IsDragging) return;
         if (Locked)
         {
-            // Kilitliyken yerinde kalır; sadece ekran söküldüyse görünür bir yere taşınır
+            // Kilitliyken yerinde kalır; sadece ekran söküldüyse görünür bir yere taşınır, iki ekrana taşıyorsa içeri alınır
             var m = MonitorFor(HeadX, HeadY);
-            if (!m.Bounds.Contains((int)HeadX, (int)HeadY)) MoveTo(HomePoint);
+            if (!m.Bounds.Contains((int)HeadX, (int)HeadY)) { MoveTo(HomePoint); return; }
+            var (cx, cy) = Clamp(HeadX, HeadY, m);
+            if (Math.Abs(cx - HeadX) > 0.5 || Math.Abs(cy - HeadY) > 0.5) MoveTo((cx, cy));
             return;
         }
         MoveTo(HomePoint);
@@ -153,16 +157,37 @@ internal sealed class RobotAvatar
     public void Dock(Native.RECT window)
     {
         if (IsDragging || Locked) return;
-        var s = MonitorFor(window.Right - 10, window.Bottom - 10).Scale * Prefs.RobotScale;
+        // Pencere iki ekrana yayılmışsa çoğunun durduğu ekran; robot hep o ekranın içinde kalır
+        var m = Native.MonitorOf(window);
+        var s = m.Scale * Prefs.RobotScale;
         var x = window.Right - DockOffsetX * s;
         var y = window.Bottom - DockOffsetY * s;
         x = Math.Max(x, window.Left + BaseHead / 2 * s);
         y = Math.Max(y, window.Top + BaseHead / 2 * s);
+        (x, y) = Clamp(x, y, m);
+        var left = x < (window.Left + window.Right) / 2.0;
+        var below = y < (window.Top + window.Bottom) / 2.0;
+        (left, below) = FitSides(x, y, left, below, m);
         var (rx, ry) = _target ?? (HeadX, HeadY);
-        if (Math.Abs(rx - x) < 1 && Math.Abs(ry - y) < 1) return;
+        if (Math.Abs(rx - x) < 1 && Math.Abs(ry - y) < 1 && left == AlignLeft && below == BubbleBelow) return;
         _target = (x, y);
-        AlignLeft = x < (window.Left + window.Right) / 2.0;
-        BubbleBelow = y < (window.Top + window.Bottom) / 2.0;
+        AlignLeft = left;
+        BubbleBelow = below;
+    }
+
+    /// <summary>Balon tarafı ekranın dışına taşacaksa öbür yöne aç.</summary>
+    private static (bool Left, bool Below) FitSides(double x, double y, bool left, bool below, Native.Monitor m)
+    {
+        var s = m.Scale * Prefs.RobotScale;
+        var w = BaseWindowW * s;
+        var h = BaseWindowH * s;
+        var near = (BaseMargin + BaseHead / 2) * s;   // kafanın merkezinden pencerenin yakın kenarına
+        var b = m.Work;
+        if (left && x - near + w > b.Right) left = false;
+        else if (!left && x + near - w < b.Left) left = true;
+        if (below && y - near + h > b.Bottom) below = false;
+        else if (!below && y + near - h < b.Top) below = true;
+        return (left, below);
     }
 
     private void MoveTo((double X, double Y) p)
@@ -173,9 +198,9 @@ internal sealed class RobotAvatar
 
     private void UpdateSides(double x, double y)
     {
-        var b = MonitorFor(x, y).Bounds;
-        AlignLeft = x < (b.Left + b.Right) / 2.0;
-        BubbleBelow = y < (b.Top + b.Bottom) / 2.0;
+        var m = MonitorFor(x, y);
+        var b = m.Bounds;
+        (AlignLeft, BubbleBelow) = FitSides(x, y, x < (b.Left + b.Right) / 2.0, y < (b.Top + b.Bottom) / 2.0, m);
     }
 
     // MARK: Sürükleme (ekrandan ekrana serbest)
