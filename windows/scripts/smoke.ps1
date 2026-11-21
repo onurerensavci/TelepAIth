@@ -1,4 +1,4 @@
-# CI duman testi: uygulamayı açar, olay gönderir, ekran görüntüsü alır, çökmediğini doğrular.
+﻿# CI duman testi: uygulamayı açar, olay gönderir, ekran görüntüsü alır, çökmediğini doğrular.
 param([string]$Exe, [string]$Hook, [string]$Out = "shots")
 $ErrorActionPreference = "Stop"
 $OutputEncoding = New-Object System.Text.UTF8Encoding $false
@@ -144,7 +144,14 @@ Check ($st.bubble -ne $null) "tıklayınca balon açıldı"
 [Mouse]::RightClick(); Start-Sleep -Milliseconds 800
 Shot "7-menu"
 [System.Windows.Forms.SendKeys]::SendWait("{ESC}")
-# Boş alana tıklama alttaki pencereye geçmeli (robot tıklamayı yutmamalı): kafa dışındaki pencere alanı
+# Hook dayanıklılığı: 10 oturum arka arkaya, hepsi ulaşmalı
+$before = (State).minis
+for ($i = 1; $i -le 10; $i++) {
+  HookEvent "claude" ('{"hook_event_name":"PreToolUse","session_id":"x' + $i + '","cwd":"C:\\proj\\p' + $i + '","tool_name":"Read","tool_input":{"file_path":"C:\\proj\\a.cs"}}')
+}
+Start-Sleep 2
+$st = State
+Check ($st.minis -ge $before + 10) "10 hook olayının hepsi ulaştı ($before → $($st.minis))"
 Start-Sleep 2
 if ($p.HasExited) { Get-Content (Join-Path $home2 "error.log") -ErrorAction SilentlyContinue; throw "Uygulama çöktü (kod $($p.ExitCode))" }
 if (Test-Path (Join-Path $home2 "error.log")) { Write-Host "--- error.log ---"; Get-Content (Join-Path $home2 "error.log") }
