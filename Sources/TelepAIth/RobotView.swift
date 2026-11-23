@@ -251,7 +251,8 @@ struct HeadFigure: View {
         // Gözde simge (? soru, ! onay, ✓ bitti, % kota), boştayken imlece bakış, kış kostümü
         let glyph = model.eyeGlyph(at: Date(timeIntervalSinceReferenceDate: time))
         let prevGlyph: Character? = prevState == .waiting ? "!" : nil
-        let gaze = pointer?.sample(time: time, active: state == .idle && model.mood == nil) ?? Gaze()
+        // Kimse çalışmıyorken (boşta, bitti, hata) gözler imleci izler
+        let gaze = pointer?.sample(time: time, active: [.idle, .done, .error].contains(state) && model.mood == nil) ?? Gaze()
         let winter = Preferences.winterActive
         let right = look > 0   // balonun açıldığı taraf (ekranın içi)
         let gt = model.gestureStart.map { time - $0.timeIntervalSinceReferenceDate } ?? -1
@@ -582,10 +583,11 @@ struct DotEyes: View {
         }
         if blinks && blinking { return capsule(u, v, cx: 3 + lookShift, cy: 4.5, rx: 2, ry: 0.5) }
         switch state {
+        // Bitti / hata yüzü de (kimse çalışmıyorken) imlece doğru bakar
         case .done:
-            return arc(u, v, cx: 3, cy: 6.2, radius: 2.7)
+            return arc(u, v, cx: 3 + lookShift * 0.6, cy: 6.2 + gaze.v * 0.5, radius: 2.7)
         case .error:
-            return cross(u, v)
+            return cross(u - lookShift * 0.6, v - gaze.v * 0.5)
         case .sleeping:
             return (abs(v - 6) < 0.3 && abs(u - 3) <= 2.2) ? 0.5 : 0
         case .thinking:

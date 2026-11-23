@@ -344,11 +344,11 @@ internal sealed class RobotView : FrameworkElement
         var glyph = model.EyeGlyph(DateTime.Now);
         var prevGlyph = model.PreviousState == RobotState.Waiting ? '!' : '\0';
 
-        // Boştayken imlece bak; üstüne gelince gözlerini kısıp gülümse
+        // Kimse çalışmıyorken (boşta, bitti, hata) imlece bak; üstüne gelince gözlerini kısıp gülümse
         var dt = Math.Clamp(time - _lastFaceTime, 0, 0.1);
         _lastFaceTime = time;
         double lookU = look / 2.5, lookV = 0, hoverTarget = 0;
-        if (state == RobotState.Idle && mood == null)
+        if (state is RobotState.Idle or RobotState.Done or RobotState.Error && mood is null)
         {
             var c = Native.Cursor();
             var px = _avatar.PixelScale;
@@ -561,8 +561,9 @@ internal sealed class RobotView : FrameworkElement
         if (blinking) return Capsule(u, v, 3 + lookShift, 4.5, 2, 0.5);
         return state switch
         {
-            RobotState.Done => Arc(u, v, 3, 6.2, 2.7),
-            RobotState.Error => Cross(u, v),
+            // Bitti / hata yüzü de (kimse çalışmıyorken) imlece doğru bakar
+            RobotState.Done => Arc(u, v, 3 + lookShift * 0.6, 6.2 + lookV * 0.5, 2.7),
+            RobotState.Error => Cross(u - lookShift * 0.6, v - lookV * 0.5),
             RobotState.Sleeping => Math.Abs(v - 6) < 0.3 && Math.Abs(u - 3) <= 2.2 ? 0.5 : 0,
             RobotState.Thinking => Capsule(u, v, 3.9, 2.8, 1.5, 2.6),
             RobotState.Reading or RobotState.Searching => Capsule(u, v, 3 + Math.Sin(time * 3) * 1.5, 4.4, 1.5, 2.3),
