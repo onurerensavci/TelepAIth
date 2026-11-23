@@ -534,13 +534,6 @@ final class RobotModel: ObservableObject {
         models.allSatisfy { now.timeIntervalSince($0.lastBusyAt) >= gazeDelay }
     }
 
-    /// Öndeki AI uygulaması gösterilir; ama o boştayken başka bir AI çalışıyor ya da seni bekliyorsa
-    /// büyük kafada çalışan görünsün (robot iş yokmuş gibi durmasın).
-    static func pinWins(_ pinned: RobotModel, among models: [RobotModel]) -> Bool {
-        pinned.state.priority >= RobotState.thinking.priority
-            || !models.contains { $0 !== pinned && $0.state.priority >= RobotState.thinking.priority }
-    }
-
     /// Kafadaki küçük ışıklar: büyük kafada ve minik kafalarda görünmeyen, çalışan ya da seni bekleyen diğer sohbetler
     /// (seni bekleyenler önce). minisShown: minik kafalar açık mı (kapalıysa öteki AI'ların sohbetleri de ışık olur).
     static func extras(_ models: [RobotModel], current: RobotModel, now: Date = Date(), minisShown: Bool = true) -> [RobotState] {

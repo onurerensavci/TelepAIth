@@ -45,14 +45,6 @@ public static class DisplayPicker
         models.All(m => (now - m.LastBusyAt).TotalSeconds >= GazeDelay);
 
     /// <summary>
-    /// Öndeki AI uygulaması gösterilir; ama o boştayken başka bir AI çalışıyor ya da seni bekliyorsa
-    /// büyük kafada çalışan görünsün (robot iş yokmuş gibi durmasın).
-    /// </summary>
-    public static bool PinWins(RobotModel pinned, IEnumerable<RobotModel> models) =>
-        pinned.State.Priority() >= RobotState.Thinking.Priority()
-        || !models.Any(m => !ReferenceEquals(m, pinned) && m.State.Priority() >= RobotState.Thinking.Priority());
-
-    /// <summary>
     /// Kafadaki küçük ışıklar: büyük kafada ve minik kafalarda görünmeyen, çalışan ya da seni bekleyen diğer sohbetler
     /// (seni bekleyenler önce). minisShown: minik kafalar açık mı (kapalıysa öteki AI'ların sohbetleri de ışık olur).
     /// </summary>

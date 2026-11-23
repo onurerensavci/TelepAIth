@@ -510,8 +510,6 @@ public static class Tests
         gpt.Refresh(t0.AddSeconds(40));
         claude.Refresh(t0.AddSeconds(40));
         A.True(!DisplayPicker.CanGaze(all, t0.AddSeconds(40)), "öteki AI çalışırken izlemez");
-        // Öndeki Claude boşta, ChatGPT çalışıyor: büyük kafada çalışan görünür
-        A.True(!DisplayPicker.PinWins(claude, all));
         // ChatGPT de bitti: 20 sn dolmadan izlemez, dolunca izler
         gpt.Refresh(t0.AddSeconds(49.9));   // uygulamada her karede yenilenir
         gpt.Apply(new AgentEvent("gpt", "g", EventKind.Stop, RobotState.Done), t0.AddSeconds(50));
@@ -521,7 +519,6 @@ public static class Tests
         claude.Refresh(t0.AddSeconds(71));
         gpt.Refresh(t0.AddSeconds(71));
         A.True(DisplayPicker.CanGaze(all, t0.AddSeconds(71)), "20 sn sonra izler");
-        A.True(DisplayPicker.PinWins(claude, all), "kimse çalışmıyorsa öndeki gösterilir");
     }
 
     public static void SidebarStatusWords()

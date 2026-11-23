@@ -33,6 +33,8 @@ internal sealed class RobotWindow : Window
     private readonly List<DateTime> _presses = new();
     public event Action? BubbleClicked;
     public event Action<ApprovalChoice>? ApprovalClicked;
+    /// <summary>Minik kafaya tıklandı: o AI'a geç</summary>
+    public event Action<string>? MiniClicked;
     public Func<ContextMenu>? BuildMenu;
 
     public IntPtr Handle => _hwnd;
@@ -126,7 +128,7 @@ internal sealed class RobotWindow : Window
         var r = _lastRect;
         var dpi = VisualTreeHelper.GetDpi(this).DpiScaleX;
         var local = new Point((c.X - r.X) / dpi, (c.Y - r.Y) / dpi);
-        var over = Contains(_view.HeadRect, local) || Contains(_view.BubbleRect, local);
+        var over = Contains(_view.HeadRect, local) || Contains(_view.BubbleRect, local) || _view.MiniAt(local) != null;
         Native.SetClickThrough(_hwnd, !over);
     }
 
@@ -184,6 +186,7 @@ internal sealed class RobotWindow : Window
             return;
         }
         if (_view.ButtonAt(start) is { } choice) ApprovalClicked?.Invoke(choice);
+        else if (_view.MiniAt(start) is { } source) MiniClicked?.Invoke(source);
         else if (Contains(_view.BubbleRect, start)) BubbleClicked?.Invoke();
         else if (Contains(_view.HeadRect, start)) Clicked?.Invoke();
     }

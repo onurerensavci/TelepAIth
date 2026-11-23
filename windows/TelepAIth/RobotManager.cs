@@ -69,6 +69,15 @@ internal sealed class RobotManager
         var window = new RobotWindow(avatar);
         window.Clicked += RobotClicked;
         window.DoubleClicked += OpenCurrentApp;
+        // Minik kafaya tıklayınca o AI büyük kafaya geçer ve uygulaması öne gelir
+        window.MiniClicked += source =>
+        {
+            if (!_models.TryGetValue(source, out var m)) return;
+            _pinnedSource = source;
+            Show(m);
+            m.Wake();
+            OpenCurrentApp();
+        };
         // Art arda hızlı tıklanınca başı döner
         window.RapidClicked += () => _avatar?.Current.React(Mood.Dizzy, 2.5, WithEmoji("😵‍💫", L("Başım döndü!", "I'm dizzy!")));
         window.BubbleClicked += BubbleClicked;
@@ -513,7 +522,8 @@ internal sealed class RobotManager
     private void ChooseDisplay()
     {
         if (_avatar == null) return;
-        if (_pinnedSource != null && _models.TryGetValue(_pinnedSource, out var pinned) && DisplayPicker.PinWins(pinned, AllModels))
+        // Öndeki AI uygulaması (tıkladığın) her zaman büyük kafada; öteki çalışıyorsa yanında minik kafa olur
+        if (_pinnedSource != null && _models.TryGetValue(_pinnedSource, out var pinned))
         {
             Show(pinned);
             return;

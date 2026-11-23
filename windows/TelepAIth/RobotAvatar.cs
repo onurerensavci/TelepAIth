@@ -32,7 +32,17 @@ internal sealed class RobotAvatar
     public bool IsDragging { get; private set; }
     public List<RobotModel.MiniSession> Minis { get; set; } = new();
     /// <summary>Kafadaki küçük ışıklar: kafalarda görünmeyen diğer çalışan/bekleyen sohbetler (bekleyenler önce)</summary>
-    public List<RobotState> Extras { get; set; } = new();
+    public List<RobotState> Extras
+    {
+        get => _extras;
+        set
+        {
+            if (value.Count > _extras.Count) ExtrasPoppedAt = DateTime.Now;   // yeni sohbet: nokta zıplayarak belirsin
+            _extras = value;
+        }
+    }
+    private List<RobotState> _extras = new();
+    public DateTime ExtrasPoppedAt { get; private set; } = DateTime.MinValue;
     /// <summary>Gözler imleci izleyebilir mi (hiçbir sohbet çalışmıyor ve son iş biteli 20 sn oldu)</summary>
     public bool GazeAllowed { get; set; }
     public bool Focus { get; set; }

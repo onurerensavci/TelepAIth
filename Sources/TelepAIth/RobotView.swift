@@ -13,7 +13,8 @@ struct AvatarView: View {
         return ZStack {
             AvatarStage(model: avatar.current, alignLeft: avatar.alignLeft, bubbleBelow: avatar.bubbleBelow,
                         health: avatar.health, locked: avatar.locked, minis: avatar.minis, focus: avatar.focus,
-                        approval: avatar.approval, pointer: avatar.pointer, extras: avatar.extras)
+                        approval: avatar.approval, pointer: avatar.pointer, extras: avatar.extras,
+                        extrasPoppedAt: avatar.extrasPoppedAt)
                 .id(avatar.current.source)
                 .transition(.scale(scale: 0.4).combined(with: .opacity))
         }
@@ -22,6 +23,7 @@ struct AvatarView: View {
         .coordinateSpace(name: "avatar")
         .onPreferenceChange(BubbleFrameKey.self) { frame in avatar.bubbleFrame = frame }
         .onPreferenceChange(ApprovalFramesKey.self) { frames in avatar.approvalFrames = frames }
+        .onPreferenceChange(MiniFramesKey.self) { frames in avatar.miniFrames = frames }
         // Robot %100 boyutta çizilir, ayardaki boyuta göre ölçeklenir
         .scaleEffect(avatar.scale, anchor: .topLeading)
         .frame(width: Layout.baseWindowSize.width * avatar.scale, height: Layout.baseWindowSize.height * avatar.scale,
@@ -33,6 +35,14 @@ struct AvatarView: View {
 struct ApprovalFramesKey: PreferenceKey {
     static var defaultValue: [ApprovalChoice: CGRect] = [:]
     static func reduce(value: inout [ApprovalChoice: CGRect], nextValue: () -> [ApprovalChoice: CGRect]) {
+        value.merge(nextValue()) { _, new in new }
+    }
+}
+
+/// Minik kafaların pencere içindeki yeri (AI adına göre; tıklayınca o AI'a geçmek için AppKit tarafına iletilir).
+struct MiniFramesKey: PreferenceKey {
+    static var defaultValue: [String: CGRect] = [:]
+    static func reduce(value: inout [String: CGRect], nextValue: () -> [String: CGRect]) {
         value.merge(nextValue()) { _, new in new }
     }
 }
@@ -57,6 +67,7 @@ struct AvatarStage: View {
     var approval: ApprovalPrompt? = nil
     var pointer: PointerTracker? = nil
     var extras: [RobotState] = []
+    var extrasPoppedAt: Date = .distantPast
 
     /// Odak modunda sadece seni bekleyen, hata veren ya da robotun kendi söylediği şeyler görünür
     private var urgent: Bool { model.state == .waiting || model.state == .error || model.bubbleIsExplicit }
@@ -124,7 +135,8 @@ struct AvatarStage: View {
                        health: health,
                        pointer: pointer,
                        bubbleBelow: bubbleBelow,
-                       extras: extras)
+                       extras: extras,
+                       extrasPoppedAt: extrasPoppedAt)
         }
         .frame(width: Layout.baseHeadSize.width, height: Layout.baseHeadSize.height)
         .overlay(alignment: .topTrailing) {
@@ -235,6 +247,7 @@ struct HeadFigure: View {
     var pointer: PointerTracker? = nil
     var bubbleBelow = false
     var extras: [RobotState] = []
+    var extrasPoppedAt: Date = .distantPast
 
     var body: some View {
         let state = model.state
@@ -289,7 +302,10 @@ struct HeadFigure: View {
                              prevState: prevState, prevMood: prevMood, blend: blend, idle: idle,
                              glyph: glyph, prevGlyph: prevGlyph, gaze: gaze, winter: winter, theme: Color(nsColor: base))
                     // Diğer sohbetler: ekranın altında küçük ışıklar (mavi çalışıyor, turuncu seni bekliyor)
-                    if !extras.isEmpty { ExtraLightsView(extras: extras, time: time) }
+                    if !extras.isEmpty {
+                        ExtraLightsView(extras: extras, time: time,
+                                        popAge: time - extrasPoppedAt.timeIntervalSinceReferenceDate)
+                    }
                 }
                 // Hata: eli alnına (yüzle birlikte hareket etsin)
                 if model.gesture == .facepalm && gt >= 0 && gt <= 1.6 {
@@ -898,6 +914,11 @@ struct MiniHeadsView: View {
             HStack(spacing: 4) {
                 ForEach(Array(minis.prefix(4).enumerated()), id: \.element.id) { index, mini in
                     MiniHead(mini: mini, time: time + Double(index) * 0.7)
+                        .background(GeometryReader { g in
+                            Color.clear.preference(key: MiniFramesKey.self,
+                                                   value: [mini.source: g.frame(in: .named("avatar")).insetBy(dx: -3, dy: -3)])
+                        })
+                        .help(mini.label)
                 }
                 if minis.count > 4 {
                     Text("+\(minis.count - 4)")
@@ -984,10 +1005,12 @@ final class PointerTracker {
 
 // MARK: - Diğer sohbetlerin ışıkları
 
-/// Kafalarda görünmeyen her sohbet için ekranın altında bir nokta (en fazla 4; Windows'takinin aynısı)
+/// Kafalarda görünmeyen her sohbet için ekranın altında bir nokta (en fazla 4; Windows'takinin aynısı).
+/// Açık renkli yüzde kaybolmasın diye ekranla aynı renkte koyu bir şeridin üstünde; yeni sohbet gelince kısa bir zıplamayla belirir.
 struct ExtraLightsView: View {
     let extras: [RobotState]
     let time: TimeInterval
+    var popAge: Double = 99
 
     private static let working = Color(red: 0.35, green: 0.72, blue: 1.0)
     private static let waiting = Color(red: 1.0, green: 0.58, blue: 0.18)
@@ -995,17 +1018,28 @@ struct ExtraLightsView: View {
     var body: some View {
         Canvas { ctx, _ in
             let n = Swift.min(4, extras.count)
+            guard n > 0 else { return }
+            let gap = 9.0, cy = 80.0
+            let bump = popAge >= 0 && popAge < 0.45 ? sin(popAge / 0.45 * .pi) : 0
+            var c = ctx
+            c.translateBy(x: 50, y: cy)
+            c.scaleBy(x: 1 + 0.3 * bump, y: 1 + 0.3 * bump)
+            c.translateBy(x: -50, y: -cy)
+            let w = Double(n) * gap + 4
+            c.fill(Path(roundedRect: CGRect(x: 50 - w / 2, y: cy - 5, width: w, height: 10), cornerRadius: 5),
+                   with: .color(Color(red: 0.09, green: 0.08, blue: 0.16)))
             for i in 0..<n {
                 let isWaiting = extras[i] == .waiting
                 let color = isWaiting ? ExtraLightsView.waiting : ExtraLightsView.working
-                let pulse = isWaiting ? 0.75 + 0.25 * sin(time * 7)
-                    : 0.45 + 0.55 * (0.5 + 0.5 * sin(time * 3.2 + Double(i) * 1.3))
-                let cx = 50 + (Double(i) - Double(n - 1) / 2) * 7
-                let cy = 79.5
-                ctx.fill(Path(ellipseIn: CGRect(x: cx - 3.6, y: cy - 3.6, width: 7.2, height: 7.2)),
-                         with: .color(color.opacity(0.28 * pulse)))
-                ctx.fill(Path(ellipseIn: CGRect(x: cx - 2.1, y: cy - 2.1, width: 4.2, height: 4.2)),
-                         with: .color(color.opacity(pulse)))
+                let pulse = isWaiting ? 0.8 + 0.2 * sin(time * 7)
+                    : 0.65 + 0.35 * (0.5 + 0.5 * sin(time * 3.2 + Double(i) * 1.3))
+                let cx = 50 + (Double(i) - Double(n - 1) / 2) * gap
+                c.fill(Path(ellipseIn: CGRect(x: cx - 4.4, y: cy - 4.4, width: 8.8, height: 8.8)),
+                       with: .color(color.opacity(0.35 * pulse)))
+                c.fill(Path(ellipseIn: CGRect(x: cx - 2.9, y: cy - 2.9, width: 5.8, height: 5.8)),
+                       with: .color(color.opacity(pulse)))
+                c.fill(Path(ellipseIn: CGRect(x: cx - 1.7, y: cy - 1.7, width: 1.8, height: 1.8)),
+                       with: .color(Color.white.opacity(0.55 * pulse)))
             }
         }
         .frame(width: 100, height: 100)

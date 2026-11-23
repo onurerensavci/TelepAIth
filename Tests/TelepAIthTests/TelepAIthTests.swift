@@ -185,7 +185,6 @@ final class TelepAIthTests: XCTestCase {
         claude.refresh(now: t0.addingTimeInterval(40))
         gpt.refresh(now: t0.addingTimeInterval(40))
         XCTAssertFalse(RobotModel.canGaze(all, now: t0.addingTimeInterval(40)), "öteki AI çalışırken izlemez")
-        XCTAssertFalse(RobotModel.pinWins(claude, among: all))
         gpt.refresh(now: t0.addingTimeInterval(49.9))
         _ = gpt.apply(AgentEvent(source: "gpt", sessionID: "g", kind: .stop, state: .done), now: t0.addingTimeInterval(50))
         claude.refresh(now: t0.addingTimeInterval(60))
@@ -194,7 +193,6 @@ final class TelepAIthTests: XCTestCase {
         claude.refresh(now: t0.addingTimeInterval(71))
         gpt.refresh(now: t0.addingTimeInterval(71))
         XCTAssertTrue(RobotModel.canGaze(all, now: t0.addingTimeInterval(71)))
-        XCTAssertTrue(RobotModel.pinWins(claude, among: all))
     }
 
     func testSidebarStatusWords() {

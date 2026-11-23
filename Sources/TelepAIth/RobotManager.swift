@@ -74,6 +74,8 @@ final class RobotManager {
             self?.avatar?.current.react(.dizzy, for: 2.5, say: withEmoji("😵‍💫", loc("Başım döndü!", "I'm dizzy!")))
         }
         window.onDoubleClick = { [weak self] in self?.openCurrentApp() }
+        // Minik kafaya tıklayınca o AI büyük kafaya geçer ve uygulaması öne gelir
+        window.onMiniClick = { [weak self] source in self?.miniClicked(source) }
         window.onAlwaysOnTopChanged = { [weak self] _ in self?.onChange?() }
         window.onBubbleClick = { [weak self] in self?.bubbleClicked() }
         window.onApproval = { [weak self] choice in self?.choose(choice) }
@@ -404,6 +406,14 @@ final class RobotManager {
     }
 
     /// Robota çift tıklayınca o an gösterdiği AI'ın uygulamasını öne getir (açık değilse aç).
+    private func miniClicked(_ source: String) {
+        guard let m = models[source] else { return }
+        pinnedSource = source
+        show(m)
+        m.wake()
+        openCurrentApp()
+    }
+
     private func openCurrentApp() {
         guard let source = avatar?.current.source else { return }
         let ownPID = ProcessInfo.processInfo.processIdentifier
@@ -500,7 +510,8 @@ final class RobotManager {
     /// eşitlikte en son hareket edeni. Hepsi boştaysa olduğu gibi kalsın.
     private func chooseDisplay() {
         guard let avatar = avatar else { return }
-        if let pinned = pinnedSource, let m = models[pinned], RobotModel.pinWins(m, among: allModels) {
+        // Öndeki AI uygulaması (tıkladığın) her zaman büyük kafada; öteki çalışıyorsa yanında minik kafa olur
+        if let pinned = pinnedSource, let m = models[pinned] {
             show(m)
             return
         }

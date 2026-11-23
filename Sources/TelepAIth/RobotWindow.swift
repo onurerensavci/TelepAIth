@@ -24,6 +24,8 @@ final class RobotAvatar: ObservableObject {
     @Published private(set) var minis: [RobotModel.MiniSession] = []
     /// Kafadaki küçük ışıklar: kafalarda görünmeyen diğer çalışan/bekleyen sohbetler (bekleyenler önce)
     @Published private(set) var extras: [RobotState] = []
+    /// Yeni sohbet ışığı eklendiği an (nokta zıplayarak belirsin)
+    private(set) var extrasPoppedAt: Date = .distantPast
     /// Odak modu: robot soluk durur, sadece seni bekleyen şeyleri söyler
     @Published private(set) var focus = FocusMode.isActive
     /// Balonun pencere içindeki yeri (SwiftUI, sol-üst köken, %100 boyuttaki ölçüyle). Tıklamayı yakalamak için.
@@ -36,6 +38,21 @@ final class RobotAvatar: ObservableObject {
     func setApproval(_ value: ApprovalPrompt?) {
         if approval != value { approval = value }
         if value == nil { approvalFrames = [:] }
+    }
+
+    var miniFrames: [String: CGRect] = [:]
+
+    /// Ekrandaki bu noktada bir minik kafa var mı? (hangi AI'ın)
+    func miniSource(at point: NSPoint) -> String? {
+        guard Preferences.miniHeads, !minis.isEmpty else { return nil }
+        let origin = windowOrigin
+        let s = Layout.scale
+        for (source, f) in miniFrames where minis.contains(where: { $0.source == source }) {
+            let r = NSRect(x: origin.x + f.minX * s, y: origin.y + Layout.windowSize.height - f.maxY * s,
+                           width: f.width * s, height: f.height * s)
+            if r.contains(point) { return source }
+        }
+        return nil
     }
 
     /// Ekrandaki bu noktada bir onay düğmesi var mı?
@@ -92,6 +109,7 @@ final class RobotAvatar: ObservableObject {
     }
 
     func setExtras(_ value: [RobotState]) {
+        if value.count > extras.count { extrasPoppedAt = Date() }
         if extras != value { extras = value }
     }
 
@@ -348,6 +366,9 @@ final class AvatarHostingView: NSHostingView<AvatarView> {
     var isOverBubble: ((NSPoint) -> Bool)?
     /// Tıklanan noktada onay düğmesi var mı?
     var approvalAt: ((NSPoint) -> ApprovalChoice?)?
+    /// Bu noktada minik kafa var mı (hangi AI'ın)?
+    var miniAt: ((NSPoint) -> String?)?
+    var onMiniClick: ((String) -> Void)?
 
     private var mouseStart: NSPoint = .zero
     private var dragging = false
@@ -360,7 +381,7 @@ final class AvatarHostingView: NSHostingView<AvatarView> {
         mouseStart = NSEvent.mouseLocation
         dragging = false
         swallowUp = false
-        guard approvalAt?(mouseStart) == nil, isOverBubble?(mouseStart) != true else { return }
+        guard approvalAt?(mouseStart) == nil, isOverBubble?(mouseStart) != true, miniAt?(mouseStart) == nil else { return }
         let now = Date()
         presses.append(now)
         presses.removeAll { now.timeIntervalSince($0) > 1.5 }
@@ -393,6 +414,8 @@ final class AvatarHostingView: NSHostingView<AvatarView> {
             onDragEnd?()
         } else if let choice = approvalAt?(NSEvent.mouseLocation) {
             onApproval?(choice)
+        } else if let source = miniAt?(NSEvent.mouseLocation) {
+            onMiniClick?(source)
         } else if isOverBubble?(NSEvent.mouseLocation) == true {
             onBubbleClick?()
         } else if event.clickCount == 2 {
@@ -413,6 +436,8 @@ final class AvatarWindowController: NSObject {
     var onClick: (() -> Void)?
     var onDoubleClick: (() -> Void)?
     var onRapidClick: (() -> Void)?
+    /// Minik kafaya tıklandı: o AI'a geç
+    var onMiniClick: ((String) -> Void)?
     var onLockChanged: ((Bool) -> Void)?
     var onAlwaysOnTopChanged: ((Bool) -> Void)?
     var onBubbleClick: (() -> Void)?
@@ -468,6 +493,8 @@ final class AvatarWindowController: NSObject {
         host.onBubbleClick = { [weak self] in self?.onBubbleClick?() }
         host.onApproval = { [weak self] choice in self?.onApproval?(choice) }
         host.approvalAt = { [weak self] point in self?.avatar.approvalChoice(at: point) }
+        host.miniAt = { [weak self] point in self?.avatar.miniSource(at: point) }
+        host.onMiniClick = { [weak self] source in self?.onMiniClick?(source) }
         host.isOverBubble = { [weak self] point in
             guard let self = self, !self.avatar.headRect.contains(point) else { return false }
             return self.avatar.bubbleScreenRect?.contains(point) ?? false
@@ -514,6 +541,7 @@ final class AvatarWindowController: NSObject {
         // Fare kafanın ya da balonun üstünde değilse tıklamalar arkadaki pencerelere geçsin
         let mouse = NSEvent.mouseLocation
         let over = avatar.isDragging || avatar.headRect.contains(mouse) || (avatar.bubbleScreenRect?.contains(mouse) ?? false)
+            || avatar.miniSource(at: mouse) != nil
         if panel.ignoresMouseEvents == over { panel.ignoresMouseEvents = !over }
     }
 

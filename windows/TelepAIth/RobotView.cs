@@ -28,6 +28,12 @@ internal sealed class RobotView : FrameworkElement
     /// <summary>Son çizimde balonun ve kafanın yeri (pencere içi DIP) — tıklama ve tıklama-geçirgenlik için.</summary>
     public Rect BubbleRect { get; private set; } = Rect.Empty;
     public Rect HeadRect { get; private set; } = Rect.Empty;
+    /// <summary>Minik kafaların yeri (AI adıyla): tıklayınca o AI'a geçmek için</summary>
+    public List<(string Source, Rect Rect)> MiniRects { get; private set; } = new();
+    private double _drawScale = 1;
+
+    /// <summary>Bu noktada minik kafa var mı (hangi AI'ın)?</summary>
+    public string? MiniAt(Point p) => MiniRects.FirstOrDefault(m => m.Rect.Contains(p)).Source;
 
     private RichLayout? _body;
     private string? _bodyKey;
@@ -113,6 +119,8 @@ internal sealed class RobotView : FrameworkElement
         var headX = alignLeft ? M : W - M - Head;
         var headY = below ? M : H - M - Head;
         HeadRect = new Rect(headX * scale, headY * scale, Head * scale, Head * scale);
+        _drawScale = scale;
+        MiniRects = new();
 
         // Yeni robota geçerken küçük bir "belirme"
         var pop = Math.Min(1, (DateTime.Now - _avatar.CurrentSince).TotalSeconds / 0.25);
@@ -381,7 +389,7 @@ internal sealed class RobotView : FrameworkElement
         else
             DrawFace(dc, time, eyeColor, face, C(baseColor));
         // Diğer sohbetler: ekranın altında küçük ışıklar (mavi çalışıyor, turuncu seni bekliyor)
-        if (skin == null) DrawExtraLights(dc, _avatar.Extras, time);
+        if (skin == null) DrawExtraLights(dc, _avatar.Extras, time, (DateTime.Now - _avatar.ExtrasPoppedAt).TotalSeconds);
         // Hata: eli alnına (yüzle birlikte hareket etsin)
         if (model.Gesture == Gesture.Facepalm && gt is >= 0 and <= 1.6) DrawFacepalm(dc, gt, right);
         dc.Pop();
@@ -746,19 +754,30 @@ internal sealed class RobotView : FrameworkElement
     private static readonly Color ExtraWorking = C(0.35, 0.72, 1.0);
     private static readonly Color ExtraWaiting = C(1.0, 0.58, 0.18);
 
-    /// <summary>Kafalarda görünmeyen her sohbet için ekranın altında bir nokta (en fazla 4)</summary>
-    private static void DrawExtraLights(DrawingContext dc, List<RobotState> extras, double time)
+    /// <summary>
+    /// Kafalarda görünmeyen her sohbet için ekranın altında bir nokta (en fazla 4). Açık renkli yüzde kaybolmasın diye
+    /// ekranla aynı renkte koyu bir şeridin üstünde; yeni sohbet gelince kısa bir zıplamayla belirir.
+    /// </summary>
+    private static void DrawExtraLights(DrawingContext dc, List<RobotState> extras, double time, double popAge)
     {
         var n = Math.Min(4, extras.Count);
+        if (n == 0) return;
+        const double gap = 9, cy = 80;
+        var bump = popAge is >= 0 and < 0.45 ? Math.Sin(popAge / 0.45 * Math.PI) : 0;
+        dc.PushTransform(new ScaleTransform(1 + 0.3 * bump, 1 + 0.3 * bump, 50, cy));
+        var w = n * gap + 4;
+        dc.DrawRoundedRectangle(B(C(0.09, 0.08, 0.16)), null, new Rect(50 - w / 2, cy - 5, w, 10), 5, 5);
         for (var i = 0; i < n; i++)
         {
             var waiting = extras[i] == RobotState.Waiting;
             var color = waiting ? ExtraWaiting : ExtraWorking;
-            var pulse = waiting ? 0.75 + 0.25 * Math.Sin(time * 7) : 0.45 + 0.55 * (0.5 + 0.5 * Math.Sin(time * 3.2 + i * 1.3));
-            var center = new Point(50 + (i - (n - 1) / 2.0) * 7, 79.5);
-            dc.DrawEllipse(B(color, 0.28 * pulse), null, center, 3.6, 3.6);
-            dc.DrawEllipse(B(color, pulse), null, center, 2.1, 2.1);
+            var pulse = waiting ? 0.8 + 0.2 * Math.Sin(time * 7) : 0.65 + 0.35 * (0.5 + 0.5 * Math.Sin(time * 3.2 + i * 1.3));
+            var center = new Point(50 + (i - (n - 1) / 2.0) * gap, cy);
+            dc.DrawEllipse(B(color, 0.35 * pulse), null, center, 4.4, 4.4);
+            dc.DrawEllipse(B(color, pulse), null, center, 2.9, 2.9);
+            dc.DrawEllipse(B(Colors.White, 0.55 * pulse), null, new Point(center.X - 0.8, center.Y - 0.8), 0.9, 0.9);
         }
+        dc.Pop();
     }
 
     // MARK: El hareketleri
@@ -942,6 +961,13 @@ internal sealed class RobotView : FrameworkElement
         var extra = minis.Count - shown.Count;
         const double w = 22, h = 18, gap = 4;
         var x = growRight ? edgeX : edgeX - (shown.Count * (w + gap) - gap) - (extra > 0 ? 18 : 0);
+        var rects = new List<(string, Rect)>();
+        for (var i = 0; i < shown.Count; i++)
+        {
+            var rx = x + i * (w + gap) - 3;
+            rects.Add((shown[i].Source, new Rect(rx * _drawScale, (bottomY - h - 5) * _drawScale, (w + 6) * _drawScale, (h + 8) * _drawScale)));
+        }
+        MiniRects = rects;
         for (var i = 0; i < shown.Count; i++)
         {
             var mini = shown[i];
