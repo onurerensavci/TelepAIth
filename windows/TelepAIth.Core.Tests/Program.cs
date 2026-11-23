@@ -647,6 +647,32 @@ public static class Tests
         A.Eq(RobotState.Waiting, extras[0]);
     }
 
+    public static void ChatListRows()
+    {
+        var claude = new RobotModel("claude");
+        var gpt = new RobotModel("gpt");
+        var t0 = DateTime.Now;
+        claude.Apply(new AgentEvent("claude", "app-1-0", EventKind.Prompt, RobotState.Thinking, "a", project: "Tarif"), t0);
+        claude.Apply(new AgentEvent("claude", "bg-1-x", EventKind.Prompt, RobotState.Thinking, "Arkada", project: "Kod incelemesi"), t0.AddSeconds(10));
+        claude.Apply(new AgentEvent("claude", "bg-1-x", EventKind.Stop, RobotState.Done, project: "Kod incelemesi"), t0.AddSeconds(70));
+        gpt.Apply(new AgentEvent("gpt", "app-2-0", EventKind.Waiting, RobotState.Waiting, "onay"), t0.AddSeconds(100));
+        var rows = DisplayPicker.ChatRows(new[] { claude, gpt }, t0.AddSeconds(220));
+        A.Eq(3, rows.Count);
+        A.Eq("gpt", rows[0].Source);                       // seni bekleyen önce
+        A.True(rows[0].Status.Contains(Text.L("2 dk", "2 min")), rows[0].Status);
+        A.Eq("Tarif", rows[1].Title);                      // sonra çalışan
+        A.True(rows[1].Status.StartsWith(Text.L("çalışıyor", "working")) && rows[1].Status.Contains(Text.L("3 dk", "3 min")), rows[1].Status);
+        A.Eq("Kod incelemesi", rows[2].Title);             // sonra biten
+        A.True(rows[2].Status.Contains(Text.L("2 dk", "2 min")), rows[2].Status);
+        // 15 dk'dan eski bitenler listede yok
+        A.True(DisplayPicker.ChatRows(new[] { claude, gpt }, t0.AddSeconds(70 + 16 * 60)).All(r => r.Title != "Kod incelemesi"));
+        A.Eq(Text.L("1 sa 6 dk", "1 h 6 min"), Text.ShortDuration(3960));
+        A.Eq(Text.L("40 sn", "40 s"), Text.ShortDuration(40));
+        // Yan menüdeki açık sohbetin adı
+        var items = new[] { new SidebarItem("Tarif", "", "https://claude.ai/chat/aaa", new RectD(0, 0, 100, 20)) };
+        A.Eq("Tarif", SidebarChats.CurrentTitle(items, "https://claude.ai/chat/aaa/"));
+    }
+
     public static void DailySummaryText()
     {
         var stats = new DailyStats(null);

@@ -28,6 +28,10 @@ public sealed class RobotModel
 
     public sealed record Notice(string Title, string Body, bool Important = false, AppTarget? Target = null);
 
+    /// <summary>Kafaya tıklayınca açılan listedeki bir sohbet: ad, durum, "çalışıyor · 3 dk" gibi durum yazısı</summary>
+    public sealed record ChatRow(string Source, string SessionId, string Title, RobotState State, string Status,
+                                 AppTarget? Target, int Rank, DateTime At);
+
     /// <summary>Robotun yanındaki minik kafalar: aynı anda çalışan diğer oturumlar.</summary>
     public sealed record MiniSession(string Id, string Source, RobotState State, string Label);
 
@@ -195,7 +199,11 @@ public sealed class RobotModel
                 break;
             }
             case EventKind.Heartbeat:
-                if (_sessions.TryGetValue(e.SessionId, out var hb)) hb.Updated = now;
+                if (_sessions.TryGetValue(e.SessionId, out var hb))
+                {
+                    hb.Updated = now;
+                    if (e.Project != null) hb.Project = e.Project;   // sohbetin adı sonradan öğrenilebilir
+                }
                 break;
 
             case EventKind.Say:
@@ -558,6 +566,49 @@ public sealed class RobotModel
             .Select(x => new MiniSession(Source + "/" + x.Id, Source, x.St,
                 string.Join(" · ", new[] { Theme.DisplayName, x.S.Project, x.S.Text != null ? Clip(x.S.Text, 40) : null }.Where(t => t != null))))
             .OrderBy(m => m.Id, StringComparer.Ordinal).ToList();
+    }
+
+    /// <summary>
+    /// Kafaya tıklayınca açılan liste: seni bekleyen, çalışan ve son 15 dakikada biten sohbetler.
+    /// Rank: 0 bekliyor, 1 çalışıyor, 2 bitti/hata. At: o hâle girdiği an (süre bundan).
+    /// </summary>
+    public List<ChatRow> ChatRows(DateTime now)
+    {
+        var rows = new List<ChatRow>();
+        foreach (var (id, s) in _sessions)
+        {
+            if (id == "mcp") continue;   // anlatıcı: açık sohbetle aynı
+            var st = EffectiveState(s, id, now);
+            var age = (now - s.Updated).TotalSeconds;
+            string status;
+            int rank;
+            DateTime at;
+            if (st == RobotState.Waiting)
+            {
+                at = s.WaitingSince ?? s.Updated;
+                status = L("seni bekliyor · ", "waiting for you · ") + ShortDuration((now - at).TotalSeconds);
+                rank = 0;
+            }
+            else if (st.IsWorking())
+            {
+                at = s.TurnStart ?? s.Updated;
+                status = L("çalışıyor · ", "working · ") + ShortDuration((now - at).TotalSeconds);
+                rank = 1;
+            }
+            else if (s.State is RobotState.Done or RobotState.Error && age < 15 * 60)
+            {
+                at = s.Updated;
+                var ago = ShortDuration(age);
+                status = s.State == RobotState.Error
+                    ? L($"hata verdi · {ago} önce", $"hit an error · {ago} ago")
+                    : L($"bitti · {ago} önce", $"done · {ago} ago");
+                rank = 2;
+            }
+            else continue;
+            var title = s.Project ?? (id.StartsWith("app-", StringComparison.Ordinal) ? L("Açık sohbet", "Open chat") : L("Oturum", "Session"));
+            rows.Add(new ChatRow(Source, id, title, st, status, s.Target, rank, at));
+        }
+        return rows;
     }
 
     private static RobotState EffectiveState(Session s, string id, DateTime now)

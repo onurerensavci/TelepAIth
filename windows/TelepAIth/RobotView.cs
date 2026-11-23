@@ -131,7 +131,13 @@ internal sealed class RobotView : FrameworkElement
 
         // Balon
         BubbleRect = Rect.Empty;
-        if (model.BubbleText is { } text && (!focus || urgent))
+        ChatRowRects.Clear();
+        if (_avatar.ChatList is { Count: > 0 } chats)
+        {
+            var r = DrawChatList(dc, chats, alignLeft, below, headY);
+            BubbleRect = new Rect(r.X * scale, r.Y * scale, r.Width * scale, r.Height * scale);
+        }
+        else if (model.BubbleText is { } text && (!focus || urgent))
         {
             var r = DrawBubble(dc, model, text, alignLeft, below, headY);
             BubbleRect = new Rect(r.X * scale, r.Y * scale, r.Width * scale, r.Height * scale);
@@ -216,6 +222,62 @@ internal sealed class RobotView : FrameworkElement
             cardY = headY - Gap - TailH - cardH;
 
         var card = new Rect(cardX, cardY, cardW, cardH);
+        var full = DrawCard(dc, card, alignLeft, below, fill, color);
+
+        // Başlık satırı: renkli nokta, uygulama adı, alt başlık, (tıklanabilirse) ↗
+        var tx = cardX + padX;
+        var ty = cardY + padY;
+        dc.DrawEllipse(B(color), null, new Point(tx + 3.5, ty + titleH / 2), 3.5, 3.5);
+        dc.DrawText(title, new Point(tx + 11, ty + (titleH - title.Height) / 2));
+        if (sub != null) dc.DrawText(sub, new Point(tx + 11 + title.Width + 4, ty + (titleH - sub.Height) / 2));
+        if (clickable)
+        {
+            // Küçük "dışarı git" işareti
+            var ix = cardX + cardW - padX - 9;
+            var iy = ty + 3;
+            var pen = new Pen(B(secondary), 1.2) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round };
+            dc.DrawRoundedRectangle(null, pen, new Rect(ix, iy + 1, 7, 7), 1.5, 1.5);
+            dc.DrawLine(pen, new Point(ix + 4, iy + 4), new Point(ix + 9, iy - 1));
+            dc.DrawLine(pen, new Point(ix + 6, iy - 1), new Point(ix + 9, iy - 1));
+            dc.DrawLine(pen, new Point(ix + 9, iy - 1), new Point(ix + 9, iy + 2));
+        }
+        body.Draw(dc, new Point(tx, ty + titleH + 2));
+        // Düğmeler: İzin ver · Hep izin ver · Reddet
+        ButtonRects.Clear();
+        if (buttons != null)
+        {
+            var scale = _avatar.PixelScale / VisualTreeHelper.GetDpi(this).DpiScaleX;
+            var bx = tx;
+            var by = ty + titleH + 2 + body.Height + 6;
+            var hover = Mouse.GetPosition(this);
+            foreach (var b in buttons)
+            {
+                var r = new Rect(bx, by, b.W, ButtonRowH);
+                var screenRect = new Rect(r.X * scale, r.Y * scale, r.Width * scale, r.Height * scale);
+                ButtonRects[b.Choice] = screenRect;
+                var over = screenRect.Contains(hover);
+                var (bg, fg, border) = b.Choice switch
+                {
+                    ApprovalChoice.Allow => (Allow, Colors.White, Allow),
+                    ApprovalChoice.Deny => (Colors.Transparent, Deny, Deny),
+                    _ => (Colors.Transparent, color, color),
+                };
+                dc.DrawRoundedRectangle(bg == Colors.Transparent ? B(border, over ? 0.16 : 0.07) : B(bg, over ? 0.85 : 1),
+                    new Pen(B(border, 0.75), 1), r, ButtonRowH / 2, ButtonRowH / 2);
+                var label = new FormattedText(b.Label, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, UiSemi, 10.5, B(fg), dpi);
+                dc.DrawText(label, new Point(r.X + (r.Width - label.Width) / 2, r.Y + (r.Height - label.Height) / 2));
+                bx += b.W + ButtonGap;
+            }
+        }
+
+        return full;
+    }
+
+    /// <summary>Balon kartı: yumuşak gölge, kart ve kafaya bakan kuyruk. Kuyruk dahil tüm alanı döner.</summary>
+    private static Rect DrawCard(DrawingContext dc, Rect card, bool alignLeft, bool below, Color fill, Color color)
+    {
+        var cardY = card.Y;
+        var cardH = card.Height;
         var tailCx = alignLeft ? M + 50 : W - M - 50;
         var tail = new StreamGeometry();
         using (var g = tail.Open())
@@ -246,55 +308,73 @@ internal sealed class RobotView : FrameworkElement
         dc.DrawRoundedRectangle(B(fill, 0.97), new Pen(B(color, 0.35), 1), card, 12, 12);
         dc.DrawGeometry(B(fill, 0.97), null, tail);
 
-        // Başlık satırı: renkli nokta, uygulama adı, alt başlık, (tıklanabilirse) ↗
-        var tx = cardX + padX;
-        var ty = cardY + padY;
-        dc.DrawEllipse(B(color), null, new Point(tx + 3.5, ty + titleH / 2), 3.5, 3.5);
-        dc.DrawText(title, new Point(tx + 11, ty + (titleH - title.Height) / 2));
-        if (sub != null) dc.DrawText(sub, new Point(tx + 11 + title.Width + 4, ty + (titleH - sub.Height) / 2));
-        if (clickable)
-        {
-            // Küçük "dışarı git" işareti
-            var ix = cardX + cardW - padX - 9;
-            var iy = ty + 3;
-            var pen = new Pen(B(secondary), 1.2) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round };
-            dc.DrawRoundedRectangle(null, pen, new Rect(ix, iy + 1, 7, 7), 1.5, 1.5);
-            dc.DrawLine(pen, new Point(ix + 4, iy + 4), new Point(ix + 9, iy - 1));
-            dc.DrawLine(pen, new Point(ix + 6, iy - 1), new Point(ix + 9, iy - 1));
-            dc.DrawLine(pen, new Point(ix + 9, iy - 1), new Point(ix + 9, iy + 2));
-        }
-        body.Draw(dc, new Point(tx, ty + titleH + 2));
-
-        // Düğmeler: İzin ver · Hep izin ver · Reddet
-        ButtonRects.Clear();
-        if (buttons != null)
-        {
-            var scale = _avatar.PixelScale / VisualTreeHelper.GetDpi(this).DpiScaleX;
-            var bx = tx;
-            var by = ty + titleH + 2 + body.Height + 6;
-            var hover = Mouse.GetPosition(this);
-            foreach (var b in buttons)
-            {
-                var r = new Rect(bx, by, b.W, ButtonRowH);
-                var screenRect = new Rect(r.X * scale, r.Y * scale, r.Width * scale, r.Height * scale);
-                ButtonRects[b.Choice] = screenRect;
-                var over = screenRect.Contains(hover);
-                var (bg, fg, border) = b.Choice switch
-                {
-                    ApprovalChoice.Allow => (Allow, Colors.White, Allow),
-                    ApprovalChoice.Deny => (Colors.Transparent, Deny, Deny),
-                    _ => (Colors.Transparent, color, color),
-                };
-                dc.DrawRoundedRectangle(bg == Colors.Transparent ? B(border, over ? 0.16 : 0.07) : B(bg, over ? 0.85 : 1),
-                    new Pen(B(border, 0.75), 1), r, ButtonRowH / 2, ButtonRowH / 2);
-                var label = new FormattedText(b.Label, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, UiSemi, 10.5, B(fg), dpi);
-                dc.DrawText(label, new Point(r.X + (r.Width - label.Width) / 2, r.Y + (r.Height - label.Height) / 2));
-                bx += b.W + ButtonGap;
-            }
-        }
-
         var full = card;
         full.Union(below ? new Point(tailCx, cardY - TailH) : new Point(tailCx, cardY + cardH + TailH));
+        return full;
+    }
+
+    // MARK: Sohbet listesi (kafaya tıklayınca)
+
+    private const int ChatListMax = 4;
+    private const double ChatRowH = 20;
+
+    /// <summary>Listedeki satırların yeri (DIP) — tıklama için</summary>
+    public List<(int Index, Rect Rect)> ChatRowRects { get; } = new();
+
+    public RobotModel.ChatRow? ChatRowAt(Point p)
+    {
+        if (_avatar.ChatList is not { } list) return null;
+        foreach (var (i, r) in ChatRowRects)
+            if (r.Contains(p) && i < list.Count) return list[i];
+        return null;
+    }
+
+    /// <summary>Sohbetler: her satırda AI rengi, sohbetin adı ve "çalışıyor · 3 dk" gibi durum. Satıra tıklayınca o sohbete gidilir.</summary>
+    private Rect DrawChatList(DrawingContext dc, List<RobotModel.ChatRow> rows, bool alignLeft, bool below, double headY)
+    {
+        var dpi = VisualTreeHelper.GetDpi(this).PixelsPerDip;
+        var dark = Dark;
+        var fill = dark ? Color.FromRgb(0x2B, 0x2A, 0x33) : Color.FromRgb(0xFB, 0xFA, 0xF8);
+        var primary = dark ? Colors.White : Color.FromRgb(0x1E, 0x1C, 0x26);
+        var secondary = dark ? Color.FromRgb(0xA8, 0xA5, 0xB8) : Color.FromRgb(0x77, 0x74, 0x86);
+        var accent = C(_avatar.Current.Theme.Color);
+        const double padX = 10, padY = 7, titleH = 14;
+        var shown = rows.Take(ChatListMax).ToList();
+        var cardW = Math.Min(W - 2 * M, 250.0);
+        var cardH = padY + titleH + 3 + shown.Count * ChatRowH + padY - 2;
+        var cardX = alignLeft ? M : W - M - cardW;
+        var cardY = below ? headY + Head + Gap + TailH : headY - Gap - TailH - cardH;
+        var full = DrawCard(dc, new Rect(cardX, cardY, cardW, cardH), alignLeft, below, fill, accent);
+
+        var tx = cardX + padX;
+        var ty = cardY + padY;
+        var headerText = L("Sohbetler", "Chats") + (rows.Count > shown.Count ? $" · +{rows.Count - shown.Count}" : "");
+        var header = new FormattedText(headerText, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, UiSemi, 10, B(secondary), dpi);
+        dc.DrawText(header, new Point(tx, ty + (titleH - header.Height) / 2));
+
+        var scale = _drawScale;
+        var hover = Mouse.GetPosition(this);
+        var y = ty + titleH + 3;
+        for (var i = 0; i < shown.Count; i++)
+        {
+            var row = shown[i];
+            var rr = new Rect(cardX + 4, y, cardW - 8, ChatRowH);
+            var screen = new Rect(rr.X * scale, rr.Y * scale, rr.Width * scale, rr.Height * scale);
+            ChatRowRects.Add((i, screen));
+            if (screen.Contains(hover)) dc.DrawRoundedRectangle(B(accent, 0.12), null, rr, 6, 6);
+            dc.DrawEllipse(B(C(Themes.Shared.Theme(row.Source).Color)), null, new Point(tx + 3, y + ChatRowH / 2), 3, 3);
+            var statusColor = row.State == RobotState.Waiting ? ExtraWaiting : row.State.IsWorking() ? ExtraWorking : secondary;
+            var status = new FormattedText(row.Status, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, Ui, 9.5, B(statusColor), dpi);
+            var name = new FormattedText(row.Title, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, UiSemi, 10.5, B(primary), dpi)
+            {
+                MaxTextWidth = Math.Max(20, cardW - 2 * padX - 10 - status.Width - 8),
+                MaxLineCount = 1,
+                Trimming = TextTrimming.CharacterEllipsis,
+            };
+            dc.DrawText(name, new Point(tx + 10, y + (ChatRowH - name.Height) / 2));
+            dc.DrawText(status, new Point(cardX + cardW - padX - status.Width, y + (ChatRowH - status.Height) / 2));
+            y += ChatRowH;
+        }
         return full;
     }
 
@@ -751,12 +831,13 @@ internal sealed class RobotView : FrameworkElement
 
     // MARK: Diğer sohbetlerin ışıkları
 
-    private static readonly Color ExtraWorking = C(0.35, 0.72, 1.0);
-    private static readonly Color ExtraWaiting = C(1.0, 0.58, 0.18);
+    // Açık renkli yüzde çerçevesiz de seçilsin diye koyu tonlar
+    private static readonly Color ExtraWorking = C(0.13, 0.47, 0.95);
+    private static readonly Color ExtraWaiting = C(0.95, 0.45, 0.05);
 
     /// <summary>
     /// Kafalarda görünmeyen her sohbet için ekranın altında bir nokta (en fazla 4). Açık renkli yüzde kaybolmasın diye
-    /// ekranla aynı renkte koyu bir şeridin üstünde; yeni sohbet gelince kısa bir zıplamayla belirir.
+    /// koyu tonlarda; yeni sohbet gelince kısa bir zıplamayla belirir.
     /// </summary>
     private static void DrawExtraLights(DrawingContext dc, List<RobotState> extras, double time, double popAge)
     {
@@ -765,16 +846,13 @@ internal sealed class RobotView : FrameworkElement
         const double gap = 9, cy = 80;
         var bump = popAge is >= 0 and < 0.45 ? Math.Sin(popAge / 0.45 * Math.PI) : 0;
         dc.PushTransform(new ScaleTransform(1 + 0.3 * bump, 1 + 0.3 * bump, 50, cy));
-        var w = n * gap + 4;
-        dc.DrawRoundedRectangle(B(C(0.09, 0.08, 0.16)), null, new Rect(50 - w / 2, cy - 5, w, 10), 5, 5);
         for (var i = 0; i < n; i++)
         {
             var waiting = extras[i] == RobotState.Waiting;
             var color = waiting ? ExtraWaiting : ExtraWorking;
             var pulse = waiting ? 0.8 + 0.2 * Math.Sin(time * 7) : 0.65 + 0.35 * (0.5 + 0.5 * Math.Sin(time * 3.2 + i * 1.3));
             var center = new Point(50 + (i - (n - 1) / 2.0) * gap, cy);
-            dc.DrawEllipse(B(color, 0.35 * pulse), null, center, 4.4, 4.4);
-            dc.DrawEllipse(B(color, pulse), null, center, 2.9, 2.9);
+            dc.DrawEllipse(B(color, pulse), null, center, 3.0, 3.0);
             dc.DrawEllipse(B(Colors.White, 0.55 * pulse), null, new Point(center.X - 0.8, center.Y - 0.8), 0.9, 0.9);
         }
         dc.Pop();

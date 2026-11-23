@@ -154,12 +154,18 @@ Check ([Math]::Abs($st.head.x - ($wa.Left + 66)) -le 3 -and [Math]::Abs($st.head
 Check ($st.alignLeft -and $st.bubbleBelow) "balon köşeye göre yön değiştirdi"
 $sb = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
 Check ($st.window.x -ge $sb.Left -and $st.window.y -ge $sb.Top -and ($st.window.x + $st.window.w) -le $sb.Right -and ($st.window.y + $st.window.h) -le $sb.Bottom) "robot penceresi ekranın dışına taşmıyor"
-# Tıkla → son olaylar
+# Tıkla → sohbet listesi (ad · durum · süre)
 [Mouse]::SetCursorPos([int]$st.head.x, [int]$st.head.y); Start-Sleep -Milliseconds 300
 [Mouse]::Down(); Start-Sleep -Milliseconds 60; [Mouse]::Up(); Start-Sleep -Milliseconds 800
-Shot "6-clicked"
+Shot "6-clicked-chat-list"
 $st = State
-Check ($st.bubble -ne $null) "tıklayınca balon açıldı"
+Check (@($st.chatList).Count -ge 1) "tıklayınca sohbet listesi açıldı ($($st.chatList -join ' | '))"
+Check (@($st.chatList | Where-Object { $_ -match "(çalışıyor|bitti|seni bekliyor) · " }).Count -ge 1) "listede durum ve süre yazıyor"
+# Tekrar tıkla → liste kapanır
+Start-Sleep -Milliseconds 700
+[Mouse]::Down(); Start-Sleep -Milliseconds 60; [Mouse]::Up(); Start-Sleep -Milliseconds 800
+$st = State
+Check ($st.chatList -eq $null) "tekrar tıklayınca liste kapandı"
 # Art arda hızlı tıklayınca başı döner
 Start-Sleep -Milliseconds 1700
 for ($i = 0; $i -lt 4; $i++) { [Mouse]::Down(); Start-Sleep -Milliseconds 50; [Mouse]::Up(); Start-Sleep -Milliseconds 150 }

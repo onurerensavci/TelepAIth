@@ -31,6 +31,9 @@ internal sealed class RobotAvatar
     public bool Locked => Prefs.RobotLocked;
     public bool IsDragging { get; private set; }
     public List<RobotModel.MiniSession> Minis { get; set; } = new();
+    /// <summary>Kafaya tıklayınca açılan sohbet listesi (null: kapalı) ve ne zamana kadar açık kalacağı</summary>
+    public List<RobotModel.ChatRow>? ChatList { get; set; }
+    public DateTime ChatListUntil { get; set; }
     /// <summary>Kafadaki küçük ışıklar: kafalarda görünmeyen diğer çalışan/bekleyen sohbetler (bekleyenler önce)</summary>
     public List<RobotState> Extras
     {

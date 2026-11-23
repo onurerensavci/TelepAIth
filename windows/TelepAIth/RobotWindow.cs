@@ -35,6 +35,8 @@ internal sealed class RobotWindow : Window
     public event Action<ApprovalChoice>? ApprovalClicked;
     /// <summary>Minik kafaya tıklandı: o AI'a geç</summary>
     public event Action<string>? MiniClicked;
+    /// <summary>Sohbet listesinde bir satıra tıklandı: o sohbete git</summary>
+    public event Action<RobotModel.ChatRow>? ChatRowClicked;
     public Func<ContextMenu>? BuildMenu;
 
     public IntPtr Handle => _hwnd;
@@ -186,6 +188,7 @@ internal sealed class RobotWindow : Window
             return;
         }
         if (_view.ButtonAt(start) is { } choice) ApprovalClicked?.Invoke(choice);
+        else if (_view.ChatRowAt(start) is { } row) ChatRowClicked?.Invoke(row);
         else if (_view.MiniAt(start) is { } source) MiniClicked?.Invoke(source);
         else if (Contains(_view.BubbleRect, start)) BubbleClicked?.Invoke();
         else if (Contains(_view.HeadRect, start)) Clicked?.Invoke();

@@ -1006,14 +1006,15 @@ final class PointerTracker {
 // MARK: - Diğer sohbetlerin ışıkları
 
 /// Kafalarda görünmeyen her sohbet için ekranın altında bir nokta (en fazla 4; Windows'takinin aynısı).
-/// Açık renkli yüzde kaybolmasın diye ekranla aynı renkte koyu bir şeridin üstünde; yeni sohbet gelince kısa bir zıplamayla belirir.
+/// Açık renkli yüzde kaybolmasın diye koyu tonlarda; yeni sohbet gelince kısa bir zıplamayla belirir.
 struct ExtraLightsView: View {
     let extras: [RobotState]
     let time: TimeInterval
     var popAge: Double = 99
 
-    private static let working = Color(red: 0.35, green: 0.72, blue: 1.0)
-    private static let waiting = Color(red: 1.0, green: 0.58, blue: 0.18)
+    // Açık renkli yüzde çerçevesiz de seçilsin diye koyu tonlar
+    private static let working = Color(red: 0.13, green: 0.47, blue: 0.95)
+    private static let waiting = Color(red: 0.95, green: 0.45, blue: 0.05)
 
     var body: some View {
         Canvas { ctx, _ in
@@ -1025,18 +1026,13 @@ struct ExtraLightsView: View {
             c.translateBy(x: 50, y: cy)
             c.scaleBy(x: 1 + 0.3 * bump, y: 1 + 0.3 * bump)
             c.translateBy(x: -50, y: -cy)
-            let w = Double(n) * gap + 4
-            c.fill(Path(roundedRect: CGRect(x: 50 - w / 2, y: cy - 5, width: w, height: 10), cornerRadius: 5),
-                   with: .color(Color(red: 0.09, green: 0.08, blue: 0.16)))
             for i in 0..<n {
                 let isWaiting = extras[i] == .waiting
                 let color = isWaiting ? ExtraLightsView.waiting : ExtraLightsView.working
                 let pulse = isWaiting ? 0.8 + 0.2 * sin(time * 7)
                     : 0.65 + 0.35 * (0.5 + 0.5 * sin(time * 3.2 + Double(i) * 1.3))
                 let cx = 50 + (Double(i) - Double(n - 1) / 2) * gap
-                c.fill(Path(ellipseIn: CGRect(x: cx - 4.4, y: cy - 4.4, width: 8.8, height: 8.8)),
-                       with: .color(color.opacity(0.35 * pulse)))
-                c.fill(Path(ellipseIn: CGRect(x: cx - 2.9, y: cy - 2.9, width: 5.8, height: 5.8)),
+                c.fill(Path(ellipseIn: CGRect(x: cx - 3.0, y: cy - 3.0, width: 6.0, height: 6.0)),
                        with: .color(color.opacity(pulse)))
                 c.fill(Path(ellipseIn: CGRect(x: cx - 1.7, y: cy - 1.7, width: 1.8, height: 1.8)),
                        with: .color(Color.white.opacity(0.55 * pulse)))

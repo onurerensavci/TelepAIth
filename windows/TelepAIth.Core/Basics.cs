@@ -77,6 +77,17 @@ public static class Text
         return info.SubstringByTextElements(0, Math.Max(1, max - 1)) + "…";
     }
 
+    /// <summary>Kısa süre: 40 → "40 sn", 200 → "3 dk", 4000 → "1 sa 6 dk"</summary>
+    public static string ShortDuration(double seconds)
+    {
+        var total = Math.Max(0, (int)seconds);
+        if (total < 60) return $"{total} {L("sn", "s")}";
+        var minutes = total / 60;
+        if (minutes < 60) return $"{minutes} {L("dk", "min")}";
+        var rest = minutes % 60;
+        return rest == 0 ? $"{minutes / 60} {L("sa", "h")}" : $"{minutes / 60} {L("sa", "h")} {rest} {L("dk", "min")}";
+    }
+
     /// <summary>75 → "1 dk 15 sn" / "1 min 15 s"</summary>
     public static string FormatDuration(double seconds)
     {

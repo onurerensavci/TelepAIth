@@ -196,8 +196,11 @@ public sealed class ChatAppTracker
         : Generating ? L("çalışıyor", "working")
         : L("izleniyor", "watching");
 
+    /// <summary>Açık sohbetin adı (yan menüden; bilinmiyorsa null)</summary>
+    public string? ChatTitle { get; private set; }
+
     private AgentEvent Ev(EventKind kind, RobotState? state = null, string? text = null, string? emoji = null) =>
-        new(Source, SessionId, kind, state, text, emoji: emoji) { AppPid = Pid };
+        new(Source, SessionId, kind, state, text, project: ChatTitle != null ? Clip(ChatTitle, 40) : null, emoji: emoji) { AppPid = Pid };
 
     /// <summary>
     /// Claude sana soru soruyorsa (seçenekli soru ekranı: "Claude is asking: …") sorunun kendisi.
@@ -247,6 +250,7 @@ public sealed class ChatAppTracker
                 _quietPolls = 0;
                 Phase = null;
                 _chatCounter++;
+                ChatTitle = null;   // yeni sohbetin adı yan menüden yeniden öğrenilecek
                 var text = L("Bu sohbete geçtim", "Switched to this chat");
                 var title = windowTitle?.Trim();
                 if (!string.IsNullOrEmpty(title) && !title.Equals(AppName, StringComparison.OrdinalIgnoreCase))
@@ -341,7 +345,11 @@ public sealed class ChatAppTracker
             events.Add(Ev(Generating ? EventKind.ToolDone : EventKind.SessionEnd));
         }
         // Arkadaki sohbetler (yan menüdeki durum noktaları)
-        if (found.SidebarScanned) events.AddRange(Background.Update(found.Sidebar, ChatKey, now));
+        if (found.SidebarScanned)
+        {
+            events.AddRange(Background.Update(found.Sidebar, ChatKey, now));
+            ChatTitle = SidebarChats.CurrentTitle(found.Sidebar, ChatKey) ?? ChatTitle;
+        }
         return events;
     }
 
@@ -373,6 +381,7 @@ public sealed class SidebarChats
     private sealed class Chat
     {
         public required string Title;
+        public string? Url;
         public RobotState State;
         public double Since, LastBeat;
     }
@@ -533,7 +542,7 @@ public sealed class SidebarChats
             var id = SessionIdFor(row.Key);
             if (!_chats.TryGetValue(row.Key, out var chat))
             {
-                chat = new Chat { Title = row.Title, State = row.State, Since = now, LastBeat = now };
+                chat = new Chat { Title = row.Title, Url = row.Url, State = row.State, Since = now, LastBeat = now };
                 _chats[row.Key] = chat;
                 events.Add(row.State == RobotState.Waiting
                     ? Ev(id, row.Title, EventKind.Waiting, RobotState.Waiting, L("Cevabını bekliyor", "Waiting for your reply"), "✋")
@@ -541,6 +550,7 @@ public sealed class SidebarChats
                 continue;
             }
             chat.Title = row.Title;
+            chat.Url ??= row.Url;
             if (row.State != chat.State)
             {
                 chat.State = row.State;
@@ -575,6 +585,27 @@ public sealed class SidebarChats
             }
         }
         return events;
+    }
+
+    /// <summary>Bu oturum hangi sohbet? (yan menüde bulup açmak için: ad ve adres)</summary>
+    public (string Title, string? Url)? Find(string sessionId)
+    {
+        foreach (var (key, chat) in _chats)
+            if (SessionIdFor(key) == sessionId) return (chat.Title, chat.Url);
+        return null;
+    }
+
+    /// <summary>Yan menüde açık sohbetin adı (seçili satır ya da adresi açık sohbetinkiyle aynı olan)</summary>
+    public static string? CurrentTitle(IReadOnlyList<SidebarItem> items, string? currentChat)
+    {
+        var key = NormalizeUrl(currentChat);
+        foreach (var it in items)
+        {
+            var title = StripStatus(it.Name);
+            if (title.Length < 2) continue;
+            if ((it.Current && it.Url != null) || (key != null && it.Url != null && NormalizeUrl(it.Url) == key)) return title;
+        }
+        return null;
     }
 
     /// <summary>Uygulama kapandı: arkadaki sohbetleri kapat</summary>

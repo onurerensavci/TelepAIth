@@ -320,6 +320,55 @@ internal sealed class AppWatcher
             found.Urls.Add(url);
     }
 
+    /// <summary>
+    /// Arkadaki bir sohbeti aç: uygulamayı öne getir, yan menüde o sohbetin bağlantısını bul ve bas.
+    /// Bulunamazsa sadece uygulama öne gelir. false: bu oturum bilinmiyor.
+    /// </summary>
+    public bool OpenBackgroundChat(string sessionId)
+    {
+        var parts = sessionId.Split('-');
+        if (parts.Length < 3 || !int.TryParse(parts[1], out var pid)) return false;
+        (string Title, string? Url)? chat;
+        try { chat = _trackers.TryGetValue(pid, out var tr) ? tr.Background.Find(sessionId) : null; }
+        catch { chat = null; }   // izleyici aynı anda güncelliyor olabilir
+        IntPtr hwnd;
+        try { using var p = Process.GetProcessById(pid); hwnd = p.MainWindowHandle; }
+        catch { return false; }
+        if (hwnd == IntPtr.Zero) return false;
+        Native.Activate(hwnd);
+        if (chat is not { } c) return true;
+        System.Threading.Tasks.Task.Run(() =>
+        {
+            try { ClickSidebarLink(hwnd, c.Title, c.Url); }
+            catch (Exception ex) { Log("open chat: " + ex.Message); }
+        });
+        return true;
+    }
+
+    private static void ClickSidebarLink(IntPtr hwnd, string title, string? url)
+    {
+        var root = AutomationElement.FromHandle(hwnd);
+        var key = SidebarChats.NormalizeUrl(url);
+        AutomationElement? best = null;
+        var links = root.FindAll(TreeScope.Descendants, new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Hyperlink));
+        foreach (AutomationElement link in links)
+        {
+            var href = link.TryGetCurrentPattern(ValuePattern.Pattern, out var vp) ? ((ValuePattern)vp).Current.Value : null;
+            if (key != null && SidebarChats.NormalizeUrl(href) == key) { best = link; break; }
+            if (best == null && SidebarChats.StripStatus(link.Current.Name).Equals(title, StringComparison.OrdinalIgnoreCase)) best = link;
+        }
+        if (best == null)
+        {
+            // Bağlantı yoksa (ör. düz liste) aynı adlı öğeye tıkla
+            var named = root.FindFirst(TreeScope.Descendants, new PropertyCondition(AutomationElement.NameProperty, title));
+            if (named?.TryGetClickablePoint(out var pt) == true) Native.Click((int)pt.X, (int)pt.Y);
+            Log($"open chat: bağlantı bulunamadı ({title})");
+            return;
+        }
+        if (best.TryGetCurrentPattern(InvokePattern.Pattern, out var ip)) ((InvokePattern)ip).Invoke();
+        else if (best.TryGetClickablePoint(out var p2)) Native.Click((int)p2.X, (int)p2.Y);
+    }
+
     /// <summary>Teşhis: yan menüde durum gibi görünen öğeler ve ipucu/açıklaması olanlar (algılamayı ayarlamak için)</summary>
     private static string SidebarDiag(FoundUi found, ChatAppTracker tracker)
     {

@@ -45,6 +45,18 @@ internal static class Native
     public const int DWMWA_CLOAKED = 14;
 
     [DllImport("user32.dll")] public static extern bool GetCursorPos(out POINT p);
+    [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
+    [DllImport("user32.dll")] private static extern void mouse_event(uint flags, int dx, int dy, uint data, UIntPtr extra);
+
+    /// <summary>Ekranda bir noktaya sol tık (fare eski yerine döner)</summary>
+    public static void Click(int x, int y)
+    {
+        GetCursorPos(out var old);
+        SetCursorPos(x, y);
+        mouse_event(0x0002, 0, 0, 0, UIntPtr.Zero);   // sol tuş bas
+        mouse_event(0x0004, 0, 0, 0, UIntPtr.Zero);   // bırak
+        SetCursorPos(old.X, old.Y);
+    }
     [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
     [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hwnd, out uint pid);
     [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr hwnd, out RECT r);

@@ -81,6 +81,7 @@ internal sealed class RobotManager
         // Art arda hızlı tıklanınca başı döner
         window.RapidClicked += () => _avatar?.Current.React(Mood.Dizzy, 2.5, WithEmoji("😵‍💫", L("Başım döndü!", "I'm dizzy!")));
         window.BubbleClicked += BubbleClicked;
+        window.ChatRowClicked += OpenChat;
         window.ApprovalClicked += Choose;
         window.BuildMenu = () => BuildRobotMenu!();
         _window = window;
@@ -341,9 +342,44 @@ internal sealed class RobotManager
                 break;
             default:
                 _avatar.Current.Wake();
-                _avatar.Current.ShowHistory();
+                // Sohbet listesi: açıksa kapat; çalışan/bekleyen/yeni biten sohbet varsa aç, yoksa son olaylar
+                if (_avatar.ChatList != null)
+                {
+                    _avatar.ChatList = null;
+                    break;
+                }
+                var rows = DisplayPicker.ChatRows(AllModels, DateTime.Now);
+                if (rows.Count > 0)
+                {
+                    _avatar.ChatList = rows;
+                    _avatar.ChatListUntil = DateTime.Now.AddSeconds(10);
+                }
+                else
+                {
+                    _avatar.Current.ShowHistory();
+                }
                 break;
         }
+    }
+
+    /// <summary>Listeden bir sohbet seçildi: o AI'a geç ve sohbeti aç</summary>
+    private void OpenChat(RobotModel.ChatRow row)
+    {
+        if (_avatar != null) _avatar.ChatList = null;
+        if (_models.TryGetValue(row.Source, out var m))
+        {
+            _pinnedSource = row.Source;
+            Show(m);
+        }
+        // Arkadaki Claude sohbeti: uygulamayı öne getir ve yan menüdeki bağlantısına bas
+        if (row.SessionId.StartsWith("bg-", StringComparison.Ordinal) && _watcher.OpenBackgroundChat(row.SessionId)) return;
+        // Claude Code: çalıştığı terminal; uygulama sohbeti: uygulamanın penceresi
+        if (row.Target is { IsEmpty: false } target)
+        {
+            Activate(target);
+            return;
+        }
+        OpenCurrentApp();
     }
 
     public void ShowHistory(string source)
@@ -553,6 +589,9 @@ internal sealed class RobotManager
             ["subtitle"] = _avatar?.Current.BubbleSubtitle,
             ["minis"] = _avatar?.Minis.Count ?? 0,
             ["extras"] = _avatar?.Extras.Count ?? 0,
+            ["chatList"] = _avatar?.ChatList is { } cl
+                ? new System.Text.Json.Nodes.JsonArray(cl.Select(r => (System.Text.Json.Nodes.JsonNode?)$"{r.Source}/{r.Title}: {r.Status}").ToArray())
+                : null,
             ["health"] = _avatar?.Health.ToString(),
             ["alignLeft"] = _avatar?.AlignLeft,
             ["bubbleBelow"] = _avatar?.BubbleBelow,
@@ -619,6 +658,12 @@ internal sealed class RobotManager
             _lastMiniCheck = now;
             ChooseDisplay();   // bitiş kutlaması bitince sıradaki çalışana geç
             _avatar.Minis = DisplayPicker.Minis(AllModels, _avatar.Current, date);
+            // Açık sohbet listesi canlı kalsın (süreler ilerler), süresi dolunca kapansın
+            if (_avatar.ChatList != null)
+            {
+                var rows = DisplayPicker.ChatRows(AllModels, date);
+                _avatar.ChatList = date > _avatar.ChatListUntil || rows.Count == 0 ? null : rows;
+            }
             _avatar.Extras = DisplayPicker.Extras(AllModels, _avatar.Current, date, Prefs.MiniHeads);
         }
         // Toplantı, odak süresi, günlük özet (5 sn'de bir)

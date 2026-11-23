@@ -44,6 +44,14 @@ public static class DisplayPicker
     public static bool CanGaze(IEnumerable<RobotModel> models, DateTime now) =>
         models.All(m => (now - m.LastBusyAt).TotalSeconds >= GazeDelay);
 
+    /// <summary>Kafaya tıklayınca açılan sohbet listesi: tüm AI'lardan, seni bekleyenler önce, sonra çalışanlar, sonra bitenler (en fazla 6)</summary>
+    public static List<RobotModel.ChatRow> ChatRows(IEnumerable<RobotModel> models, DateTime now, int max = 6) =>
+        models.SelectMany(m => m.ChatRows(now))
+            .OrderBy(r => r.Rank)
+            .ThenBy(r => r.Rank == 2 ? -r.At.Ticks : r.At.Ticks)   // bekleyen/çalışan: en eski önce; biten: en yeni önce
+            .Take(max)
+            .ToList();
+
     /// <summary>
     /// Kafadaki küçük ışıklar: büyük kafada ve minik kafalarda görünmeyen, çalışan ya da seni bekleyen diğer sohbetler
     /// (seni bekleyenler önce). minisShown: minik kafalar açık mı (kapalıysa öteki AI'ların sohbetleri de ışık olur).
