@@ -406,8 +406,32 @@ final class AppWatcher {
         return (status, diagnostics)
     }
 
+    /// Claude sana soru soruyorsa (seçenekli soru ekranı: "Claude is asking: …") sorunun kendisi.
+    /// Bu sırada "Durdur" düğmesi kaybolur ama tur bitmemiştir: cevabını bekliyordur. (Windows'ta ChatAppTracker.Question)
+    static func question(_ texts: [(String, CGRect)]) -> String? {
+        for (text, _) in texts {
+            let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            let l = t.lowercased()
+            if l.hasPrefix("claude is asking") || l.hasPrefix("claude soruyor") || l.contains(" is asking:") {
+                if let i = t.firstIndex(of: ":") {
+                    let q = t[t.index(after: i)...].trimmingCharacters(in: .whitespaces)
+                    return q.isEmpty ? t : q
+                }
+                return t
+            }
+        }
+        return nil
+    }
+
     private func update(_ st: inout AppState, pid: pid_t, found: Found, generatingNow: Bool, streaming: Bool, now: TimeInterval) {
         let session = st.session(pid)
+        let question = AppWatcher.question(found.texts)
+        let asking = question != nil
+        if asking {
+            // Soru soruyor: tur bitmedi, "bitti" deme
+            st.quietPolls = 0
+            st.lastActiveAt = now
+        }
         if generatingNow {
             st.quietPolls = 0
             st.lastActiveAt = now
@@ -425,7 +449,7 @@ final class AppWatcher {
                 emitMain(AgentEvent(source: st.source, sessionID: session, kind: .heartbeat))
             }
             // Ne yaptığını kısa Türkçe bir aşamayla söyle (bakıyor, inceliyor, yazıyor, düzeltiyor…)
-            if !found.approve {
+            if !found.approve && !asking {
                 let p = AppWatcher.phase(found, elapsed: now - st.startedAt, streaming: streaming)
                 if p != st.phase && now - st.lastPhaseAt > 1.5 {
                     st.phase = p
@@ -434,7 +458,7 @@ final class AppWatcher {
                                         text: p.phrase, emoji: p.emoji))
                 }
             }
-        } else if st.generating {
+        } else if st.generating && !asking {
             st.quietPolls += 1
             if st.quietPolls >= 2 && now - st.lastActiveAt >= 1.6 {   // 1,6 sn boyunca "Durdur" yoksa (ve metin akmıyorsa) bitti say
                 st.generating = false
@@ -448,17 +472,19 @@ final class AppWatcher {
             }
         }
 
-        if found.approve && !st.approving {
+        let waitingNow = found.approve || asking
+        if waitingNow && !st.approving {
             st.approving = true
-            var e = AgentEvent(source: st.source, sessionID: session, kind: .waiting, state: .waiting,
-                               text: loc("Onayını bekliyor", "Needs your approval"), emoji: "✋")
+            var e = asking
+                ? AgentEvent(source: st.source, sessionID: session, kind: .waiting, state: .waiting,
+                             text: loc("Soru soruyor: ", "Asking you: ") + clip(question!, 90), emoji: "❓")
+                : AgentEvent(source: st.source, sessionID: session, kind: .waiting, state: .waiting,
+                             text: loc("Onayını bekliyor", "Needs your approval"), emoji: "✋")
             e.quietIfFrontmostPID = pid
             emitMain(e)
-        } else if !found.approve && st.approving {
+        } else if !waitingNow && st.approving {
             st.approving = false
-            if st.generating {
-                emitMain(AgentEvent(source: st.source, sessionID: session, kind: .toolDone))
-            }
+            emitMain(AgentEvent(source: st.source, sessionID: session, kind: st.generating ? .toolDone : .sessionEnd))
         }
     }
 

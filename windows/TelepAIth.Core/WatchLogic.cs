@@ -180,10 +180,38 @@ public sealed class ChatAppTracker
     private AgentEvent Ev(EventKind kind, RobotState? state = null, string? text = null, string? emoji = null) =>
         new(Source, SessionId, kind, state, text, emoji: emoji) { AppPid = Pid };
 
+    /// <summary>
+    /// Claude sana soru soruyorsa (seçenekli soru ekranı: "Claude is asking: …") sorunun kendisi.
+    /// Bu sırada "Durdur" düğmesi kaybolur ama tur bitmemiştir: cevabını bekliyordur.
+    /// </summary>
+    public static string? Question(FoundUi found)
+    {
+        foreach (var (text, _) in found.Texts)
+        {
+            var t = text.Trim();
+            var l = t.ToLowerInvariant();
+            if (l.StartsWith("claude is asking") || l.StartsWith("claude soruyor") || l.Contains(" is asking:"))
+            {
+                var i = t.IndexOf(':');
+                var q = i >= 0 ? t[(i + 1)..].Trim() : "";
+                return q.Length > 0 ? q : t;
+            }
+        }
+        return null;
+    }
+
     /// <summary>Bir tarama sonucunu işler; robota gönderilecek olayları döner. now: saniye (monoton).</summary>
     public List<AgentEvent> Update(FoundUi found, string? windowTitle, double now)
     {
         var events = new List<AgentEvent>();
+        var question = Question(found);
+        var asking = question != null;
+        if (asking)
+        {
+            // Soru soruyor: tur bitmedi, "bitti" deme
+            _quietPolls = 0;
+            _lastActiveAt = now;
+        }
         if (found.Stop != null || found.Send != null || found.Composer != null) SawComposer = true;
 
         // Başka sohbete geçildi mi? Geçildiyse eski sohbet için "bitti" deme, tıklanan sohbete geç.
@@ -245,7 +273,7 @@ public sealed class ChatAppTracker
                 events.Add(Ev(EventKind.Heartbeat));
             }
             // Ne yaptığını kısa bir aşamayla söyle (bakıyor, inceliyor, yazıyor, düzeltiyor…)
-            if (!found.Approve)
+            if (!found.Approve && !asking)
             {
                 var p = WorkPhases.Infer(found, now - _startedAt, streaming);
                 if (p != Phase && now - _lastPhaseAt > 1.5)
@@ -256,7 +284,7 @@ public sealed class ChatAppTracker
                 }
             }
         }
-        else if (Generating)
+        else if (Generating && !asking)
         {
             _quietPolls++;
             if (_quietPolls >= 2 && now - _lastActiveAt >= 1.6)   // 1,6 sn boyunca "Durdur" yoksa (ve metin akmıyorsa) bitti say
@@ -276,17 +304,20 @@ public sealed class ChatAppTracker
             }
         }
 
-        if (found.Approve && !Approving)
+        var waitingNow = found.Approve || asking;
+        if (waitingNow && !Approving)
         {
             Approving = true;
-            var w = Ev(EventKind.Waiting, Core.RobotState.Waiting, L("Onayını bekliyor", "Needs your approval"), "✋");
+            var w = asking
+                ? Ev(EventKind.Waiting, Core.RobotState.Waiting, L("Soru soruyor: ", "Asking you: ") + Clip(question!, 90), "❓")
+                : Ev(EventKind.Waiting, Core.RobotState.Waiting, L("Onayını bekliyor", "Needs your approval"), "✋");
             w.QuietIfForegroundPid = Pid;
             events.Add(w);
         }
-        else if (!found.Approve && Approving)
+        else if (!waitingNow && Approving)
         {
             Approving = false;
-            if (Generating) events.Add(Ev(EventKind.ToolDone));
+            events.Add(Ev(Generating ? EventKind.ToolDone : EventKind.SessionEnd));
         }
         return events;
     }

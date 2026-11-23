@@ -180,4 +180,10 @@ final class TelepAIthTests: XCTestCase {
         XCTAssertTrue(cmd.contains("/permission?source=claude"))
         XCTAssertTrue(cmd.contains(AppInfo.hookMarker))
     }
+
+    func testClaudeAskingQuestion() {
+        let r = CGRect(x: 0, y: 0, width: 10, height: 10)
+        XCTAssertEqual(AppWatcher.question([("Claude is asking: Deneme sorusu: çalışıyor mu?", r)]), "Deneme sorusu: çalışıyor mu?")
+        XCTAssertNil(AppWatcher.question([("Claude is AI and can make mistakes.", r)]))
+    }
 }

@@ -324,6 +324,29 @@ public static class Tests
         HookInstaller.Uninstall(HookTarget.Claude);
     }
 
+    public static void ClaudeAskingIsWaitingNotDone()
+    {
+        var t = new ChatAppTracker("claude", 42, "Claude");
+        var composer = new RectD(100, 900, 600, 60);
+        var stop = new RectD(700, 910, 30, 30);
+        // Çalışıyor (Durdur görünüyor)
+        t.Update(new FoundUi { Stop = stop, Composer = composer }, "Claude", 0);
+        t.Update(new FoundUi { Stop = stop, Composer = composer }, "Claude", 5);
+        A.True(t.Generating, "çalışıyor");
+        // Soru ekranı: Durdur yok, Gönder var, "Claude is asking: …"
+        var asking = new FoundUi { Send = stop, Composer = composer };
+        asking.Texts.Add(("Claude is asking: Deneme sorusu: robot şu an 'seni bekliyor' diyor mu?", new RectD(100, 800, 500, 20)));
+        A.Eq("Deneme sorusu: robot şu an 'seni bekliyor' diyor mu?", ChatAppTracker.Question(asking));
+        var all = new List<AgentEvent>();
+        for (var i = 0; i < 6; i++) all.AddRange(t.Update(asking, "Claude", 6 + i));
+        A.True(!all.Any(e => e.Kind == EventKind.Stop), "soru sırasında 'bitti' demez");
+        var w = all.Single(e => e.Kind == EventKind.Waiting);
+        A.True(w.Text!.Contains("Deneme sorusu") && w.Emoji == "❓", "soruyu söyler");
+        // Cevaplandı, Claude devam ediyor
+        var after = t.Update(new FoundUi { Stop = stop, Composer = composer }, "Claude", 13);
+        A.True(after.Any(e => e.Kind == EventKind.ToolDone), "cevaptan sonra çalışmaya döner");
+    }
+
     public static void ModelStopNotice()
     {
         var m = new RobotModel("claude");
