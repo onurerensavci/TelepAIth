@@ -242,6 +242,7 @@ final class AppController: NSObject {
         let demoMenu = NSMenu()
         demoMenu.addItem(actionItem(loc("Claude: kısa bir görev", "Claude: a short task"), #selector(demoClaude)))
         demoMenu.addItem(actionItem(loc("GPT: onay beklesin", "GPT: wait for approval"), #selector(demoGPTWaiting)))
+        demoMenu.addItem(actionItem(loc("Claude: izin istesin (İzin ver / Reddet)", "Claude: ask for permission (Allow / Deny)"), #selector(demoApproval)))
         demoMenu.addItem(actionItem(loc("Claude: kota uyarısı", "Claude: quota alert"), #selector(demoQuota)))
         demoMenu.addItem(actionItem(loc("İki oturum aynı anda", "Two sessions at once"), #selector(demoParallel)))
         demoMenu.addItem(.separator())
@@ -611,6 +612,38 @@ final class AppController: NSObject {
                             text: loc("Komut: ", "Command: ") + "npm install", project: p, emoji: "📦")),
             (15, AgentEvent(source: "gpt", sessionID: s, kind: .stop, state: .done, project: p)),
         ])
+    }
+
+    /// Robottan onayı denemek için: gerçek akışın aynısı, sadece karar Claude Code yerine bu örneğe gider
+    @objc private func demoApproval() {
+        let s = "demo-\(Int.random(in: 1000...9999))"
+        let p = "demo-app"
+        manager.handle(AgentEvent(source: "claude", sessionID: s, kind: .prompt, state: .thinking,
+                                  text: loc("Düşünüyor…", "Thinking…"), project: p, emoji: "🔮"))
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+            guard let self = self else { return }
+            var e = AgentEvent(source: "claude", sessionID: s, kind: .waiting, state: .waiting,
+                               text: loc("Onayını bekliyor: ", "Needs your approval: ") + "Bash — npm install",
+                               project: p, emoji: "✋")
+            e.forceNotify = false
+            let body = Data(#"{"permission_suggestions":[{"type":"addRules","rules":[{"toolName":"Bash","ruleContent":"npm install"}],"behavior":"allow","destination":"localSettings"}]}"#.utf8)
+            let pending = PendingApproval(event: e, body: body) { [weak self] answer in
+                DispatchQueue.main.async {
+                    guard let self = self, !answer.isEmpty else { return }
+                    if answer.contains("\"deny\"") {
+                        self.play([(2.6, AgentEvent(source: "claude", sessionID: s, kind: .stop, state: .done,
+                                                    text: loc("Peki, npm install'ı atladım (demo).", "OK, skipped npm install (demo)."), project: p))])
+                    } else {
+                        self.play([
+                            (2.6, AgentEvent(source: "claude", sessionID: s, kind: .tool, state: .running,
+                                             text: loc("Komut: ", "Command: ") + "npm install", project: p, emoji: "📦")),
+                            (5.5, AgentEvent(source: "claude", sessionID: s, kind: .stop, state: .done, project: p)),
+                        ])
+                    }
+                }
+            }
+            self.manager.onPermission(pending)
+        }
     }
 
     @objc private func demoQuota() {

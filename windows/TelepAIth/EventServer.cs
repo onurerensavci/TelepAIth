@@ -191,6 +191,9 @@ internal sealed class PendingApproval
         Suggestions = Approval.Suggestions(body);
     }
 
+    /// <summary>Karar (boşsa soru terminale bırakıldı)</summary>
+    public Task<string> Result => _answer.Task;
+
     public void Answer(string json) => _answer.TrySetResult(json);
     public void Release() => _answer.TrySetResult("");
 

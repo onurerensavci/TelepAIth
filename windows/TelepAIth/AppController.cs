@@ -159,6 +159,7 @@ internal sealed class AppController : ISettingsHost
         {
             new(L("Claude: kısa bir görev", "Claude: a short task"), Demos.Claude(this), Dot: Themes.Shared.Theme("claude").Color),
             new(L("GPT: onay beklesin", "GPT: wait for approval"), Demos.GptWaiting(this), Dot: Themes.Shared.Theme("gpt").Color),
+            new(L("Claude: izin istesin (İzin ver / Reddet)", "Claude: ask for permission (Allow / Deny)"), Demos.Approval(this), Icon: "\uE8FB"),
             new(L("Claude: kota uyarısı", "Claude: quota alert"), () => Manager.Handle(Demos.Quota()), Icon: "\uEBA7"),
             new(L("İki oturum aynı anda", "Two sessions at once"), Demos.Parallel(this), Icon: "\uE716"),
             null,
@@ -567,6 +568,29 @@ internal static class Demos
             (11, E("gpt", s, EventKind.ToolDone)),
             (12, E("gpt", s, EventKind.Tool, RobotState.Running, L("Komut: ", "Command: ") + "npm install", p, "📦")),
             (15, E("gpt", s, EventKind.Stop, RobotState.Done, project: p)));
+    };
+
+    /// <summary>Robottan onayı denemek için: gerçek akışın aynısı, sadece karar Claude Code yerine bu örneğe gider</summary>
+    public static Action Approval(AppController c) => () =>
+    {
+        var s = Id();
+        const string p = "demo-app";
+        c.Manager.Handle(E("claude", s, EventKind.Prompt, RobotState.Thinking, L("Düşünüyor…", "Thinking…"), p, "🔮"));
+        _ = Application.Current.Dispatcher.InvokeAsync(async () =>
+        {
+            await Task.Delay(1500);
+            var e = E("claude", s, EventKind.Waiting, RobotState.Waiting, L("Onayını bekliyor: ", "Needs your approval: ") + "Bash — npm install", p, "✋");
+            var pending = new PendingApproval(e,
+                """{"permission_suggestions":[{"type":"addRules","rules":[{"toolName":"Bash","ruleContent":"npm install"}],"behavior":"allow","destination":"localSettings"}]}""");
+            c.Manager.OnPermission(pending);
+            var answer = await pending.Result;
+            if (string.IsNullOrEmpty(answer)) return;
+            if (answer.Contains("\"deny\""))
+                Play(c, (2.6, E("claude", s, EventKind.Stop, RobotState.Done, L("Peki, npm install'ı atladım (demo).", "OK, skipped npm install (demo)."), p)));
+            else
+                Play(c, (2.6, E("claude", s, EventKind.Tool, RobotState.Running, L("Komut: ", "Command: ") + "npm install", p, "📦")),
+                        (5.5, E("claude", s, EventKind.Stop, RobotState.Done, project: p)));
+        });
     };
 
     public static AgentEvent Quota() =>
