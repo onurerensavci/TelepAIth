@@ -380,6 +380,8 @@ internal sealed class RobotView : FrameworkElement
             dc.DrawImage(skin, FitRect(skin, new Rect(2, 3, 96, 90)));
         else
             DrawFace(dc, time, eyeColor, face, C(baseColor));
+        // Diğer sohbetler: ekranın altında küçük ışıklar (mavi çalışıyor, turuncu seni bekliyor)
+        if (skin == null) DrawExtraLights(dc, _avatar.Extras, time);
         // Hata: eli alnına (yüzle birlikte hareket etsin)
         if (model.Gesture == Gesture.Facepalm && gt is >= 0 and <= 1.6) DrawFacepalm(dc, gt, right);
         dc.Pop();
@@ -737,6 +739,26 @@ internal sealed class RobotView : FrameworkElement
         var phase = age % 4;
         if (phase >= 0.6) return 0;
         return Math.Sin(phase * 40) * (1 - phase / 0.6) * 4;
+    }
+
+    // MARK: Diğer sohbetlerin ışıkları
+
+    private static readonly Color ExtraWorking = C(0.35, 0.72, 1.0);
+    private static readonly Color ExtraWaiting = C(1.0, 0.58, 0.18);
+
+    /// <summary>Kafalarda görünmeyen her sohbet için ekranın altında bir nokta (en fazla 4)</summary>
+    private static void DrawExtraLights(DrawingContext dc, List<RobotState> extras, double time)
+    {
+        var n = Math.Min(4, extras.Count);
+        for (var i = 0; i < n; i++)
+        {
+            var waiting = extras[i] == RobotState.Waiting;
+            var color = waiting ? ExtraWaiting : ExtraWorking;
+            var pulse = waiting ? 0.75 + 0.25 * Math.Sin(time * 7) : 0.45 + 0.55 * (0.5 + 0.5 * Math.Sin(time * 3.2 + i * 1.3));
+            var center = new Point(50 + (i - (n - 1) / 2.0) * 7, 79.5);
+            dc.DrawEllipse(B(color, 0.28 * pulse), null, center, 3.6, 3.6);
+            dc.DrawEllipse(B(color, pulse), null, center, 2.1, 2.1);
+        }
     }
 
     // MARK: El hareketleri

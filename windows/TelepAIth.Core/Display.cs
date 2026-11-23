@@ -53,6 +53,24 @@ public static class DisplayPicker
         || !models.Any(m => !ReferenceEquals(m, pinned) && m.State.Priority() >= RobotState.Thinking.Priority());
 
     /// <summary>
+    /// Kafadaki küçük ışıklar: büyük kafada ve minik kafalarda görünmeyen, çalışan ya da seni bekleyen diğer sohbetler
+    /// (seni bekleyenler önce). minisShown: minik kafalar açık mı (kapalıysa öteki AI'ların sohbetleri de ışık olur).
+    /// </summary>
+    public static List<RobotState> Extras(IEnumerable<RobotModel> models, RobotModel current, DateTime now, bool minisShown = true)
+    {
+        var extras = new List<RobotState>();
+        foreach (var m in models)
+        {
+            var all = m.MiniSessions(ReferenceEquals(m, current) ? m.BestSessionId : null, now);
+            var states = all.Select(x => x.State).OrderByDescending(s => s.Priority()).ToList();
+            // Öteki AI'ın en acil sohbeti zaten minik kafada
+            if (!ReferenceEquals(m, current) && minisShown && states.Count > 0) states.RemoveAt(0);
+            extras.AddRange(states);
+        }
+        return extras.OrderByDescending(s => s.Priority()).ToList();
+    }
+
+    /// <summary>
     /// Minik kafalar: büyük kafada gösterilmeyen her AI için en fazla bir tane (Claude büyükse GPT, GPT büyükse Claude).
     /// O AI'ın birden çok sohbeti çalışıyorsa en acil olanı gösterilir. Gösterilen AI'ın diğer sohbetleri
     /// ayrı kafa olmaz: büyük kafanın "çalışıyor" hâlinde ve bildirimlerde görünür.

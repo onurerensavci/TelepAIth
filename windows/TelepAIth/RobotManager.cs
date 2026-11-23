@@ -527,6 +527,7 @@ internal sealed class RobotManager
         if (_avatar == null || ReferenceEquals(model, _avatar.Current)) return;
         _avatar.Show(model);
         _avatar.Minis = DisplayPicker.Minis(AllModels, model, DateTime.Now);
+        _avatar.Extras = DisplayPicker.Extras(AllModels, model, DateTime.Now, Prefs.MiniHeads);
     }
 
     /// <summary>Robotun o anki durumu (JSON) — teşhis ve otomatik testler için</summary>
@@ -541,6 +542,7 @@ internal sealed class RobotManager
             ["bubble"] = _avatar?.Current.BubbleText,
             ["subtitle"] = _avatar?.Current.BubbleSubtitle,
             ["minis"] = _avatar?.Minis.Count ?? 0,
+            ["extras"] = _avatar?.Extras.Count ?? 0,
             ["health"] = _avatar?.Health.ToString(),
             ["alignLeft"] = _avatar?.AlignLeft,
             ["bubbleBelow"] = _avatar?.BubbleBelow,
@@ -607,6 +609,7 @@ internal sealed class RobotManager
             _lastMiniCheck = now;
             ChooseDisplay();   // bitiş kutlaması bitince sıradaki çalışana geç
             _avatar.Minis = DisplayPicker.Minis(AllModels, _avatar.Current, date);
+            _avatar.Extras = DisplayPicker.Extras(AllModels, _avatar.Current, date, Prefs.MiniHeads);
         }
         // Toplantı, odak süresi, günlük özet (5 sn'de bir)
         if (now - _lastSlowCheck > 5)

@@ -541,6 +541,21 @@ final class RobotModel: ObservableObject {
             || !models.contains { $0 !== pinned && $0.state.priority >= RobotState.thinking.priority }
     }
 
+    /// Kafadaki küçük ışıklar: büyük kafada ve minik kafalarda görünmeyen, çalışan ya da seni bekleyen diğer sohbetler
+    /// (seni bekleyenler önce). minisShown: minik kafalar açık mı (kapalıysa öteki AI'ların sohbetleri de ışık olur).
+    static func extras(_ models: [RobotModel], current: RobotModel, now: Date = Date(), minisShown: Bool = true) -> [RobotState] {
+        var extras: [RobotState] = []
+        for m in models {
+            var states = m.miniSessions(excluding: m === current ? m.bestSessionID : nil, now: now)
+                .map { $0.state }
+                .sorted { $0.priority > $1.priority }
+            // Öteki AI'ın en acil sohbeti zaten minik kafada
+            if m !== current && minisShown && !states.isEmpty { states.removeFirst() }
+            extras += states
+        }
+        return extras.sorted { $0.priority > $1.priority }
+    }
+
     /// Minik kafalar: büyük kafada gösterilmeyen her AI için en fazla bir tane (Claude büyükse GPT, GPT büyükse Claude).
     /// O AI'ın birden çok sohbeti çalışıyorsa en acil olanı gösterilir. Gösterilen AI'ın diğer sohbetleri
     /// ayrı kafa olmaz: büyük kafanın "çalışıyor" hâlinde ve bildirimlerde görünür.

@@ -512,6 +512,7 @@ final class RobotManager {
         guard let avatar = avatar, model !== avatar.current else { return }
         avatar.show(model)
         avatar.setMinis(RobotModel.minis(allModels, current: model))
+        avatar.setExtras(RobotModel.extras(allModels, current: model, minisShown: Preferences.miniHeads))
     }
 
     // MARK: - Döngü
@@ -564,6 +565,7 @@ final class RobotManager {
             chooseDisplay()   // bitiş kutlaması bitince sıradaki çalışana geç
             // Gösterilen AI'ın kendisi zaten büyük kafada; başka AI'ların tek oturumu da minik kafa olur
             avatar.setMinis(RobotModel.minis(allModels, current: avatar.current, now: date))
+            avatar.setExtras(RobotModel.extras(allModels, current: avatar.current, now: date, minisShown: Preferences.miniHeads))
         }
         // Toplantı, odak süresi, günlük özet (5 sn'de bir)
         if now - lastSlowCheck > 5 {

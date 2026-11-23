@@ -13,7 +13,7 @@ struct AvatarView: View {
         return ZStack {
             AvatarStage(model: avatar.current, alignLeft: avatar.alignLeft, bubbleBelow: avatar.bubbleBelow,
                         health: avatar.health, locked: avatar.locked, minis: avatar.minis, focus: avatar.focus,
-                        approval: avatar.approval, pointer: avatar.pointer)
+                        approval: avatar.approval, pointer: avatar.pointer, extras: avatar.extras)
                 .id(avatar.current.source)
                 .transition(.scale(scale: 0.4).combined(with: .opacity))
         }
@@ -56,6 +56,7 @@ struct AvatarStage: View {
     let focus: Bool
     var approval: ApprovalPrompt? = nil
     var pointer: PointerTracker? = nil
+    var extras: [RobotState] = []
 
     /// Odak modunda sadece seni bekleyen, hata veren ya da robotun kendi söylediği şeyler görünür
     private var urgent: Bool { model.state == .waiting || model.state == .error || model.bubbleIsExplicit }
@@ -122,7 +123,8 @@ struct AvatarStage: View {
                        look: alignLeft ? 2.5 : -2.5,
                        health: health,
                        pointer: pointer,
-                       bubbleBelow: bubbleBelow)
+                       bubbleBelow: bubbleBelow,
+                       extras: extras)
         }
         .frame(width: Layout.baseHeadSize.width, height: Layout.baseHeadSize.height)
         .overlay(alignment: .topTrailing) {
@@ -232,6 +234,7 @@ struct HeadFigure: View {
     let health: Health
     var pointer: PointerTracker? = nil
     var bubbleBelow = false
+    var extras: [RobotState] = []
 
     var body: some View {
         let state = model.state
@@ -285,6 +288,8 @@ struct HeadFigure: View {
                     FaceView(state: state, mood: model.mood, time: time, look: look, eyeColor: eyeColor, health: health,
                              prevState: prevState, prevMood: prevMood, blend: blend, idle: idle,
                              glyph: glyph, prevGlyph: prevGlyph, gaze: gaze, winter: winter, theme: Color(nsColor: base))
+                    // Diğer sohbetler: ekranın altında küçük ışıklar (mavi çalışıyor, turuncu seni bekliyor)
+                    if !extras.isEmpty { ExtraLightsView(extras: extras, time: time) }
                 }
                 // Hata: eli alnına (yüzle birlikte hareket etsin)
                 if model.gesture == .facepalm && gt >= 0 && gt <= 1.6 {
@@ -974,6 +979,37 @@ final class PointerTracker {
         hover += (target - hover) * Swift.min(1, dt * 8)
         gaze.hover = hover
         return gaze
+    }
+}
+
+// MARK: - Diğer sohbetlerin ışıkları
+
+/// Kafalarda görünmeyen her sohbet için ekranın altında bir nokta (en fazla 4; Windows'takinin aynısı)
+struct ExtraLightsView: View {
+    let extras: [RobotState]
+    let time: TimeInterval
+
+    private static let working = Color(red: 0.35, green: 0.72, blue: 1.0)
+    private static let waiting = Color(red: 1.0, green: 0.58, blue: 0.18)
+
+    var body: some View {
+        Canvas { ctx, _ in
+            let n = Swift.min(4, extras.count)
+            for i in 0..<n {
+                let isWaiting = extras[i] == .waiting
+                let color = isWaiting ? ExtraLightsView.waiting : ExtraLightsView.working
+                let pulse = isWaiting ? 0.75 + 0.25 * sin(time * 7)
+                    : 0.45 + 0.55 * (0.5 + 0.5 * sin(time * 3.2 + Double(i) * 1.3))
+                let cx = 50 + (Double(i) - Double(n - 1) / 2) * 7
+                let cy = 79.5
+                ctx.fill(Path(ellipseIn: CGRect(x: cx - 3.6, y: cy - 3.6, width: 7.2, height: 7.2)),
+                         with: .color(color.opacity(0.28 * pulse)))
+                ctx.fill(Path(ellipseIn: CGRect(x: cx - 2.1, y: cy - 2.1, width: 4.2, height: 4.2)),
+                         with: .color(color.opacity(pulse)))
+            }
+        }
+        .frame(width: 100, height: 100)
+        .allowsHitTesting(false)
     }
 }
 

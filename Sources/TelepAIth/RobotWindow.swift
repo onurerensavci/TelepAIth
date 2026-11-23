@@ -22,6 +22,8 @@ final class RobotAvatar: ObservableObject {
     @Published private(set) var locked = Preferences.robotLocked
     /// Aynı anda çalışan diğer oturumlar (minik kafalar)
     @Published private(set) var minis: [RobotModel.MiniSession] = []
+    /// Kafadaki küçük ışıklar: kafalarda görünmeyen diğer çalışan/bekleyen sohbetler (bekleyenler önce)
+    @Published private(set) var extras: [RobotState] = []
     /// Odak modu: robot soluk durur, sadece seni bekleyen şeyleri söyler
     @Published private(set) var focus = FocusMode.isActive
     /// Balonun pencere içindeki yeri (SwiftUI, sol-üst köken, %100 boyuttaki ölçüyle). Tıklamayı yakalamak için.
@@ -87,6 +89,10 @@ final class RobotAvatar: ObservableObject {
 
     func setMinis(_ value: [RobotModel.MiniSession]) {
         if minis != value { minis = value }
+    }
+
+    func setExtras(_ value: [RobotState]) {
+        if extras != value { extras = value }
     }
 
     func setFocus(_ value: Bool) {

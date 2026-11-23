@@ -639,6 +639,15 @@ public static class Tests
         minis = DisplayPicker.Minis(new[] { claude, gpt }, gpt, t0.AddSeconds(1));
         A.Eq(1, minis.Count);
         A.Eq("claude", minis[0].Id);
+        // Kafadaki ışıklar: Claude büyükken gösterilen dışındaki 2 Claude sohbeti + minik kafaya sığmayan 1 GPT sohbeti
+        claude.Refresh(t0.AddSeconds(1));
+        var extras = DisplayPicker.Extras(new[] { claude, gpt }, claude, t0.AddSeconds(1));
+        A.Eq(3, extras.Count);
+        A.True(extras.All(s => s.IsWorking()), "bekleyen GPT sohbeti minik kafada, ışıklar çalışanlar");
+        // Minik kafalar kapalıysa GPT'nin iki sohbeti de ışık olur, bekleyen önce
+        extras = DisplayPicker.Extras(new[] { claude, gpt }, claude, t0.AddSeconds(1), minisShown: false);
+        A.Eq(4, extras.Count);
+        A.Eq(RobotState.Waiting, extras[0]);
     }
 
     public static void DailySummaryText()

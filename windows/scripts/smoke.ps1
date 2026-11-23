@@ -121,6 +121,7 @@ Check ($st.glyph -eq "!") "onay beklerken gözde ! var ($($st.glyph))"
 Check ($st.gazeAllowed -eq $false) "sohbetler çalışırken gözler imleci izlemiyor"
 for ($t = 0; $t -lt 6 -and $st.minis -lt 1; $t++) { Start-Sleep -Milliseconds 500; $st = State }
 Check ($st.minis -eq 1) "minik kafa sadece öteki AI için, tek ($($st.minis))"
+Check ($st.extras -ge 1) "kafalarda görünmeyen sohbet kafada ışık ($($st.extras))"
 Post '{"agent":"claude","session":"s1","project":"web","state":"done","text":"Bitti"}'
 Start-Sleep -Milliseconds 1200
 Shot "4-done"
