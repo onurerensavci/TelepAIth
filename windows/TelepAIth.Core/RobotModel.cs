@@ -88,6 +88,8 @@ public sealed class RobotModel
     /// her aşama mesajında değişmediği için iki AI aynı anda çalışırken hangisinin gösterileceği bununla seçilir.
     /// </summary>
     public DateTime ActiveSince { get; private set; } = DateTime.MinValue;
+    /// <summary>Herhangi bir oturumu en son ne zaman çalışıyor / seni bekliyor / hatadaydı (gösterilmeyen sohbetler dahil)</summary>
+    public DateTime LastBusyAt { get; private set; } = DateTime.MinValue;
     private int _activeKind;
     public List<Notice> PendingNotices { get; } = new();
     public IReadOnlyList<string> History => _history;
@@ -455,6 +457,7 @@ public sealed class RobotModel
         foreach (var (id, s) in _sessions)
         {
             var st = EffectiveState(s, id, now);
+            if (st.IsWorking() || st is RobotState.Waiting or RobotState.Error) LastBusyAt = now;
             if (best == null || st.Priority() > bestState.Priority() || (st.Priority() == bestState.Priority() && s.Updated > best.Updated))
             {
                 best = s;

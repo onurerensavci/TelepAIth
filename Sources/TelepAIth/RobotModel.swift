@@ -102,6 +102,8 @@ final class RobotModel: ObservableObject {
     /// Şu anki hâline (çalışıyor / seni bekliyor / ikisi de değil) ne zaman girdi. Sadece bu geçişlerde değişir;
     /// her aşama mesajında değişmediği için iki AI aynı anda çalışırken hangisinin gösterileceği bununla seçilir.
     private(set) var activeSince: Date = .distantPast
+    /// Herhangi bir oturumu en son ne zaman çalışıyor / seni bekliyor / hatadaydı (gösterilmeyen sohbetler dahil)
+    private(set) var lastBusyAt: Date = .distantPast
     private var activeKind = 0
     private(set) var history: [String] = []
     private var sessions: [String: Session] = [:]
@@ -413,6 +415,7 @@ final class RobotModel: ObservableObject {
         var bestState: RobotState = .idle
         for (id, s) in sessions {
             let st = effectiveState(s, id: id, now: now)
+            if st.isWorking || st == .waiting || st == .error { lastBusyAt = now }
             if let b = bestSession {
                 if st.priority > bestState.priority || (st.priority == bestState.priority && s.updated > b.updated) {
                     bestSession = s
@@ -520,6 +523,22 @@ final class RobotModel: ObservableObject {
             && candidate.state.priority >= RobotState.thinking.priority
             && candidate.displayKey > current.displayKey
         return higher || sameButNewer ? candidate : nil
+    }
+
+    /// Gözler imleci izlemeye başlamadan önce, son işin üstünden geçmesi gereken süre
+    static let gazeDelay: TimeInterval = 20
+
+    /// Gözler imleci izleyebilir mi? Hiçbir AI'ın hiçbir sohbeti çalışmıyor / seni beklemiyor olmalı ve
+    /// son iş biteli en az 20 sn geçmiş olmalı. Çalışırken robot işine bakar.
+    static func canGaze(_ models: [RobotModel], now: Date = Date()) -> Bool {
+        models.allSatisfy { now.timeIntervalSince($0.lastBusyAt) >= gazeDelay }
+    }
+
+    /// Öndeki AI uygulaması gösterilir; ama o boştayken başka bir AI çalışıyor ya da seni bekliyorsa
+    /// büyük kafada çalışan görünsün (robot iş yokmuş gibi durmasın).
+    static func pinWins(_ pinned: RobotModel, among models: [RobotModel]) -> Bool {
+        pinned.state.priority >= RobotState.thinking.priority
+            || !models.contains { $0 !== pinned && $0.state.priority >= RobotState.thinking.priority }
     }
 
     /// Minik kafalar: gösterilen kafanın dışında çalışan/bekleyen tüm oturumlar (gösterilen oturum hariç)

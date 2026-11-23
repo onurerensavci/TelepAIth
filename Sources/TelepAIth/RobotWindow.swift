@@ -57,6 +57,8 @@ final class RobotAvatar: ObservableObject {
 
     /// Kafanın merkezi (ekran koordinatı, ana ekranın sol-alt köşesi köken)
     private(set) var head: CGPoint = .zero
+    /// Gözler imleci izleyebilir mi (hiçbir sohbet çalışmıyor ve son iş biteli 20 sn oldu)
+    var gazeAllowed = false
     /// Boştayken gözlerin imleci izlemesi için
     lazy var pointer: PointerTracker = {
         let p = PointerTracker()

@@ -34,6 +34,24 @@ public static class DisplayPicker
         return higher || sameButNewer ? best : null;
     }
 
+    /// <summary>Gözler imleci izlemeye başlamadan önce, son işin üstünden geçmesi gereken süre</summary>
+    public const double GazeDelay = 20;
+
+    /// <summary>
+    /// Gözler imleci izleyebilir mi? Hiçbir AI'ın hiçbir sohbeti çalışmıyor / seni beklemiyor olmalı ve
+    /// son iş biteli en az 20 sn geçmiş olmalı. Çalışırken robot işine bakar.
+    /// </summary>
+    public static bool CanGaze(IEnumerable<RobotModel> models, DateTime now) =>
+        models.All(m => (now - m.LastBusyAt).TotalSeconds >= GazeDelay);
+
+    /// <summary>
+    /// Öndeki AI uygulaması gösterilir; ama o boştayken başka bir AI çalışıyor ya da seni bekliyorsa
+    /// büyük kafada çalışan görünsün (robot iş yokmuş gibi durmasın).
+    /// </summary>
+    public static bool PinWins(RobotModel pinned, IEnumerable<RobotModel> models) =>
+        pinned.State.Priority() >= RobotState.Thinking.Priority()
+        || !models.Any(m => !ReferenceEquals(m, pinned) && m.State.Priority() >= RobotState.Thinking.Priority());
+
     /// <summary>Minik kafalar: gösterilen kafanın dışında çalışan/bekleyen tüm oturumlar (gösterilen oturum hariç)</summary>
     public static List<RobotModel.MiniSession> Minis(IEnumerable<RobotModel> models, RobotModel current, DateTime now)
     {

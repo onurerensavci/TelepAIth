@@ -118,6 +118,7 @@ $st = State
 Check ($st.state -eq "Waiting") "onay bekliyor"
 Check ($st.bubble -like "*npm install*") "balonda komut yazıyor"
 Check ($st.glyph -eq "!") "onay beklerken gözde ! var ($($st.glyph))"
+Check ($st.gazeAllowed -eq $false) "sohbetler çalışırken gözler imleci izlemiyor"
 for ($t = 0; $t -lt 6 -and $st.minis -lt 2; $t++) { Start-Sleep -Milliseconds 500; $st = State }
 Check ($st.minis -ge 2) "diğer oturumlar minik kafa"
 Post '{"agent":"claude","session":"s1","project":"web","state":"done","text":"Bitti"}'

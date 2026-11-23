@@ -344,11 +344,11 @@ internal sealed class RobotView : FrameworkElement
         var glyph = model.EyeGlyph(DateTime.Now);
         var prevGlyph = model.PreviousState == RobotState.Waiting ? '!' : '\0';
 
-        // Kimse çalışmıyorken (boşta, bitti, hata) imlece bak; üstüne gelince gözlerini kısıp gülümse
+        // Hiçbir sohbet çalışmıyorken ve son iş biteli 20 sn olunca imlece bak; üstüne gelince gözlerini kısıp gülümse
         var dt = Math.Clamp(time - _lastFaceTime, 0, 0.1);
         _lastFaceTime = time;
         double lookU = look / 2.5, lookV = 0, hoverTarget = 0;
-        if (state is RobotState.Idle or RobotState.Done or RobotState.Error && mood is null)
+        if (_avatar.GazeAllowed && state is RobotState.Idle or RobotState.Done or RobotState.Error && mood is null)
         {
             var c = Native.Cursor();
             var px = _avatar.PixelScale;

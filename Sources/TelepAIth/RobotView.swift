@@ -251,8 +251,9 @@ struct HeadFigure: View {
         // Gözde simge (? soru, ! onay, ✓ bitti, % kota), boştayken imlece bakış, kış kostümü
         let glyph = model.eyeGlyph(at: Date(timeIntervalSinceReferenceDate: time))
         let prevGlyph: Character? = prevState == .waiting ? "!" : nil
-        // Kimse çalışmıyorken (boşta, bitti, hata) gözler imleci izler
-        let gaze = pointer?.sample(time: time, active: [.idle, .done, .error].contains(state) && model.mood == nil) ?? Gaze()
+        // Hiçbir sohbet çalışmıyorken ve son iş biteli 20 sn olunca gözler imleci izler
+        let gaze = pointer?.sample(time: time, active: (pointer?.avatar?.gazeAllowed ?? false)
+                                   && [.idle, .done, .error].contains(state) && model.mood == nil) ?? Gaze()
         let winter = Preferences.winterActive
         let right = look > 0   // balonun açıldığı taraf (ekranın içi)
         let gt = model.gestureStart.map { time - $0.timeIntervalSinceReferenceDate } ?? -1

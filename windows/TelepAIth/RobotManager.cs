@@ -513,7 +513,7 @@ internal sealed class RobotManager
     private void ChooseDisplay()
     {
         if (_avatar == null) return;
-        if (_pinnedSource != null && _models.TryGetValue(_pinnedSource, out var pinned))
+        if (_pinnedSource != null && _models.TryGetValue(_pinnedSource, out var pinned) && DisplayPicker.PinWins(pinned, AllModels))
         {
             Show(pinned);
             return;
@@ -550,6 +550,7 @@ internal sealed class RobotManager
                 ["always"] = ap.HasAlways,
                 ["buttons"] = _window?.ApprovalButtonsJson(),
             } : null,
+            ["gazeAllowed"] = _avatar?.GazeAllowed ?? false,
             ["gesture"] = _avatar?.Current is { GestureStart: { } gs } gm && (DateTime.Now - gs).TotalSeconds <= 2.5 ? gm.Gesture.ToString() : "None",
             ["glyph"] = _avatar?.Current.EyeGlyph(DateTime.Now) is { } g && g != '\0' ? g.ToString() : "",
             ["mood"] = _avatar?.Current.Mood?.ToString(),
@@ -575,6 +576,7 @@ internal sealed class RobotManager
         _lastTick = now;
         var date = DateTime.Now;
         foreach (var m in _models.Values) m.Refresh(date);
+        if (_avatar != null) _avatar.GazeAllowed = DisplayPicker.CanGaze(_models.Values, date);
 
         // Öndeki pencere değişti mi? (saniyede 10 kez)
         if (now - _lastForegroundCheck > 0.1)

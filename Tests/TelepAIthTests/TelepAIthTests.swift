@@ -173,6 +173,30 @@ final class TelepAIthTests: XCTestCase {
         XCTAssertEqual(RobotModel.minis(all, current: shown, now: t0.addingTimeInterval(31)).map { $0.source }, ["gpt"])
     }
 
+    func testGazeWaitsUntilAllQuiet() {
+        let claude = RobotModel(source: "claude"), gpt = RobotModel(source: "gpt")
+        let all = [claude, gpt]
+        let t0 = Date()
+        XCTAssertTrue(RobotModel.canGaze(all, now: t0))
+        _ = claude.apply(AgentEvent(source: "claude", sessionID: "s", kind: .prompt, state: .thinking, text: "a"), now: t0)
+        _ = gpt.apply(AgentEvent(source: "gpt", sessionID: "g", kind: .prompt, state: .thinking, text: "b"), now: t0)
+        XCTAssertFalse(RobotModel.canGaze(all, now: t0.addingTimeInterval(1)))
+        _ = claude.apply(AgentEvent(source: "claude", sessionID: "s", kind: .stop, state: .done), now: t0.addingTimeInterval(10))
+        claude.refresh(now: t0.addingTimeInterval(40))
+        gpt.refresh(now: t0.addingTimeInterval(40))
+        XCTAssertFalse(RobotModel.canGaze(all, now: t0.addingTimeInterval(40)), "öteki AI çalışırken izlemez")
+        XCTAssertFalse(RobotModel.pinWins(claude, among: all))
+        gpt.refresh(now: t0.addingTimeInterval(49.9))
+        _ = gpt.apply(AgentEvent(source: "gpt", sessionID: "g", kind: .stop, state: .done), now: t0.addingTimeInterval(50))
+        claude.refresh(now: t0.addingTimeInterval(60))
+        gpt.refresh(now: t0.addingTimeInterval(60))
+        XCTAssertFalse(RobotModel.canGaze(all, now: t0.addingTimeInterval(60)), "bitince 20 sn beklenir")
+        claude.refresh(now: t0.addingTimeInterval(71))
+        gpt.refresh(now: t0.addingTimeInterval(71))
+        XCTAssertTrue(RobotModel.canGaze(all, now: t0.addingTimeInterval(71)))
+        XCTAssertTrue(RobotModel.pinWins(claude, among: all))
+    }
+
     func testDraftChatAddress() {
         XCTAssertTrue(AppWatcher.isDraftChat("https://claude.ai/new"))
         XCTAssertTrue(AppWatcher.isDraftChat("https://chatgpt.com/"))

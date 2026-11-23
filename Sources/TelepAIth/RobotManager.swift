@@ -500,7 +500,7 @@ final class RobotManager {
     /// eşitlikte en son hareket edeni. Hepsi boştaysa olduğu gibi kalsın.
     private func chooseDisplay() {
         guard let avatar = avatar else { return }
-        if let pinned = pinnedSource, let m = models[pinned] {
+        if let pinned = pinnedSource, let m = models[pinned], RobotModel.pinWins(m, among: allModels) {
             show(m)
             return
         }
@@ -522,6 +522,7 @@ final class RobotManager {
         lastTick = now
         let date = Date()
         for m in models.values { m.refresh(now: date) }
+        avatar?.gazeAllowed = RobotModel.canGaze(allModels, now: date)
         // Bekleyen izin soruları (terminale geçildi mi?)
         if (!approvals.isEmpty || avatar?.approval != nil) && now - lastApprovalCheck > 0.15 {
             lastApprovalCheck = now
