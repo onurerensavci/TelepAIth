@@ -148,6 +148,8 @@ internal sealed class AppController : ISettingsHost
         list.Add(null);
         list.Add(new MenuEntry(L("Robotu göster", "Show robot"), () => Manager.Visible = !Manager.Visible, Manager.Visible, Icon: "\uE890"));
         list.Add(new MenuEntry(L("Robotu bu masaüstüne getir", "Bring robot to this desktop"), Manager.BringHere, Icon: "\uE7C4"));
+        list.Add(new MenuEntry(L("Windows açılınca başlasın", "Start with Windows"), () => Installer.SetAutostart(!Installer.AutostartEnabled),
+            Installer.AutostartEnabled, Icon: "\uE7E8"));
         list.Add(new MenuEntry(L("Odak modu", "Focus mode"), Children: FocusEntries(), Icon: "\uE708"));
         list.Add(new MenuEntry(L("Bugünün özeti", "Today's summary"), Manager.ShowSummary, Icon: "\uE787"));
         list.Add(null);
@@ -175,7 +177,7 @@ internal sealed class AppController : ISettingsHost
         list.Add(new MenuEntry(Updater.Shared.IsBusy ? L("Güncelleme indiriliyor…", "Downloading update…") : L("Güncellemeleri denetle", "Check for updates"),
             CheckUpdates, Enabled: !Updater.Shared.IsBusy, Icon: "\uE895"));
         list.Add(null);
-        list.Add(new MenuEntry(L("Çıkış", "Quit"), () => Application.Current.Shutdown(), Icon: "\uE7E8"));
+        list.Add(new MenuEntry(L("Çıkış", "Quit"), () => Application.Current.Shutdown(), Icon: "\uE711"));
         return list;
     }
 

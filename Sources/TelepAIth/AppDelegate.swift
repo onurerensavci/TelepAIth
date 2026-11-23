@@ -63,6 +63,8 @@ final class AppController: NSObject {
             }
         }
         server.start(preferredPort: AppInfo.defaultPort)
+        // İlk açılışta "Mac açılınca başlasın" açık (kullanıcı sonra kapatabilir)
+        LaunchAtLogin.applyDefaultOnce()
 
         Updater.shared.onChange = { [weak self] in self?.rebuildMenu() }
         Updater.shared.onProgress = { [weak self] text in self?.manager.say(text, for: 30) }
@@ -209,6 +211,8 @@ final class AppController: NSObject {
 
         menu.addItem(.separator())
         menu.addItem(toggleItem(loc("Robotu göster", "Show robot"), on: manager.visible, action: #selector(toggleRobots)))
+        menu.addItem(toggleItem(loc("Mac açılınca başlasın", "Open at login"),
+                                on: LaunchAtLogin.isEnabled || LaunchAtLogin.needsApproval, action: #selector(toggleLaunchAtLogin)))
         menu.addItem(actionItem(loc("Robotu bu masaüstüne getir", "Bring robot to this desktop"), #selector(bringRobotHere)))
 
         let focus = NSMenuItem(title: loc("Odak modu", "Focus mode"), action: nil, keyEquivalent: "")
@@ -288,6 +292,19 @@ final class AppController: NSObject {
     @objc private func showRobotHistory(_ sender: NSMenuItem) {
         guard let source = sender.representedObject as? String else { return }
         manager.showHistory(source: source)
+    }
+
+    @objc private func toggleLaunchAtLogin() {
+        let on = !(LaunchAtLogin.isEnabled || LaunchAtLogin.needsApproval)
+        if let error = LaunchAtLogin.set(on) {
+            let alert = NSAlert()
+            alert.messageText = loc("Ayarlanamadı", "Couldn't change it")
+            alert.informativeText = error
+            alert.runModal()
+        } else if on && LaunchAtLogin.needsApproval {
+            LaunchAtLogin.openSystemSettings()
+        }
+        rebuildMenu()
     }
 
     @objc private func toggleRobots() {

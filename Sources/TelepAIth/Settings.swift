@@ -99,6 +99,16 @@ struct SettingsView: View {
                         Text(loc(option.1, option.2) + " (%\(Int(option.0 * 100)))").tag(option.0)
                     }
                 }
+                Toggle(loc("Mac açılınca başlasın", "Open at login"),
+                       isOn: model.toggle({ LaunchAtLogin.isEnabled || LaunchAtLogin.needsApproval }, { LaunchAtLogin.set($0) }))
+                if LaunchAtLogin.needsApproval {
+                    HStack {
+                        Text(loc("macOS onayını bekliyor: Giriş Öğeleri'nde TelepAIth'i aç.", "Waiting for macOS approval: turn on TelepAIth in Login Items."))
+                            .font(.caption).foregroundColor(.secondary)
+                        Button(loc("Giriş Öğeleri", "Login Items")) { LaunchAtLogin.openSystemSettings() }
+                    }
+                    .padding(.leading, 16)
+                }
                 Toggle(loc("Robotu göster", "Show the robot"), isOn: model.toggle({ model.host?.robotVisible ?? true },
                                                                                   { model.host?.robotVisible = $0 }))
                 Toggle(loc("Her zaman üstte", "Always on top"), isOn: model.toggle({ Preferences.alwaysOnTop },
@@ -329,6 +339,7 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
 // MARK: - İlk açılış sihirbazı
 
 struct OnboardingView: View {
+    @State private var launchAtLogin = LaunchAtLogin.isEnabled || LaunchAtLogin.needsApproval
     @ObservedObject var model: SettingsModel
     let onFinish: () -> Void
     @State private var step = 0
@@ -479,6 +490,12 @@ struct OnboardingView: View {
                 tip("menubar.rectangle", loc("Menü çubuğundaki robot ikonu → Ayarlar.", "Menu bar robot icon → Settings."))
             }
             .padding(.top, 4)
+            Toggle(loc("Mac açılınca başlasın", "Open at login"),
+                   isOn: Binding(get: { launchAtLogin }, set: { value in
+                       LaunchAtLogin.set(value)
+                       launchAtLogin = LaunchAtLogin.isEnabled || LaunchAtLogin.needsApproval
+                   }))
+                .padding(.top, 8)
         }
     }
 

@@ -69,6 +69,12 @@ enum Preferences {
         set { defaults.set(newValue, forKey: "shield") }
     }
 
+    /// "Mac açılınca başlasın" için kullanıcı bir seçim yaptı mı (yapmadıysa ilk açılışta açılır)
+    static var launchAtLoginChosen: Bool {
+        get { defaults.bool(forKey: "launchAtLoginChosen") }
+        set { defaults.set(newValue, forKey: "launchAtLoginChosen") }
+    }
+
     /// Claude Code izin isteyince robotun balonunda İzin ver / Reddet düğmeleri
     static var approveFromRobot: Bool {
         get { defaults.object(forKey: "approveFromRobot") as? Bool ?? true }

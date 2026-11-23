@@ -613,7 +613,10 @@ internal static class OnboardingWindow
                 Ui.Card(L("Balona tıkla", "Click the bubble"), L("O işin penceresine gidersin.", "Jump to that task's window."), null, ""),
                 Ui.Card(L("Robota tıkla", "Click the robot"), L("Son olaylar. Çift tıkla: AI uygulamasını aç.", "Recent events. Double-click to open the AI app."), null, ""),
                 Ui.Card(L("Sağ tık", "Right-click"), L("Kilit, her zaman üstte, odak modu, günün özeti.", "Lock, always on top, focus mode, today's summary."), null, ""),
-                Ui.Card(L("Tepsi simgesi", "Tray icon"), L("Görev çubuğunun sağındaki robot simgesi → Ayarlar.", "The robot icon in the taskbar tray → Settings."), null, "")),
+                Ui.Card(L("Tepsi simgesi", "Tray icon"), L("Görev çubuğunun sağındaki robot simgesi → Ayarlar.", "The robot icon in the taskbar tray → Settings."), null, ""),
+                Ui.Section(L("Başlangıç", "Startup")),
+                Ui.SwitchCard(L("Windows açılınca başlasın", "Start with Windows"), L("Robot her zaman hazır olsun", "Keep the robot ready"),
+                    Installer.AutostartEnabled, v => Installer.SetAutostart(v), "\uE7E8")),
         };
 
         var bar = Ui.Themed(new DockPanel { LastChildFill = false }, bg: "Side");
