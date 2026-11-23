@@ -44,6 +44,7 @@
 **🔔 Haber verir**
 - 20 saniyeden uzun süren iş bitince, AI senden onay ya da cevap beklerken ve hata olunca bildirim atar.
 - **Bildirime ya da balona tıkla:** o işin penceresine gidersin: Claude, ChatGPT ya da Claude Code'un çalıştığı terminal.
+- **Robota tıkla:** çalışan, seni bekleyen ve yeni biten sohbetlerin listesi açılır: adı, durumu ve süresi (*çalışıyor · 3 dk*, *bitti · 5 dk önce*). Birine tıklayınca o sohbete gidersin.
 - **Israr eder:** AI 30 saniyeden uzun süre onayını beklerse robot arada bir sallanır, başında "!" çıkar; 2 dakika sonra bir kez daha hatırlatır.
 - **Odak modu:** toplantıdayken (Zoom/Teams öndeyken ya da mikrofon kullanımdayken) ya da elle açınca robot soluklaşır ve susar, sadece seni bekleyen şeyleri söyler.
 - **Günün özeti:** akşam "Claude: 14 iş, 2 sa 10 dk, 31 düzenleme" gibi kısa bir özet verir.

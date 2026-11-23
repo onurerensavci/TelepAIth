@@ -32,6 +32,20 @@ final class RobotModel: ObservableObject {
         var target: AppTarget?
     }
 
+    /// Kafaya tıklayınca açılan listedeki bir sohbet: ad, durum, "çalışıyor · 3 dk" gibi durum yazısı
+    struct ChatRow: Equatable {
+        let source: String
+        let sessionID: String
+        let title: String
+        let state: RobotState
+        let status: String
+        let target: AppTarget?
+        /// 0 bekliyor, 1 çalışıyor, 2 bitti/hata
+        let rank: Int
+        /// O hâle girdiği an (süre bundan)
+        let at: Date
+    }
+
     /// Robotun yanındaki minik kafalar: aynı anda çalışan diğer oturumlar.
     struct MiniSession: Equatable, Identifiable {
         let id: String
@@ -197,6 +211,8 @@ final class RobotModel: ObservableObject {
 
         case .heartbeat:
             sessions[e.sessionID]?.updated = now
+            // Sohbetin adı sonradan öğrenilebilir
+            if let project = e.project { sessions[e.sessionID]?.project = project }
 
         case .say:
             showOverride(withEmoji(e.emoji, e.text ?? ""), for: 4, now: now)
@@ -579,6 +595,48 @@ final class RobotModel: ObservableObject {
             return MiniSession(id: source + "/" + x.id, source: source, state: x.st, label: label)
         }
         .sorted { $0.id < $1.id }
+    }
+
+    /// Kafaya tıklayınca açılan liste: seni bekleyen, çalışan ve son 15 dakikada biten sohbetler (Windows'taki ChatRows'un aynısı)
+    func chatRows(now: Date = Date()) -> [ChatRow] {
+        var rows: [ChatRow] = []
+        for (id, s) in sessions where id != "mcp" {   // anlatıcı: açık sohbetle aynı
+            let st = effectiveState(s, id: id, now: now)
+            let age = now.timeIntervalSince(s.updated)
+            let status: String
+            let rank: Int
+            let at: Date
+            if st == .waiting {
+                at = s.waitingSince ?? s.updated
+                status = loc("seni bekliyor · ", "waiting for you · ") + shortDuration(now.timeIntervalSince(at))
+                rank = 0
+            } else if st.isWorking {
+                at = s.turnStart ?? s.updated
+                status = loc("çalışıyor · ", "working · ") + shortDuration(now.timeIntervalSince(at))
+                rank = 1
+            } else if (s.state == .done || s.state == .error) && age < 15 * 60 {
+                at = s.updated
+                let ago = shortDuration(age)
+                status = s.state == .error ? loc("hata verdi · \(ago) önce", "hit an error · \(ago) ago")
+                    : loc("bitti · \(ago) önce", "done · \(ago) ago")
+                rank = 2
+            } else {
+                continue
+            }
+            let title = s.project ?? (id.hasPrefix("app-") ? loc("Açık sohbet", "Open chat") : loc("Oturum", "Session"))
+            rows.append(ChatRow(source: source, sessionID: id, title: title, state: st, status: status,
+                                target: s.target, rank: rank, at: at))
+        }
+        return rows
+    }
+
+    /// Tüm AI'lardan sohbet listesi: seni bekleyenler önce, sonra çalışanlar (en eski önce), sonra bitenler (en yeni önce)
+    static func chatRows(_ models: [RobotModel], now: Date = Date(), max: Int = 6) -> [ChatRow] {
+        let all = models.flatMap { $0.chatRows(now: now) }.sorted { a, b in
+            if a.rank != b.rank { return a.rank < b.rank }
+            return a.rank == 2 ? a.at > b.at : a.at < b.at
+        }
+        return Array(all.prefix(max))
     }
 
     private func effectiveState(_ s: Session, id: String, now: Date) -> RobotState {

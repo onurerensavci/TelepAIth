@@ -76,6 +76,7 @@ final class RobotManager {
         window.onDoubleClick = { [weak self] in self?.openCurrentApp() }
         // Minik kafaya tıklayınca o AI büyük kafaya geçer ve uygulaması öne gelir
         window.onMiniClick = { [weak self] source in self?.miniClicked(source) }
+        window.onChatRow = { [weak self] row in self?.openChat(row) }
         window.onAlwaysOnTopChanged = { [weak self] _ in self?.onChange?() }
         window.onBubbleClick = { [weak self] in self?.bubbleClicked() }
         window.onApproval = { [weak self] choice in self?.choose(choice) }
@@ -440,8 +441,36 @@ final class RobotManager {
             if Preferences.watchApps && !AppWatcher.isTrusted { AppWatcher.resetAndRequestTrust() }
         case .ok:
             avatar.current.wake()
-            avatar.current.showHistory()
+            // Sohbet listesi: açıksa kapat; çalışan/bekleyen/yeni biten sohbet varsa aç, yoksa son olaylar
+            if avatar.chatList != nil {
+                avatar.setChatList(nil)
+                return
+            }
+            let rows = RobotModel.chatRows(allModels)
+            if rows.isEmpty {
+                avatar.current.showHistory()
+            } else {
+                avatar.chatListUntil = Date().addingTimeInterval(10)
+                avatar.setChatList(rows)
+            }
         }
+    }
+
+    /// Listeden bir sohbet seçildi: o AI'a geç ve sohbeti aç
+    private func openChat(_ row: RobotModel.ChatRow) {
+        avatar?.setChatList(nil)
+        if let m = models[row.source] {
+            pinnedSource = row.source
+            show(m)
+        }
+        // Arkadaki Claude sohbeti: uygulamayı öne getir ve yan menüdeki bağlantısına bas
+        if row.sessionID.hasPrefix("bg-"), watcher.openBackgroundChat(row.sessionID) { return }
+        // Claude Code: çalıştığı terminal; uygulama sohbeti: uygulamanın penceresi
+        if let target = row.target, !target.isEmpty {
+            RobotManager.activate(target)
+            return
+        }
+        openCurrentApp()
     }
 
     // MARK: - Hangi AI gösterilsin?
@@ -576,6 +605,11 @@ final class RobotManager {
             chooseDisplay()   // bitiş kutlaması bitince sıradaki çalışana geç
             // Gösterilen AI'ın kendisi zaten büyük kafada; başka AI'ların tek oturumu da minik kafa olur
             avatar.setMinis(RobotModel.minis(allModels, current: avatar.current, now: date))
+            // Açık sohbet listesi canlı kalsın (süreler ilerler), süresi dolunca kapansın
+            if avatar.chatList != nil {
+                let rows = RobotModel.chatRows(allModels, now: date)
+                avatar.setChatList(date > avatar.chatListUntil || rows.isEmpty ? nil : rows)
+            }
             avatar.setExtras(RobotModel.extras(allModels, current: avatar.current, now: date, minisShown: Preferences.miniHeads))
         }
         // Toplantı, odak süresi, günlük özet (5 sn'de bir)

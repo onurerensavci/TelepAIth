@@ -22,6 +22,7 @@ final class SidebarChats {
 
     private struct Chat {
         var title: String
+        var url: String?
         var state: RobotState
         var since: TimeInterval
         var lastBeat: TimeInterval
@@ -184,13 +185,14 @@ final class SidebarChats {
             guard let row = rows[k] else { continue }
             let id = sessionID(for: k)
             guard var chat = chats[k] else {
-                chats[k] = Chat(title: row.title, state: row.state, since: now, lastBeat: now)
+                chats[k] = Chat(title: row.title, url: row.url, state: row.state, since: now, lastBeat: now)
                 events.append(row.state == .waiting
                     ? ev(id, row.title, .waiting, .waiting, waiting, "✋")
                     : ev(id, row.title, .prompt, .thinking, working, "🔄"))
                 continue
             }
             chat.title = row.title
+            if chat.url == nil { chat.url = row.url }
             if row.state != chat.state {
                 chat.state = row.state
                 chat.lastBeat = now
@@ -218,6 +220,23 @@ final class SidebarChats {
             }
         }
         return events
+    }
+
+    /// Bu oturum hangi sohbet? (yan menüde bulup açmak için: ad ve adres)
+    func find(_ sessionID: String) -> (title: String, url: String?)? {
+        for (k, chat) in chats where self.sessionID(for: k) == sessionID { return (chat.title, chat.url) }
+        return nil
+    }
+
+    /// Yan menüde açık sohbetin adı (seçili satır ya da adresi açık sohbetinkiyle aynı olan)
+    static func currentTitle(_ items: [SidebarItem], currentChat: String?) -> String? {
+        let key = normalizeURL(currentChat)
+        for it in items {
+            let title = stripStatus(it.name)
+            guard title.count >= 2, let url = it.url else { continue }
+            if it.current || (key != nil && normalizeURL(url) == key) { return title }
+        }
+        return nil
     }
 
     /// Uygulama kapandı: arkadaki sohbetleri kapat

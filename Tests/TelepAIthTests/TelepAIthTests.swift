@@ -273,6 +273,32 @@ final class TelepAIthTests: XCTestCase {
         XCTAssertEqual(extras.first, .waiting)
     }
 
+    func testChatListRows() {
+        let claude = RobotModel(source: "claude"), gpt = RobotModel(source: "gpt")
+        let t0 = Date()
+        var e = AgentEvent(source: "claude", sessionID: "app-1-0", kind: .prompt, state: .thinking, text: "a")
+        e.project = "Tarif"
+        _ = claude.apply(e, now: t0)
+        var bg = AgentEvent(source: "claude", sessionID: "bg-1-x", kind: .prompt, state: .thinking, text: "Arkada")
+        bg.project = "Kod incelemesi"
+        _ = claude.apply(bg, now: t0.addingTimeInterval(10))
+        var stop = AgentEvent(source: "claude", sessionID: "bg-1-x", kind: .stop, state: .done)
+        stop.project = "Kod incelemesi"
+        _ = claude.apply(stop, now: t0.addingTimeInterval(70))
+        _ = gpt.apply(AgentEvent(source: "gpt", sessionID: "app-2-0", kind: .waiting, state: .waiting, text: "onay"),
+                      now: t0.addingTimeInterval(100))
+        let rows = RobotModel.chatRows([claude, gpt], now: t0.addingTimeInterval(220))
+        XCTAssertEqual(rows.map { $0.source }, ["gpt", "claude", "claude"])
+        XCTAssertTrue(rows[0].status.contains(loc("2 dk", "2 min")), rows[0].status)
+        XCTAssertEqual(rows[1].title, "Tarif")
+        XCTAssertTrue(rows[1].status.contains(loc("3 dk", "3 min")), rows[1].status)
+        XCTAssertEqual(rows[2].title, "Kod incelemesi")
+        XCTAssertFalse(RobotModel.chatRows([claude, gpt], now: t0.addingTimeInterval(70 + 16 * 60)).contains { $0.title == "Kod incelemesi" })
+        XCTAssertEqual(shortDuration(3960), loc("1 sa 6 dk", "1 h 6 min"))
+        let items = [SidebarItem(name: "Tarif", help: "", url: "https://claude.ai/chat/aaa", rect: .zero)]
+        XCTAssertEqual(SidebarChats.currentTitle(items, currentChat: "https://claude.ai/chat/aaa/"), "Tarif")
+    }
+
     func testDraftChatAddress() {
         XCTAssertTrue(AppWatcher.isDraftChat("https://claude.ai/new"))
         XCTAssertTrue(AppWatcher.isDraftChat("https://chatgpt.com/"))

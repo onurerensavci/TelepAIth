@@ -367,6 +367,16 @@ func clip(_ s: String, _ max: Int) -> String {
     return String(flat.prefix(Swift.max(1, max - 1))) + "…"
 }
 
+/// Kısa süre: 40 → "40 sn", 200 → "3 dk", 4000 → "1 sa 6 dk"
+func shortDuration(_ seconds: TimeInterval) -> String {
+    let total = Swift.max(0, Int(seconds))
+    if total < 60 { return "\(total) \(loc("sn", "s"))" }
+    let minutes = total / 60
+    if minutes < 60 { return "\(minutes) \(loc("dk", "min"))" }
+    let rest = minutes % 60
+    return rest == 0 ? "\(minutes / 60) \(loc("sa", "h"))" : "\(minutes / 60) \(loc("sa", "h")) \(rest) \(loc("dk", "min"))"
+}
+
 /// 75 → "1 dk 15 sn" / "1 min 15 s"
 func formatDuration(_ seconds: TimeInterval) -> String {
     let s = loc("sn", "s")

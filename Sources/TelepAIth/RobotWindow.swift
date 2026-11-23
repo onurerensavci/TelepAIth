@@ -42,6 +42,29 @@ final class RobotAvatar: ObservableObject {
 
     var miniFrames: [String: CGRect] = [:]
 
+    /// Kafaya tıklayınca açılan sohbet listesi (nil: kapalı) ve ne zamana kadar açık kalacağı
+    @Published private(set) var chatList: [RobotModel.ChatRow]?
+    var chatListUntil: Date = .distantPast
+    var chatRowFrames: [Int: CGRect] = [:]
+
+    func setChatList(_ rows: [RobotModel.ChatRow]?) {
+        if chatList != rows { chatList = rows }
+        if rows == nil { chatRowFrames = [:] }
+    }
+
+    /// Ekrandaki bu noktada sohbet listesinin bir satırı var mı?
+    func chatRow(at point: NSPoint) -> RobotModel.ChatRow? {
+        guard let list = chatList else { return nil }
+        let origin = windowOrigin
+        let s = Layout.scale
+        for (index, f) in chatRowFrames where index < list.count {
+            let r = NSRect(x: origin.x + f.minX * s, y: origin.y + Layout.windowSize.height - f.maxY * s,
+                           width: f.width * s, height: f.height * s)
+            if r.contains(point) { return list[index] }
+        }
+        return nil
+    }
+
     /// Ekrandaki bu noktada bir minik kafa var mı? (hangi AI'ın)
     func miniSource(at point: NSPoint) -> String? {
         guard Preferences.miniHeads, !minis.isEmpty else { return nil }
@@ -369,6 +392,9 @@ final class AvatarHostingView: NSHostingView<AvatarView> {
     /// Bu noktada minik kafa var mı (hangi AI'ın)?
     var miniAt: ((NSPoint) -> String?)?
     var onMiniClick: ((String) -> Void)?
+    /// Bu noktada sohbet listesinin bir satırı var mı?
+    var chatRowAt: ((NSPoint) -> RobotModel.ChatRow?)?
+    var onChatRow: ((RobotModel.ChatRow) -> Void)?
 
     private var mouseStart: NSPoint = .zero
     private var dragging = false
@@ -381,7 +407,8 @@ final class AvatarHostingView: NSHostingView<AvatarView> {
         mouseStart = NSEvent.mouseLocation
         dragging = false
         swallowUp = false
-        guard approvalAt?(mouseStart) == nil, isOverBubble?(mouseStart) != true, miniAt?(mouseStart) == nil else { return }
+        guard approvalAt?(mouseStart) == nil, isOverBubble?(mouseStart) != true, miniAt?(mouseStart) == nil,
+              chatRowAt?(mouseStart) == nil else { return }
         let now = Date()
         presses.append(now)
         presses.removeAll { now.timeIntervalSince($0) > 1.5 }
@@ -416,6 +443,8 @@ final class AvatarHostingView: NSHostingView<AvatarView> {
             onApproval?(choice)
         } else if let source = miniAt?(NSEvent.mouseLocation) {
             onMiniClick?(source)
+        } else if let row = chatRowAt?(NSEvent.mouseLocation) {
+            onChatRow?(row)
         } else if isOverBubble?(NSEvent.mouseLocation) == true {
             onBubbleClick?()
         } else if event.clickCount == 2 {
@@ -438,6 +467,8 @@ final class AvatarWindowController: NSObject {
     var onRapidClick: (() -> Void)?
     /// Minik kafaya tıklandı: o AI'a geç
     var onMiniClick: ((String) -> Void)?
+    /// Sohbet listesinde bir satıra tıklandı: o sohbete git
+    var onChatRow: ((RobotModel.ChatRow) -> Void)?
     var onLockChanged: ((Bool) -> Void)?
     var onAlwaysOnTopChanged: ((Bool) -> Void)?
     var onBubbleClick: (() -> Void)?
@@ -495,6 +526,8 @@ final class AvatarWindowController: NSObject {
         host.approvalAt = { [weak self] point in self?.avatar.approvalChoice(at: point) }
         host.miniAt = { [weak self] point in self?.avatar.miniSource(at: point) }
         host.onMiniClick = { [weak self] source in self?.onMiniClick?(source) }
+        host.chatRowAt = { [weak self] point in self?.avatar.chatRow(at: point) }
+        host.onChatRow = { [weak self] row in self?.onChatRow?(row) }
         host.isOverBubble = { [weak self] point in
             guard let self = self, !self.avatar.headRect.contains(point) else { return false }
             return self.avatar.bubbleScreenRect?.contains(point) ?? false

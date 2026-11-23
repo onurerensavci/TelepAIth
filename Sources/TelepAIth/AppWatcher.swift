@@ -135,6 +135,8 @@ final class AppWatcher {
     private var timer: Timer?
     private var busy = false
     private var states: [pid_t: AppState] = [:]   // yalnızca queue içinde
+    /// Açık sohbetin adı (yan menüden), uygulama başına — yalnızca queue içinde
+    private var chatTitles: [pid_t: String] = [:]
 
     // Değişiklik bildirimleri (AXObserver): ekranda bir şey değişince hemen tara, yoklamayı seyrekleştir.
     private var observers: [pid_t: AXObserver] = [:]   // yalnızca ana iş parçacığında
@@ -289,6 +291,7 @@ final class AppWatcher {
         for pid in states.keys where !alive.contains(pid) {
             if let st = states[pid], st.generating { emit(stop: pid, state: st) }
             states[pid]?.background?.closed().forEach { emitMain($0) }
+            chatTitles.removeValue(forKey: pid)
             states.removeValue(forKey: pid)
         }
 
@@ -366,6 +369,7 @@ final class AppWatcher {
                     st.quietPolls = 0
                     st.phase = nil
                     st.chatCounter += 1
+                    chatTitles[target.pid] = nil   // yeni sohbetin adı yan menüden yeniden öğrenilecek
                     var text = loc("Bu sohbete geçtim", "Switched to this chat")
                     if let title = windowTitle?.trimmingCharacters(in: .whitespacesAndNewlines),
                        !title.isEmpty, title.lowercased() != target.name.lowercased() {
@@ -403,6 +407,7 @@ final class AppWatcher {
                 st.background = bg
                 for e in bg.update(items, currentChat: st.chatKey, now: now) { emitMain(e) }
                 st.sidebarInfo = AppWatcher.sidebarInfo(items, background: bg)
+                if let title = SidebarChats.currentTitle(items, currentChat: st.chatKey) { chatTitles[target.pid] = title }
             }
 
             if !st.sawComposer {
@@ -571,9 +576,13 @@ final class AppWatcher {
     private func emitMain(_ event: AgentEvent) {
         var e = event
         // Oturum adı "app-<pid>-<n>": balona tıklayınca bu uygulamayı öne getirmek için
-        if e.appPID == nil, e.sessionID.hasPrefix("app-") {
+        if e.sessionID.hasPrefix("app-") {
             let parts = e.sessionID.split(separator: "-")
-            if parts.count >= 2, let pid = Int32(parts[1]) { e.appPID = pid }
+            if parts.count >= 2, let pid = Int32(parts[1]) {
+                if e.appPID == nil { e.appPID = pid }
+                // Açık sohbetin adı (yan menüden öğrenildiyse) balonda ve listede görünsün
+                if e.project == nil, let title = chatTitles[pid] { e.project = clip(title, 40) }
+            }
         }
         DispatchQueue.main.async { self.onEvent?(e) }
     }
@@ -633,6 +642,51 @@ final class AppWatcher {
             guard depth < 70, let children = AppWatcher.children(element) else { continue }
             for child in children { stack.append((child, depth + 1)) }
         }
+    }
+
+    /// Arkadaki bir sohbeti aç: uygulamayı öne getir, yan menüde o sohbetin bağlantısını bul ve bas.
+    /// Bulunamazsa sadece uygulama öne gelir. false: bu oturum bilinmiyor ya da uygulama kapalı.
+    func openBackgroundChat(_ sessionID: String) -> Bool {
+        let parts = sessionID.split(separator: "-")
+        guard parts.count >= 3, let pid = Int32(parts[1]),
+              let app = NSRunningApplication(processIdentifier: pid), !app.isTerminated else { return false }
+        app.activate(options: [.activateAllWindows])
+        queue.async {
+            guard let chat = self.states[pid]?.background?.find(sessionID) else { return }
+            let axApp = AXUIElementCreateApplication(pid)
+            AXUIElementSetMessagingTimeout(axApp, 1.0)
+            guard let window = AppWatcher.windows(of: axApp).first, let wf = AppWatcher.frame(window) else { return }
+            let zone = CGRect(x: wf.minX, y: wf.minY, width: wf.width * 0.4, height: wf.height)
+            if let link = AppWatcher.findSidebarLink(window, zone: zone, title: chat.title, url: chat.url) {
+                AXUIElementPerformAction(link, kAXPressAction as CFString)
+            }
+        }
+        return true
+    }
+
+    /// Yan menüde adresi (ya da adı) tutan sohbet bağlantısı
+    private static func findSidebarLink(_ root: AXUIElement, zone: CGRect, title: String, url: String?) -> AXUIElement? {
+        let key = SidebarChats.normalizeURL(url)
+        var byTitle: AXUIElement?
+        var stack: [(AXUIElement, Int)] = [(root, 0)]
+        var visited = 0
+        while visited < 6000, let item = stack.popLast() {
+            visited += 1
+            let element = item.0
+            if let f = frame(element), f.width > 0, f.height > 0, !f.intersects(zone) { continue }
+            let role = string(element, kAXRoleAttribute) ?? ""
+            if role == "AXLink" {
+                if let key = key, let link = (value(element, "AXURL") as? URL)?.absoluteString,
+                   SidebarChats.normalizeURL(link) == key { return element }
+                let name = [string(element, kAXTitleAttribute), string(element, kAXDescriptionAttribute)]
+                    .compactMap { $0 }.first { !$0.isEmpty } ?? ""
+                if byTitle == nil && SidebarChats.stripStatus(name).caseInsensitiveCompare(title) == .orderedSame { byTitle = element }
+            }
+            if role == kAXImageRole || role == kAXStaticTextRole { continue }
+            guard item.1 < 70, let kids = children(element) else { continue }
+            for child in kids { stack.append((child, item.1 + 1)) }
+        }
+        return byTitle
     }
 
     /// Yan menüdeki öğeleri toplar (sohbet bağlantıları, durum noktaları): ad, ipucu, adres, seçili mi

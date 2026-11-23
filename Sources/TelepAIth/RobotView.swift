@@ -14,7 +14,7 @@ struct AvatarView: View {
             AvatarStage(model: avatar.current, alignLeft: avatar.alignLeft, bubbleBelow: avatar.bubbleBelow,
                         health: avatar.health, locked: avatar.locked, minis: avatar.minis, focus: avatar.focus,
                         approval: avatar.approval, pointer: avatar.pointer, extras: avatar.extras,
-                        extrasPoppedAt: avatar.extrasPoppedAt)
+                        extrasPoppedAt: avatar.extrasPoppedAt, chatList: avatar.chatList)
                 .id(avatar.current.source)
                 .transition(.scale(scale: 0.4).combined(with: .opacity))
         }
@@ -24,6 +24,7 @@ struct AvatarView: View {
         .onPreferenceChange(BubbleFrameKey.self) { frame in avatar.bubbleFrame = frame }
         .onPreferenceChange(ApprovalFramesKey.self) { frames in avatar.approvalFrames = frames }
         .onPreferenceChange(MiniFramesKey.self) { frames in avatar.miniFrames = frames }
+        .onPreferenceChange(ChatRowFramesKey.self) { frames in avatar.chatRowFrames = frames }
         // Robot %100 boyutta çizilir, ayardaki boyuta göre ölçeklenir
         .scaleEffect(avatar.scale, anchor: .topLeading)
         .frame(width: Layout.baseWindowSize.width * avatar.scale, height: Layout.baseWindowSize.height * avatar.scale,
@@ -35,6 +36,14 @@ struct AvatarView: View {
 struct ApprovalFramesKey: PreferenceKey {
     static var defaultValue: [ApprovalChoice: CGRect] = [:]
     static func reduce(value: inout [ApprovalChoice: CGRect], nextValue: () -> [ApprovalChoice: CGRect]) {
+        value.merge(nextValue()) { _, new in new }
+    }
+}
+
+/// Sohbet listesindeki satırların pencere içindeki yeri (tıklayınca o sohbete gitmek için AppKit tarafına iletilir).
+struct ChatRowFramesKey: PreferenceKey {
+    static var defaultValue: [Int: CGRect] = [:]
+    static func reduce(value: inout [Int: CGRect], nextValue: () -> [Int: CGRect]) {
         value.merge(nextValue()) { _, new in new }
     }
 }
@@ -68,6 +77,7 @@ struct AvatarStage: View {
     var pointer: PointerTracker? = nil
     var extras: [RobotState] = []
     var extrasPoppedAt: Date = .distantPast
+    var chatList: [RobotModel.ChatRow]? = nil
 
     /// Odak modunda sadece seni bekleyen, hata veren ya da robotun kendi söylediği şeyler görünür
     private var urgent: Bool { model.state == .waiting || model.state == .error || model.bubbleIsExplicit }
@@ -89,7 +99,13 @@ struct AvatarStage: View {
 
     @ViewBuilder
     private var bubble: some View {
-        if let text = model.bubbleText, !focus || urgent {
+        if let rows = chatList, !rows.isEmpty {
+            ChatListBubble(rows: rows, color: Color(nsColor: model.theme.color), tailOnTop: bubbleBelow, tailLeading: alignLeft)
+                .background(GeometryReader { g in
+                    Color.clear.preference(key: BubbleFrameKey.self, value: g.frame(in: .named("avatar")))
+                })
+                .transition(.opacity)
+        } else if let text = model.bubbleText, !focus || urgent {
             BubbleView(title: model.theme.displayName,
                        subtitle: model.bubbleSubtitle,
                        text: text,
@@ -234,6 +250,80 @@ struct BubbleView: View {
         .frame(maxWidth: approval != nil ? 248 : 220, alignment: .leading)   // düğme satırı sığsın
         .background(RoundedRectangle(cornerRadius: 12).fill(fill))
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(color.opacity(0.35), lineWidth: 1))
+    }
+}
+
+// MARK: - Sohbet listesi (kafaya tıklayınca)
+
+/// Sohbetler: her satırda AI rengi, sohbetin adı ve "çalışıyor · 3 dk" gibi durum. Satıra tıklayınca o sohbete gidilir.
+/// (Windows'taki DrawChatList'in aynısı; pencereye sığsın diye en fazla 4 satır.)
+struct ChatListBubble: View {
+    let rows: [RobotModel.ChatRow]
+    let color: Color
+    let tailOnTop: Bool
+    let tailLeading: Bool
+
+    static let maxRows = 4
+    private var fill: Color { Color(nsColor: .windowBackgroundColor).opacity(0.97) }
+
+    var body: some View {
+        VStack(alignment: tailLeading ? .leading : .trailing, spacing: 0) {
+            if tailOnTop { tail.rotationEffect(.degrees(180)) }
+            card
+            if !tailOnTop { tail }
+        }
+        .shadow(color: Color.black.opacity(0.18), radius: 4, x: 0, y: 2)
+    }
+
+    private var tail: some View {
+        BubbleTail()
+            .fill(fill)
+            .frame(width: 14, height: 8)
+            .padding(tailLeading ? .leading : .trailing, 43)
+    }
+
+    private var card: some View {
+        let shown = Array(rows.prefix(ChatListBubble.maxRows))
+        return VStack(alignment: .leading, spacing: 0) {
+            Text(loc("Sohbetler", "Chats") + (rows.count > shown.count ? " · +\(rows.count - shown.count)" : ""))
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundColor(.secondary)
+                .padding(.bottom, 3)
+            ForEach(Array(shown.enumerated()), id: \.element.sessionID) { index, row in
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(Color(nsColor: Themes.shared.theme(for: row.source).color))
+                        .frame(width: 6, height: 6)
+                    Text(row.title)
+                        .font(.system(size: 10.5, weight: .semibold))
+                        .foregroundColor(.primary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                    Spacer(minLength: 6)
+                    Text(row.status)
+                        .font(.system(size: 9.5))
+                        .foregroundColor(statusColor(row))
+                        .lineLimit(1)
+                        .fixedSize()
+                }
+                .frame(height: 20)
+                .contentShape(Rectangle())
+                .background(GeometryReader { g in
+                    Color.clear.preference(key: ChatRowFramesKey.self, value: [index: g.frame(in: .named("avatar"))])
+                })
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .frame(width: 248, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 12).fill(fill))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(color.opacity(0.35), lineWidth: 1))
+    }
+
+    private func statusColor(_ row: RobotModel.ChatRow) -> Color {
+        if row.state == .waiting { return Color(red: 0.95, green: 0.45, blue: 0.05) }
+        if row.state.isWorking { return Color(red: 0.13, green: 0.47, blue: 0.95) }
+        return .secondary
     }
 }
 

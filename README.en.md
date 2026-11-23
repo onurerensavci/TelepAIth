@@ -44,6 +44,7 @@
 **🔔 Lets you know**
 - Notifies you when a task longer than 20 seconds finishes, when the AI needs your approval or an answer, and on errors.
 - **Click a notification or the bubble** to jump to that task's window: Claude, ChatGPT, or the terminal Claude Code runs in.
+- **Click the robot** for a list of running, waiting and recently finished chats with their name, state and time (*working · 3 min*, *done · 5 min ago*). Click one to jump to that chat.
 - **Nags when it should:** if the AI waits more than 30 seconds for your OK, the robot wiggles now and then with a "!" on its head, and reminds you once more after 2 minutes.
 - **Focus mode:** in meetings (Zoom/Teams in front, or the microphone in use) or when you turn it on, the robot dims and goes quiet, telling you only what needs you.
 - **Daily summary:** in the evening, a short recap like "Claude: 14 tasks, 2 h 10 min, 31 edits".
