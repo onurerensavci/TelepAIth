@@ -203,6 +203,8 @@ public static class Prefs
     public static double LongTurnSeconds { get => GetDouble("longTurnSeconds", 20); set => Set("longTurnSeconds", value); }
     public static bool IdleChatter { get => GetBool("idleChatter", true); set => Set("idleChatter", value); }
     public static bool Shield { get => GetBool("shield", true); set => Set("shield", value); }
+    /// <summary>Claude Code izin isteyince robotun balonunda İzin ver / Reddet düğmeleri</summary>
+    public static bool ApproveFromRobot { get => GetBool("approveFromRobot", true); set => Set("approveFromRobot", value); }
     public static bool Speak { get => GetBool("speak", false); set => Set("speak", value); }
     public static bool Sounds { get => GetBool("sounds", false); set => Set("sounds", value); }
     public static bool WatchApps { get => GetBool("watchApps", true); set => Set("watchApps", value); }

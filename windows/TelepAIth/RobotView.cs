@@ -4,10 +4,12 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Windows;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Microsoft.Win32;
 using TelepAIth.Core;
+using static TelepAIth.Core.Text;
 
 namespace TelepAIth;
 
@@ -164,7 +166,12 @@ internal sealed class RobotView : FrameworkElement
 
         const double padX = 10, padY = 7, titleH = 14;
         var maxCardH = H - 2 * M - Head - Gap - TailH;
-        var innerMax = BubbleMaxW - 2 * padX;
+        // İzin sorusu: altta düğme satırı (balon biraz genişler)
+        var approval = _avatar.Approval;
+        var buttons = approval == null ? null : ApprovalButtons(approval, dpi);
+        var rowW = buttons?.Sum(b => b.W) + (buttons?.Count - 1) * ButtonGap ?? 0;
+        if (buttons != null) maxCardH -= ButtonRowH + 6;
+        var innerMax = Math.Max(BubbleMaxW - 2 * padX, Math.Min(W - 2 * M - 2 * padX, rowW));
 
         // Gövde: kelime kaydırmalı, renkli emojili yerleşim (yazı değişmedikçe yeniden hesaplanmaz)
         var maxBodyH = Math.Max(15, maxCardH - 2 * padY - titleH - 2);
@@ -188,9 +195,9 @@ internal sealed class RobotView : FrameworkElement
             };
         }
         var titleW = 11 + title.Width + (sub != null ? 4 + sub.WidthIncludingTrailingWhitespace : 0) + (clickable ? 16 : 0);
-        var innerW = Math.Min(innerMax, Math.Max(body.Width, titleW));
+        var innerW = Math.Min(innerMax, Math.Max(Math.Max(body.Width, titleW), rowW));
         var cardW = Math.Max(innerW + 2 * padX, 2 * 50 + 4);
-        var cardH = padY + titleH + 2 + body.Height + padY;
+        var cardH = padY + titleH + 2 + body.Height + padY + (buttons != null ? ButtonRowH + 6 : 0);
 
         var cardX = alignLeft ? M : W - M - cardW;
         double cardY;
@@ -249,9 +256,67 @@ internal sealed class RobotView : FrameworkElement
         }
         body.Draw(dc, new Point(tx, ty + titleH + 2));
 
+        // Düğmeler: İzin ver · Hep izin ver · Reddet
+        ButtonRects.Clear();
+        if (buttons != null)
+        {
+            var scale = _avatar.PixelScale / VisualTreeHelper.GetDpi(this).DpiScaleX;
+            var bx = tx;
+            var by = ty + titleH + 2 + body.Height + 6;
+            var hover = Mouse.GetPosition(this);
+            foreach (var b in buttons)
+            {
+                var r = new Rect(bx, by, b.W, ButtonRowH);
+                var screenRect = new Rect(r.X * scale, r.Y * scale, r.Width * scale, r.Height * scale);
+                ButtonRects[b.Choice] = screenRect;
+                var over = screenRect.Contains(hover);
+                var (bg, fg, border) = b.Choice switch
+                {
+                    ApprovalChoice.Allow => (Allow, Colors.White, Allow),
+                    ApprovalChoice.Deny => (Colors.Transparent, Deny, Deny),
+                    _ => (Colors.Transparent, color, color),
+                };
+                dc.DrawRoundedRectangle(bg == Colors.Transparent ? B(border, over ? 0.16 : 0.07) : B(bg, over ? 0.85 : 1),
+                    new Pen(B(border, 0.75), 1), r, ButtonRowH / 2, ButtonRowH / 2);
+                var label = new FormattedText(b.Label, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, UiSemi, 10.5, B(fg), dpi);
+                dc.DrawText(label, new Point(r.X + (r.Width - label.Width) / 2, r.Y + (r.Height - label.Height) / 2));
+                bx += b.W + ButtonGap;
+            }
+        }
+
         var full = card;
         full.Union(below ? new Point(tailCx, cardY - TailH) : new Point(tailCx, cardY + cardH + TailH));
         return full;
+    }
+
+    // MARK: Onay düğmeleri
+
+    private const double ButtonRowH = 22, ButtonGap = 6;
+    private static readonly Color Allow = Color.FromRgb(0x23, 0x9B, 0x56);
+    private static readonly Color Deny = Color.FromRgb(0xE0, 0x4F, 0x4F);
+
+    /// <summary>Düğmelerin pencere içindeki yeri (DIP) — tıklama için</summary>
+    public Dictionary<ApprovalChoice, Rect> ButtonRects { get; } = new();
+
+    public ApprovalChoice? ButtonAt(Point p)
+    {
+        foreach (var (choice, r) in ButtonRects)
+            if (r.Contains(p)) return choice;
+        return null;
+    }
+
+    private sealed record ButtonSpec(ApprovalChoice Choice, string Label, double W);
+
+    private static List<ButtonSpec> ApprovalButtons(ApprovalPrompt approval, double dpi)
+    {
+        var list = new List<(ApprovalChoice, string)> { (ApprovalChoice.Allow, L("İzin ver", "Allow")) };
+        if (approval.HasAlways) list.Add((ApprovalChoice.Always, L("Hep izin ver", "Always")));
+        list.Add((ApprovalChoice.Deny, L("Reddet", "Deny")));
+        return list.Select(x =>
+        {
+            var w = new FormattedText(x.Item2, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, UiSemi, 10.5, Brushes.Black, dpi).Width;
+            return new ButtonSpec(x.Item1, x.Item2, Math.Ceiling(w) + 22);
+        }).ToList();
     }
 
     // MARK: Kafa

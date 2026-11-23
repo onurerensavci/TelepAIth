@@ -158,4 +158,26 @@ final class TelepAIthTests: XCTestCase {
         XCTAssertEqual(Preferences.robotScale, 1.8, accuracy: 0.001)
         Preferences.robotScale = old
     }
+
+    func testApprovalDecision() throws {
+        let body = Data(#"{"hook_event_name":"PermissionRequest","session_id":"s1","tool_name":"Bash","tool_input":{"command":"npm install"},"permission_suggestions":[{"type":"addRules","rules":[{"toolName":"Bash","ruleContent":"npm install"}],"behavior":"allow","destination":"localSettings"}]}"#.utf8)
+        let sug = Approval.suggestions(body)
+        XCTAssertEqual(sug?.count, 1)
+        func decision(_ c: ApprovalChoice) throws -> [String: Any] {
+            let j = try JSONSerialization.jsonObject(with: Data(Approval.decision(c, suggestions: sug).utf8)) as! [String: Any]
+            let out = j["hookSpecificOutput"] as! [String: Any]
+            XCTAssertEqual(out["hookEventName"] as? String, "PermissionRequest")
+            return out["decision"] as! [String: Any]
+        }
+        XCTAssertEqual(try decision(.allow)["behavior"] as? String, "allow")
+        XCTAssertNil(try decision(.allow)["updatedPermissions"])
+        XCTAssertNotNil(try decision(.always)["updatedPermissions"])
+        XCTAssertEqual(try decision(.deny)["behavior"] as? String, "deny")
+        XCTAssertNotNil(try decision(.deny)["message"])
+        XCTAssertNil(Approval.suggestions(Data(#"{"tool_name":"Edit"}"#.utf8)))
+        // Hook komutu: bekleyen curl, işaretli (kaldırılabilir)
+        let cmd = HookInstaller.permissionCommand(source: "claude")
+        XCTAssertTrue(cmd.contains("/permission?source=claude"))
+        XCTAssertTrue(cmd.contains(AppInfo.hookMarker))
+    }
 }

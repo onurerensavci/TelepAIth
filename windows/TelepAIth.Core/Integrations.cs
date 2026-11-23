@@ -57,6 +57,9 @@ public static class HookInstaller
     /// <summary>Kalkan: tehlikeli görünen komutlarda Claude Code'un onay sormasını sağlar (engellemez).</summary>
     public static string ShieldCommand(string helperPath) => $"{ShellPath(helperPath)} shield {AppInfo.HookMarker}_shield";
 
+    /// <summary>İzin isteği: robotun cevabını bekler (en fazla ~10 dk), kararı Claude Code'a yazar.</summary>
+    public static string PermissionCommand(string helperPath, string source) => $"{ShellPath(helperPath)} permission {source} {AppInfo.HookMarker}_permission";
+
     public static bool IsInstalled(HookTarget t)
     {
         try
@@ -90,6 +93,19 @@ public static class HookInstaller
                 });
             }
             hooks[name] = groups;
+        }
+        if (t == HookTarget.Claude)
+        {
+            // Robottan onay: Claude Code izin sormadan önce robotun balonunda İzin ver / Reddet
+            var groups = Cleaned(hooks["PermissionRequest"] as JsonArray);
+            groups.Add(new JsonObject
+            {
+                ["hooks"] = new JsonArray(new JsonObject
+                {
+                    ["type"] = "command", ["command"] = PermissionCommand(helperPath, Source(t)), ["timeout"] = 600,
+                }),
+            });
+            hooks["PermissionRequest"] = groups;
         }
         Save(root, path);
     }
@@ -400,4 +416,41 @@ public sealed class HttpRequest
 
     private static int IndexOf(byte[] data, int length, ReadOnlySpan<byte> pattern) =>
         data.AsSpan(0, length).IndexOf(pattern);
+}
+
+
+/// <summary>Robottan onay: Claude Code'un PermissionRequest hook'una dönen karar.</summary>
+public enum ApprovalChoice { Allow, Always, Deny }
+
+public static class Approval
+{
+    /// <summary>Claude'un önerdiği izin kuralları (permission_suggestions) varsa "Hep izin ver" gösterilir.</summary>
+    public static JsonArray? Suggestions(string body)
+    {
+        try { return (JsonNode.Parse(body) as JsonObject)?["permission_suggestions"] as JsonArray is { Count: > 0 } a ? a : null; }
+        catch { return null; }
+    }
+
+    public static string Decision(ApprovalChoice choice, JsonArray? suggestions)
+    {
+        var decision = new JsonObject();
+        switch (choice)
+        {
+            case ApprovalChoice.Deny:
+                decision["behavior"] = "deny";
+                decision["message"] = L("Kullanıcı bunu TelepAIth robotundan reddetti.", "The user declined this from the TelepAIth robot.");
+                break;
+            case ApprovalChoice.Always when suggestions != null:
+                decision["behavior"] = "allow";
+                decision["updatedPermissions"] = suggestions.DeepClone();
+                break;
+            default:
+                decision["behavior"] = "allow";
+                break;
+        }
+        return new JsonObject
+        {
+            ["hookSpecificOutput"] = new JsonObject { ["hookEventName"] = "PermissionRequest", ["decision"] = decision },
+        }.ToJsonString();
+    }
 }

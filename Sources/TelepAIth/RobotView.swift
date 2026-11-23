@@ -12,7 +12,8 @@ struct AvatarView: View {
             : (avatar.alignLeft ? .bottomLeading : .bottomTrailing)
         return ZStack {
             AvatarStage(model: avatar.current, alignLeft: avatar.alignLeft, bubbleBelow: avatar.bubbleBelow,
-                        health: avatar.health, locked: avatar.locked, minis: avatar.minis, focus: avatar.focus)
+                        health: avatar.health, locked: avatar.locked, minis: avatar.minis, focus: avatar.focus,
+                        approval: avatar.approval)
                 .id(avatar.current.source)
                 .transition(.scale(scale: 0.4).combined(with: .opacity))
         }
@@ -20,10 +21,19 @@ struct AvatarView: View {
         .frame(width: Layout.baseWindowSize.width, height: Layout.baseWindowSize.height, alignment: frameAlignment)
         .coordinateSpace(name: "avatar")
         .onPreferenceChange(BubbleFrameKey.self) { frame in avatar.bubbleFrame = frame }
+        .onPreferenceChange(ApprovalFramesKey.self) { frames in avatar.approvalFrames = frames }
         // Robot %100 boyutta çizilir, ayardaki boyuta göre ölçeklenir
         .scaleEffect(avatar.scale, anchor: .topLeading)
         .frame(width: Layout.baseWindowSize.width * avatar.scale, height: Layout.baseWindowSize.height * avatar.scale,
                alignment: .topLeading)
+    }
+}
+
+/// Onay düğmelerinin pencere içindeki yeri (tıklamayı yakalamak için AppKit tarafına iletilir).
+struct ApprovalFramesKey: PreferenceKey {
+    static var defaultValue: [ApprovalChoice: CGRect] = [:]
+    static func reduce(value: inout [ApprovalChoice: CGRect], nextValue: () -> [ApprovalChoice: CGRect]) {
+        value.merge(nextValue()) { _, new in new }
     }
 }
 
@@ -44,6 +54,7 @@ struct AvatarStage: View {
     let locked: Bool
     let minis: [RobotModel.MiniSession]
     let focus: Bool
+    var approval: ApprovalPrompt? = nil
 
     /// Odak modunda sadece seni bekleyen, hata veren ya da robotun kendi söylediği şeyler görünür
     private var urgent: Bool { model.state == .waiting || model.state == .error || model.bubbleIsExplicit }
@@ -72,7 +83,8 @@ struct AvatarStage: View {
                        color: Color(nsColor: model.theme.color),
                        tailOnTop: bubbleBelow,
                        tailLeading: alignLeft,
-                       clickable: !(model.target?.isEmpty ?? true))
+                       clickable: !(model.target?.isEmpty ?? true),
+                       approval: approval)
                 .background(GeometryReader { g in
                     Color.clear.preference(key: BubbleFrameKey.self, value: g.frame(in: .named("avatar")))
                 })
@@ -144,6 +156,7 @@ struct BubbleView: View {
     let tailOnTop: Bool
     let tailLeading: Bool
     var clickable = false
+    var approval: ApprovalPrompt? = nil
 
     private var fill: Color { Color(nsColor: .windowBackgroundColor).opacity(0.97) }
 
@@ -190,14 +203,18 @@ struct BubbleView: View {
                 }
             }
             Text(text)
-                .font(.system(size: 11))
+                .font(.system(size: approval != nil ? 10.5 : 11))
                 .foregroundColor(.primary)
-                .lineLimit(6)
+                .lineLimit(approval != nil ? 3 : 6)
                 .fixedSize(horizontal: false, vertical: true)
+            if let approval = approval {
+                ApprovalButtons(approval: approval, color: color)
+                    .padding(.top, 5)
+            }
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 7)
-        .frame(maxWidth: 220, alignment: .leading)
+        .frame(maxWidth: approval != nil ? 248 : 220, alignment: .leading)   // düğme satırı sığsın
         .background(RoundedRectangle(cornerRadius: 12).fill(fill))
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(color.opacity(0.35), lineWidth: 1))
     }
@@ -569,6 +586,39 @@ struct WavesView: View {
 
     private func opacity(_ i: Int) -> Double {
         (1 - progress(i)) * 0.5
+    }
+}
+
+/// İzin sorusu düğmeleri: İzin ver · Hep izin ver · Reddet. Tıklamayı AppKit tarafı yakalar (yerlerini bildiriyoruz).
+struct ApprovalButtons: View {
+    let approval: ApprovalPrompt
+    let color: Color
+
+    private static let allow = Color(red: 0.14, green: 0.61, blue: 0.34)
+    private static let deny = Color(red: 0.88, green: 0.31, blue: 0.31)
+
+    var body: some View {
+        HStack(spacing: 6) {
+            pill(.allow, loc("İzin ver", "Allow"), fill: ApprovalButtons.allow, text: .white)
+            if approval.hasAlways {
+                pill(.always, loc("Hep izin ver", "Always"), fill: nil, text: color)
+            }
+            pill(.deny, loc("Reddet", "Deny"), fill: nil, text: ApprovalButtons.deny)
+        }
+        .fixedSize()
+    }
+
+    private func pill(_ choice: ApprovalChoice, _ label: String, fill: Color?, text: Color) -> some View {
+        Text(label)
+            .font(.system(size: 10.5, weight: .semibold))
+            .foregroundColor(text)
+            .padding(.horizontal, 11)
+            .frame(height: 22)
+            .background(Capsule().fill(fill ?? text.opacity(0.08)))
+            .overlay(Capsule().stroke(fill ?? text.opacity(0.75), lineWidth: 1))
+            .background(GeometryReader { g in
+                Color.clear.preference(key: ApprovalFramesKey.self, value: [choice: g.frame(in: .named("avatar"))])
+            })
     }
 }
 

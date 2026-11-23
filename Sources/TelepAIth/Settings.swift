@@ -275,6 +275,10 @@ struct SettingsView: View {
                     Toggle(loc("Kalkan: tehlikeli komutlarda onay iste", "Shield: ask before risky commands"),
                            isOn: model.toggle({ Preferences.shield }, { model.host?.setShield($0) }))
                         .padding(.leading, 16)
+                    Toggle(loc("Robottan onay ver (balonda İzin ver / Reddet)", "Approve from the robot (Allow / Deny in the bubble)"),
+                           isOn: model.toggle({ Preferences.approveFromRobot }, { Preferences.approveFromRobot = $0 }))
+                        .padding(.leading, 16)
+                        .help(loc("Terminale bakıyorsan soru terminalde sorulur.", "If you're looking at the terminal, it asks there."))
                 }
                 Toggle("Codex", isOn: model.toggle({ HookInstaller.isInstalled(.codex) },
                                                    { model.host?.setHook(.codex, on: $0, quiet: false) }))

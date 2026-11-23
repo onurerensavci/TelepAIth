@@ -33,6 +33,7 @@ final class RobotManager {
     private var wasTrusted = AppWatcher.isTrusted
     private var lastUpdateAnnounce: CFTimeInterval = 0
     private var lastMiniCheck: CFTimeInterval = 0
+    private var lastApprovalCheck: CFTimeInterval = 0
     private var lastSlowCheck: CFTimeInterval = 0
     private var wasFocused = FocusMode.isActive
 
@@ -71,6 +72,7 @@ final class RobotManager {
         window.onDoubleClick = { [weak self] in self?.openCurrentApp() }
         window.onAlwaysOnTopChanged = { [weak self] _ in self?.onChange?() }
         window.onBubbleClick = { [weak self] in self?.bubbleClicked() }
+        window.onApproval = { [weak self] choice in self?.choose(choice) }
         window.onFocusChanged = { [weak self] in self?.focusChanged() }
         window.onOpenSettings = { [weak self] in self?.onOpenSettings?() }
         window.onShowSummary = { [weak self] in self?.showSummary() }
@@ -146,7 +148,68 @@ final class RobotManager {
         }
     }
 
+    // MARK: - Robottan onay
+
+    private var approvals: [PendingApproval] = []
+
+    /// Claude Code izin istiyor: robot bekliyor durumuna geçer, balonda düğmeler çıkar
+    func onPermission(_ p: PendingApproval) {
+        handle(p.event)   // bekliyor durumu ve bildirim
+        // Ayar kapalıysa ya da zaten terminale bakıyorsan soru terminalde çıksın
+        if !Preferences.approveFromRobot || terminalInFront(p) {
+            p.release()
+            return
+        }
+        approvals.append(p)
+        approvalsChanged()
+    }
+
+    private func terminalInFront(_ p: PendingApproval) -> Bool {
+        guard let front = NSWorkspace.shared.frontmostApplication else { return false }
+        if let pid = p.event.appPID, front.processIdentifier == pid { return true }
+        if let bundle = p.event.appBundleID, !bundle.isEmpty, front.bundleIdentifier == bundle { return true }
+        return false
+    }
+
+    /// Ekrandaki robotun cevaplayabileceği soru (gösterilen AI'ın en yeni sorusu)
+    private var currentApproval: PendingApproval? {
+        guard let avatar = avatar else { return nil }
+        let mine = approvals.filter { !$0.finished && $0.event.source == avatar.current.source }
+        return mine.first(where: { $0.event.sessionID == avatar.current.bestSessionID }) ?? mine.last
+    }
+
+    func approvalsChanged() {
+        approvals.removeAll { $0.finished }
+        avatar?.setApproval(currentApproval.map { ApprovalPrompt(id: $0.id, hasAlways: $0.suggestions != nil) })
+    }
+
+    /// Balondaki düğme: kararı Claude Code'a gönder
+    func choose(_ choice: ApprovalChoice) {
+        guard let p = currentApproval else { return }
+        p.answer(Approval.decision(choice, suggestions: p.suggestions))
+        let m = model(for: p.event.source)
+        switch choice {
+        case .deny: m.say(withEmoji("🚫", loc("Reddettim.", "Declined.")), for: 2.5)
+        case .always: m.say(withEmoji("✅", loc("İzin verdim, bundan sonra sormayacak.", "Allowed; it won't ask again.")), for: 2.5)
+        case .allow: m.say(withEmoji("✅", loc("İzin verdim.", "Allowed.")), for: 2.5)
+        }
+        approvalsChanged()
+        onChange?()
+    }
+
+    /// Bekleyen sorular: terminale geçtiysen, ayar kapandıysa ya da çok beklediyse bırak
+    private func checkApprovals() {
+        for p in approvals where !p.finished {
+            if terminalInFront(p) || Date().timeIntervalSince(p.created) > 580 || !Preferences.approveFromRobot { p.release() }
+        }
+        approvalsChanged()
+    }
+
     func handle(_ event: AgentEvent) {
+        // Claude devam etti (izin verildi, reddedildi, yeni istek…): o oturumun bekleyen sorusunu bırak
+        if event.kind != .waiting {
+            for p in approvals where p.event.source == event.source && p.event.sessionID == event.sessionID { p.release() }
+        }
         let m = model(for: event.source)
         if let notice = m.apply(event) {
             deliver(notice, quietPID: event.quietIfFrontmostPID)
@@ -465,6 +528,11 @@ final class RobotManager {
         lastTick = now
         let date = Date()
         for m in models.values { m.refresh(now: date) }
+        // Bekleyen izin soruları (terminale geçildi mi?)
+        if (!approvals.isEmpty || avatar?.approval != nil) && now - lastApprovalCheck > 0.15 {
+            lastApprovalCheck = now
+            checkApprovals()
+        }
         // Takip edilen pencere taşındı mı? (saniyede 5 kez bak)
         if dockPID != nil && now - lastDockCheck > 0.2 {
             lastDockCheck = now

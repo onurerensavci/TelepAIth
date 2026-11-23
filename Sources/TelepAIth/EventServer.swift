@@ -7,6 +7,9 @@ import Network
 /// GET  /                      → "çalışıyor" cevabı (sağlık kontrolü)
 final class EventServer {
     var onRequest: ((String, [String: String], Data) -> Void)?
+    /// İzin isteği: cevap verilene kadar bağlantı açık kalır. respond (herhangi bir iş parçacığından) cevabı yazar;
+    /// onClosed: hook bağlantıyı kapattı.
+    var onPermission: ((_ query: [String: String], _ body: Data, _ respond: @escaping (String) -> Void, _ onClosed: @escaping (@escaping () -> Void) -> Void) -> Void)?
     var onReady: ((UInt16) -> Void)?
     var onFailure: ((String) -> Void)?
     private(set) var port: UInt16 = 0
@@ -109,6 +112,27 @@ final class EventServer {
                 guard request.method == "POST" else {
                     let ok = request.method == "GET"
                     self.respond(connection, status: ok ? "200 OK" : "405 Method Not Allowed", body: "\(AppInfo.name) is running")
+                    return
+                }
+                if request.path == "/permission", let handler = self.onPermission {
+                    // Cevap gelene kadar bekle; hook vazgeçerse (bağlantı kapanırsa) haber ver
+                    var answered = false
+                    let lock = NSLock()
+                    let respond: (String) -> Void = { body in
+                        lock.lock(); defer { lock.unlock() }
+                        guard !answered else { return }
+                        answered = true
+                        self.respond(connection, status: "200 OK", body: body)
+                    }
+                    let onClosed: (@escaping () -> Void) -> Void = { callback in
+                        connection.receive(minimumIncompleteLength: 1, maximumLength: 1) { _, _, isComplete, error in
+                            if isComplete || error != nil {
+                                lock.lock(); let done = answered; answered = true; lock.unlock()
+                                if !done { connection.cancel(); callback() }
+                            }
+                        }
+                    }
+                    handler(request.query, request.body, respond, onClosed)
                     return
                 }
                 self.respond(connection, status: "200 OK")

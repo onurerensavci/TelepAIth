@@ -205,6 +205,37 @@ foreach ($ui in @("robotmenu", "traymenu", "settings&page=0", "settings&page=1",
   Dbg "ui?open=close" | Out-Null
   Start-Sleep -Milliseconds 300
 }
+# Robottan onay: hook izin ister, robotun balonundaki düğmeye tıklanır, karar hook'un çıktısına yazılır
+$hookAbs = (Resolve-Path $Hook).Path
+function AskPermission($session) {
+  $req = '{"hook_event_name":"PermissionRequest","session_id":"' + $session + '","cwd":"C:\\proj\\api","tool_name":"Bash","tool_input":{"command":"npm install"},"permission_suggestions":[{"type":"addRules","rules":[{"toolName":"Bash","ruleContent":"npm install"}],"behavior":"allow","destination":"localSettings"}]}'
+  Start-Job -ScriptBlock { param($h, $home3, $body) $env:TELEPAITH_HOME = $home3; $OutputEncoding = New-Object System.Text.UTF8Encoding $false; $body | & $h permission claude } -ArgumentList $hookAbs, $home2, $req
+}
+foreach ($case in @(@{ Session = "perm1"; Button = "allow"; Expect = '"behavior":"allow"' }, @{ Session = "perm2"; Button = "always"; Expect = '"updatedPermissions"' }, @{ Session = "perm3"; Button = "deny"; Expect = '"behavior":"deny"' })) {
+  $job = AskPermission $case.Session
+  $st = $null
+  for ($t = 0; $t -lt 20; $t++) { Start-Sleep -Milliseconds 400; $st = State; if ($st.approval -and $st.approval.buttons.($case.Button)) { break } }
+  Shot ("11-approval-" + $case.Button)
+  Check ($st.approval -ne $null) "izin sorusu balonda ($($case.Button))"
+  $xy = $st.approval.buttons.($case.Button)
+  [Mouse]::SetCursorPos([int]$xy[0], [int]$xy[1]); Start-Sleep -Milliseconds 400
+  [Mouse]::Down(); Start-Sleep -Milliseconds 60; [Mouse]::Up()
+  $done = Wait-Job $job -Timeout 10
+  $out = (Receive-Job $job | Out-String).Trim()
+  Remove-Job $job -Force
+  Write-Host "  hook çıktısı: $out"
+  Check ($out -like ("*" + $case.Expect + "*")) "düğmeye tıklayınca karar Claude Code'a gitti ($($case.Button))"
+  Start-Sleep -Milliseconds 800
+}
+# Robot kapalıyken ya da ayar kapalıyken hook hemen boş döner (soru terminalde çıkar): bağlantı kurulamayan port
+$env:TELEPAITH_HOME_SAVE = $env:TELEPAITH_HOME
+$empty = Join-Path $env:RUNNER_TEMP "tp-empty"; New-Item -ItemType Directory -Force $empty | Out-Null; Set-Content (Join-Path $empty "port") "19899"
+$sw = [Diagnostics.Stopwatch]::StartNew()
+$env:TELEPAITH_HOME = $empty
+$o = '{"hook_event_name":"PermissionRequest","session_id":"x","tool_name":"Bash","tool_input":{"command":"ls"}}' | & $hookAbs permission claude
+$env:TELEPAITH_HOME = $env:TELEPAITH_HOME_SAVE
+Check ([string]::IsNullOrWhiteSpace($o) -and $sw.Elapsed.TotalSeconds -lt 5) "robot yokken hook beklemeden boş döner ($([int]$sw.Elapsed.TotalSeconds) sn)"
+
 # Sahte "Claude" uygulaması: açılınca robot fark etsin, kapatıp yeniden açınca yine fark etsin
 $fakeDir = Join-Path $env:RUNNER_TEMP "fake-claude"
 New-Item -ItemType Directory -Force $fakeDir | Out-Null

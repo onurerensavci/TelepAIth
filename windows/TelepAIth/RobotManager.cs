@@ -70,6 +70,7 @@ internal sealed class RobotManager
         window.Clicked += RobotClicked;
         window.DoubleClicked += OpenCurrentApp;
         window.BubbleClicked += BubbleClicked;
+        window.ApprovalClicked += Choose;
         window.BuildMenu = () => BuildRobotMenu!();
         _window = window;
 
@@ -151,6 +152,10 @@ internal sealed class RobotManager
     {
         _recent.Enqueue($"{DateTime.Now:HH:mm:ss.fff} {e.Source}/{e.SessionId} {e.Kind} {e.State}");
         while (_recent.Count > 30) _recent.Dequeue();
+        // Claude devam etti (izin verildi, reddedildi, yeni istek…): o oturumun bekleyen sorusunu bırak
+        if (e.Kind != EventKind.Waiting)
+            foreach (var p in _approvals.Where(p => p.Event.Source == e.Source && p.Event.SessionId == e.SessionId).ToList())
+                p.Release();
         // Terminaldeki Claude Code / Codex: hook'u çalıştıran sürecin penceresi olan atası (terminal, VS Code…)
         if (e.AppPid == null && e.HookParentPid is { } ppid) e.AppPid = WindowedAncestor(ppid);
         var m = Model(e.Source);
@@ -167,6 +172,70 @@ internal sealed class RobotManager
         _ancestorCache[pid] = (found, DateTime.Now);
         return found;
     }
+
+    // MARK: Robottan onay
+
+    private readonly List<PendingApproval> _approvals = new();
+
+    /// <summary>Claude Code izin istiyor: robot bekliyor durumuna geçer, balonda düğmeler çıkar.</summary>
+    public void OnPermission(PendingApproval p)
+    {
+        Handle(p.Event);   // bekliyor durumu, bildirim; terminal penceresi (AppPid) de burada bulunur
+        // Ayar kapalıysa ya da zaten terminale bakıyorsan soru terminalde çıksın
+        if (!Prefs.ApproveFromRobot || TerminalInFront(p))
+        {
+            p.Release();
+            return;
+        }
+        _approvals.Add(p);
+        UpdateApproval();
+    }
+
+    private static bool TerminalInFront(PendingApproval p) =>
+        p.Event.AppPid is { } pid && Native.WindowPid(Native.GetForegroundWindow()) == pid;
+
+    /// <summary>Ekrandaki robotun cevaplayabileceği soru (gösterilen AI'ın en yeni sorusu)</summary>
+    private PendingApproval? CurrentApproval()
+    {
+        if (_avatar == null) return null;
+        var mine = _approvals.Where(p => !p.Finished && p.Event.Source == _avatar.Current.Source).ToList();
+        return mine.FirstOrDefault(p => p.Event.SessionId == _avatar.Current.BestSessionId) ?? mine.LastOrDefault();
+    }
+
+    private void UpdateApproval()
+    {
+        _approvals.RemoveAll(p => p.Finished);
+        if (_avatar == null) return;
+        var current = CurrentApproval();
+        _avatar.Approval = current == null ? null : new ApprovalPrompt(current.Id, current.Suggestions != null);
+    }
+
+    /// <summary>Balondaki düğme: kararı Claude Code'a gönder</summary>
+    public void Choose(ApprovalChoice choice)
+    {
+        var p = CurrentApproval();
+        if (p == null) return;
+        p.Answer(Approval.Decision(choice, p.Suggestions));
+        var m = Model(p.Event.Source);
+        m.Say(choice == ApprovalChoice.Deny
+            ? WithEmoji("🚫", L("Reddettim.", "Declined."))
+            : WithEmoji("✅", choice == ApprovalChoice.Always ? L("İzin verdim, bundan sonra sormayacak.", "Allowed; it won't ask again.") : L("İzin verdim.", "Allowed.")), 2.5);
+        UpdateApproval();
+        Changed?.Invoke();
+    }
+
+    /// <summary>Bekleyen sorular: terminale geçtiysen, Claude vazgeçtiyse ya da çok beklediyse bırak</summary>
+    private void CheckApprovals()
+    {
+        foreach (var p in _approvals.ToList())
+        {
+            if (p.Finished) continue;
+            if (TerminalInFront(p) || (DateTime.Now - p.Created).TotalSeconds > 580 || !Prefs.ApproveFromRobot) p.Release();
+        }
+        UpdateApproval();
+    }
+
+    public bool HasApproval => _avatar?.Approval != null;
 
     /// <summary>Bildirimi gönderir: odak modunda sadece önemliler, kullanıcı o pencereye bakıyorsa hiç (ayara göre).</summary>
     private void Deliver(RobotModel.Notice notice, int? quietPid)
@@ -483,6 +552,11 @@ internal sealed class RobotManager
             ["alignLeft"] = _avatar?.AlignLeft,
             ["bubbleBelow"] = _avatar?.BubbleBelow,
             ["focus"] = FocusMode.IsActive,
+            ["approval"] = _avatar?.Approval is { } ap ? new System.Text.Json.Nodes.JsonObject
+            {
+                ["always"] = ap.HasAlways,
+                ["buttons"] = _window?.ApprovalButtonsJson(),
+            } : null,
             ["celebrating"] = _avatar?.Current.CelebrateStart is { } cs && (DateTime.Now - cs).TotalSeconds is >= 0 and <= 2.4,
             ["recent"] = new System.Text.Json.Nodes.JsonArray(_recent.Select(r => (System.Text.Json.Nodes.JsonNode?)r).ToArray()),
             ["sessions"] = new System.Text.Json.Nodes.JsonArray(AllModels.SelectMany(m => m.SessionStates.Select(x => (System.Text.Json.Nodes.JsonNode?)$"{m.Source}/{x.Id}={x.State}")).ToArray()),
@@ -511,6 +585,7 @@ internal sealed class RobotManager
         {
             _lastForegroundCheck = now;
             ForegroundChanged(Native.GetForegroundWindow());
+            if (_approvals.Count > 0 || _avatar?.Approval != null) CheckApprovals();
         }
         // Takip edilen pencere taşındı mı? (saniyede 5 kez)
         if (_dockWindow != IntPtr.Zero && now - _lastDockCheck > 0.2)

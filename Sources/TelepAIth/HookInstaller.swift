@@ -73,6 +73,17 @@ enum HookInstaller {
             + "{ printf '%s' \"$P\" | curl -s -m 3 --noproxy '*' -H 'Content-Type: application/json' -H 'Expect:' --data-binary @- \"\(url)\"; } >/dev/null 2>&1 & }; \(m)"
     }
 
+    /// İzin isteği: robotun balonundaki cevabı bekler (en fazla ~10 dk) ve kararı Claude Code'a yazar.
+    /// TelepAIth kapalıysa ya da cevap vermezse hiçbir şey yazmaz: soru her zamanki gibi terminalde çıkar.
+    static func permissionCommand(source: String) -> String {
+        let m = AppInfo.hookMarker + "_permission"
+        let portFile = "$HOME/\(AppInfo.supportDirName)/port"
+        let url = "http://127.0.0.1:${PORT}/permission?source=\(source)&app=${__CFBundleIdentifier:-}&term=${TERM_PROGRAM:-}"
+        return "\(m)() { [ \"$CLAUDEBAR_PROBE\" = \"1\" ] && return 0; P=$(cat); "
+            + "PORT=$(cat \"\(portFile)\" 2>/dev/null || echo \(AppInfo.defaultPort)); "
+            + "printf '%s' \"$P\" | curl -s -m 590 --noproxy '*' -H 'Content-Type: application/json' -H 'Expect:' --data-binary @- \"\(url)\" 2>/dev/null; return 0; }; \(m)"
+    }
+
     /// Kalkan: tehlikeli görünen Bash komutlarında Claude Code'un onay sormasını sağlar
     /// (komutu engellemez, sadece "izin veriyor musun?" diye sordurur).
     static let shieldCommand = #"__telepaith_hook_shield() { P=$(cat); if printf '%s' "$P" | grep -qiE 'rm[[:space:]]+-[a-z]*r[a-z]*f|rm[[:space:]]+-[a-z]*f[a-z]*r|git[[:space:]]+push[^"]*(--force|[[:space:]]-f([^a-z]|$))|git[[:space:]]+reset[[:space:]]+--hard|git[[:space:]]+clean[[:space:]]+-[a-z]*f|drop[[:space:]]+(table|database)|mkfs|dd[[:space:]]+if=|chmod[[:space:]]+-r[[:space:]]+777|sudo[[:space:]]+rm'; then printf '%s' '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"TelepAIth kalkanı: tehlikeli görünen komut, onayın gerekiyor."}}'; fi; }; __telepaith_hook_shield"#
@@ -97,6 +108,12 @@ enum HookInstaller {
                 groups.append(["matcher": "Bash", "hooks": [["type": "command", "command": shieldCommand]]])
             }
             hooks[event.name] = groups
+        }
+        if target == .claude {
+            // Robottan onay: Claude Code izin sormadan önce robotun balonunda İzin ver / Reddet
+            var groups = cleaned(hooks["PermissionRequest"] as? [[String: Any]] ?? [])
+            groups.append(["hooks": [["type": "command", "command": permissionCommand(source: target.source), "timeout": 600]]])
+            hooks["PermissionRequest"] = groups
         }
         root["hooks"] = hooks
         try save(root, to: url)

@@ -43,6 +43,7 @@ internal sealed class AppController : ISettingsHost
         Manager.Start();
 
         _server.EventReceived += e => Application.Current.Dispatcher.BeginInvoke(() => Manager.Handle(e));
+        _server.PermissionRequested += p => Application.Current.Dispatcher.BeginInvoke(() => Manager.OnPermission(p));
         _server.StateProvider = () => Application.Current.Dispatcher.Invoke(Manager.StateJson);
         _server.DebugHandler = (path, query) => Application.Current.Dispatcher.Invoke(() => Debug(path, query));
         _server.Start();

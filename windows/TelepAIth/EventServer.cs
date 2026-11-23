@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -21,6 +22,9 @@ internal sealed class EventServer
 
     /// <summary>Gelen olay (arka plan iş parçacığında çağrılır)</summary>
     public event Action<AgentEvent>? EventReceived;
+
+    /// <summary>Claude Code izin istiyor: bağlantı açık kalır, robotun cevabı (ya da boş cevap) dönene kadar.</summary>
+    public event Action<PendingApproval>? PermissionRequested;
 
     /// <summary>GET /state: robotun o anki durumu (teşhis ve otomatik testler için)</summary>
     public Func<string>? StateProvider;
@@ -124,6 +128,15 @@ internal sealed class EventServer
                 var e = EventParser.Parse(request.Path, request.Query, request.Body);
                 if (Debug) Log($"{request.Method} {request.Path} q={string.Join("&", request.Query.Select(kv => kv.Key + "=" + kv.Value))} body={request.Body.Length} → {(e == null ? "400" : e.Source + "/" + e.SessionId + " " + e.Kind)}");
                 if (e == null) { await Respond(stream, 400, "unrecognized event"); return; }
+                if (request.Path == "/permission" && PermissionRequested != null)
+                {
+                    var pending = new PendingApproval(e, request.Body);
+                    PermissionRequested.Invoke(pending);
+                    var answer = await pending.WaitAsync(client, TimeSpan.FromSeconds(585)).ConfigureAwait(false);
+                    if (Debug) Log($"permission {e.Source}/{e.SessionId} → {(string.IsNullOrEmpty(answer) ? "(terminalde sorulacak)" : answer)}");
+                    try { await Respond(stream, 200, answer ?? ""); } catch { }
+                    return;
+                }
                 // Önce olayı ilet, sonra cevap ver: hook yardımcısı cevabın başını okuyunca bağlantıyı kapatıyor,
                 // cevap yazılırken bağlantı koparsa olay kaybolmasın.
                 EventReceived?.Invoke(e);
@@ -152,5 +165,57 @@ internal sealed class EventServer
         head.CopyTo(all, 0);
         payload.CopyTo(all, head.Length);
         await stream.WriteAsync(all).ConfigureAwait(false);
+    }
+}
+
+
+/// <summary>
+/// Robotun cevabını bekleyen bir izin isteği. Answer: karar JSON'u; Release: boş cevap (soru terminalde çıkar).
+/// Hook yardımcısı bağlantıyı kapatırsa (Claude Code vazgeçti) Closed olur.
+/// </summary>
+internal sealed class PendingApproval
+{
+    private static int _counter;
+    private readonly TaskCompletionSource<string> _answer = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    public int Id { get; } = Interlocked.Increment(ref _counter);
+    public AgentEvent Event { get; }
+    public System.Text.Json.Nodes.JsonArray? Suggestions { get; }
+    public DateTime Created { get; } = DateTime.Now;
+    public bool Finished => _answer.Task.IsCompleted;
+    public bool Closed { get; private set; }
+
+    public PendingApproval(AgentEvent e, string body)
+    {
+        Event = e;
+        Suggestions = Approval.Suggestions(body);
+    }
+
+    public void Answer(string json) => _answer.TrySetResult(json);
+    public void Release() => _answer.TrySetResult("");
+
+    public async Task<string?> WaitAsync(TcpClient client, TimeSpan max)
+    {
+        var until = DateTime.Now + max;
+        while (!_answer.Task.IsCompleted && DateTime.Now < until)
+        {
+            await Task.WhenAny(_answer.Task, Task.Delay(400)).ConfigureAwait(false);
+            try
+            {
+                // Karşı taraf kapattı mı? (okunacak veri yok ama okunabilir = bağlantı bitti)
+                if (!_answer.Task.IsCompleted && client.Client.Poll(0, SelectMode.SelectRead) && client.Available == 0)
+                {
+                    Closed = true;
+                    _answer.TrySetResult("");
+                }
+            }
+            catch
+            {
+                Closed = true;
+                _answer.TrySetResult("");
+            }
+        }
+        _answer.TrySetResult("");
+        return await _answer.Task.ConfigureAwait(false);
     }
 }

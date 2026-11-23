@@ -535,6 +535,10 @@ internal static class SettingsWindow
         items.Add(Ui.Section(L("Kodlama ajanları", "Coding agents")));
         items.Add(Ui.SwitchCard("Claude Code", L("Terminaldeki her adımı anında görür", "Sees every step in the terminal instantly"),
             HookInstaller.IsInstalled(HookTarget.Claude), v => host.SetHook(HookTarget.Claude, v, false), ""));
+        items.Add(Ui.SwitchCard(L("Robottan onay ver", "Approve from the robot"),
+            L("Claude Code izin isteyince balonda İzin ver / Reddet çıkar. Terminale bakıyorsan soru terminalde sorulur.",
+              "When Claude Code asks for permission, the bubble shows Allow / Deny. If you're looking at the terminal, it asks there."),
+            Prefs.ApproveFromRobot, v => Prefs.ApproveFromRobot = v, "\uE8FB"));
         items.Add(Ui.SwitchCard("Codex", L("Codex'te bir kere /hooks yazıp onayla", "Type /hooks once in Codex and approve"),
             HookInstaller.IsInstalled(HookTarget.Codex), v => host.SetHook(HookTarget.Codex, v, false), ""));
         items.Add(Ui.SwitchCard(L("Kalkan", "Shield"), L("Tehlikeli komutlardan önce onay iste", "Ask before risky commands"), Prefs.Shield, v => host.SetShield(v), ""));

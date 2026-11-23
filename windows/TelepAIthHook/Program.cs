@@ -5,6 +5,7 @@ using System.Text.Json.Nodes;
 using TelepAIth.Core;
 
 // TelepAIthHook.exe hook <kaynak>   → stdin'deki olayı TelepAIth'e iletir (hiçbir şey yazmaz: Claude Code çıktıyı bağlama ekleyebilir)
+// TelepAIthHook.exe permission <kaynak> → izin isteğini robota sorar, cevabı (izin ver / reddet) yazar
 // TelepAIthHook.exe shield          → tehlikeli komutta "onay sor" cevabı yazar
 // TelepAIthHook.exe mcp [--source claude] → anlatıcı MCP sunucusu (stdio)
 var mode = args.Length > 0 ? args[0].ToLowerInvariant() : "";
@@ -29,6 +30,26 @@ try
             {
                 Thread.Sleep(250);
                 Local.Post("/event?" + query, body, waitMs: 1500);
+            }
+            return 0;
+        }
+        case "permission":
+        {
+            // Claude Code izin istiyor: robotun balonundaki cevabı bekle, kararı yaz.
+            // TelepAIth kapalıysa ya da cevap vermezse hiçbir şey yazmaz: soru her zamanki gibi terminalde çıkar.
+            if (Environment.GetEnvironmentVariable("CLAUDEBAR_PROBE") == "1") return 0;
+            var source = args.Length > 1 && !args[1].StartsWith("__") ? args[1] : "claude";
+            var body = ReadStdin();
+            var query = new StringBuilder("source=" + Uri.EscapeDataString(source));
+            var ppid = Native.ParentPid();
+            if (ppid > 0) query.Append("&ppid=").Append(ppid);
+            var term = Environment.GetEnvironmentVariable("TERM_PROGRAM");
+            if (!string.IsNullOrEmpty(term)) query.Append("&term=").Append(Uri.EscapeDataString(term));
+            var answer = Local.Ask("/permission?" + query, body, TimeSpan.FromSeconds(590));
+            if (!string.IsNullOrWhiteSpace(answer))
+            {
+                var stdout = new StreamWriter(Console.OpenStandardOutput(), new UTF8Encoding(false)) { AutoFlush = true };
+                stdout.Write(answer);
             }
             return 0;
         }
@@ -75,14 +96,19 @@ static string ReadStdin()
 /// <summary>Çalışan TelepAIth'e yerel HTTP ile gönderir (HttpClient yerine ham soket: çok daha hızlı açılır).</summary>
 static class Local
 {
-    public static bool Post(string pathAndQuery, string body, int waitMs)
+    private static int Port()
     {
-        var port = AppInfo.DefaultPort;
         try
         {
-            if (File.Exists(AppInfo.PortFile) && int.TryParse(File.ReadAllText(AppInfo.PortFile).Trim(), out var p)) port = p;
+            if (File.Exists(AppInfo.PortFile) && int.TryParse(File.ReadAllText(AppInfo.PortFile).Trim(), out var p)) return p;
         }
         catch { }
+        return AppInfo.DefaultPort;
+    }
+
+    public static bool Post(string pathAndQuery, string body, int waitMs)
+    {
+        var port = Port();
         try
         {
             using var client = new TcpClient();
@@ -106,6 +132,38 @@ static class Local
         catch (Exception ex)
         {
             return Fail(ex.GetType().Name + ": " + ex.Message);
+        }
+    }
+
+    /// <summary>İstek gönderir ve cevabın gövdesini (uzun süre bekleyerek) döner; hata olursa null.</summary>
+    public static string? Ask(string pathAndQuery, string body, TimeSpan wait)
+    {
+        try
+        {
+            var port = Port();
+            using var client = new TcpClient();
+            if (!client.ConnectAsync(System.Net.IPAddress.Loopback, port).Wait(1500)) { Fail($"connect timeout :{port}"); return null; }
+            client.ReceiveTimeout = (int)wait.TotalMilliseconds;
+            client.SendTimeout = 3000;
+            using var stream = client.GetStream();
+            var payload = Encoding.UTF8.GetBytes(body);
+            var head = Encoding.ASCII.GetBytes(
+                $"POST {pathAndQuery} HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Type: application/json\r\nContent-Length: {payload.Length}\r\nConnection: close\r\n\r\n");
+            stream.Write(head);
+            stream.Write(payload);
+            using var ms = new MemoryStream();
+            var buf = new byte[8192];
+            int n;
+            while ((n = stream.Read(buf, 0, buf.Length)) > 0) ms.Write(buf, 0, n);
+            var reply = Encoding.UTF8.GetString(ms.ToArray());
+            var split = reply.IndexOf("\r\n\r\n", StringComparison.Ordinal);
+            if (!reply.Contains(" 200 ") || split < 0) { Fail("reply: " + reply.Split('\r')[0]); return null; }
+            return reply[(split + 4)..];
+        }
+        catch (Exception ex)
+        {
+            Fail(ex.GetType().Name + ": " + ex.Message);
+            return null;
         }
     }
 

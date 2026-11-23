@@ -9,6 +9,9 @@ public enum Corner { BottomLeft, BottomRight, TopLeft, TopRight }
 
 public enum Health { Ok, Update, Broken }
 
+/// <summary>Balonda gösterilecek izin sorusu (düğmeler)</summary>
+public sealed record ApprovalPrompt(int Id, bool HasAlways);
+
 /// <summary>
 /// Robotun yeri: köşeye yapışma, sürükleme, AI penceresine uçma. Konumlar fiziksel piksel (ekran), kafanın merkezi.
 /// Ölçüler %100 boyutta DIP olarak tanımlı; ekranın DPI'ı ve ayardaki robot boyutuyla çarpılır.
@@ -29,6 +32,8 @@ internal sealed class RobotAvatar
     public bool IsDragging { get; private set; }
     public List<RobotModel.MiniSession> Minis { get; set; } = new();
     public bool Focus { get; set; }
+    /// <summary>Gösterilen AI'ın cevap bekleyen izin sorusu varsa balonda İzin ver / Reddet düğmeleri</summary>
+    public ApprovalPrompt? Approval { get; set; }
 
     /// <summary>Kafanın merkezi (fiziksel piksel)</summary>
     public double HeadX { get; private set; }

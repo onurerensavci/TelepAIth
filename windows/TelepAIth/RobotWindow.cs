@@ -28,6 +28,7 @@ internal sealed class RobotWindow : Window
     public event Action? Clicked;
     public event Action? DoubleClicked;
     public event Action? BubbleClicked;
+    public event Action<ApprovalChoice>? ApprovalClicked;
     public Func<ContextMenu>? BuildMenu;
 
     public IntPtr Handle => _hwnd;
@@ -164,7 +165,8 @@ internal sealed class RobotWindow : Window
             _avatar.EndDrag();
             return;
         }
-        if (Contains(_view.BubbleRect, start)) BubbleClicked?.Invoke();
+        if (_view.ButtonAt(start) is { } choice) ApprovalClicked?.Invoke(choice);
+        else if (Contains(_view.BubbleRect, start)) BubbleClicked?.Invoke();
         else if (Contains(_view.HeadRect, start)) Clicked?.Invoke();
     }
 
@@ -178,6 +180,17 @@ internal sealed class RobotWindow : Window
         menu.Closed += (_, _) => _menuOpen = false;
         menu.IsOpen = true;
         e.Handled = true;
+    }
+
+    /// <summary>Test için: düğmelerin ekrandaki yeri (fiziksel piksel)</summary>
+    public System.Text.Json.Nodes.JsonObject ApprovalButtonsJson()
+    {
+        var o = new System.Text.Json.Nodes.JsonObject();
+        var dpi = _hwnd == IntPtr.Zero ? 1 : VisualTreeHelper.GetDpi(this).DpiScaleX;
+        foreach (var (choice, r) in _view.ButtonRects)
+            o[choice.ToString().ToLowerInvariant()] = new System.Text.Json.Nodes.JsonArray(
+                (int)(_lastRect.X + (r.X + r.Width / 2) * dpi), (int)(_lastRect.Y + (r.Y + r.Height / 2) * dpi));
+        return o;
     }
 
     /// <summary>Robotu şu anki sanal masaüstüne getir (verilen pencerenin masaüstüne).</summary>

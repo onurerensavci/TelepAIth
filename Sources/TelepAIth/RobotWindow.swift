@@ -26,6 +26,28 @@ final class RobotAvatar: ObservableObject {
     @Published private(set) var focus = FocusMode.isActive
     /// Balonun pencere içindeki yeri (SwiftUI, sol-üst köken, %100 boyuttaki ölçüyle). Tıklamayı yakalamak için.
     var bubbleFrame: CGRect = .zero
+    /// Gösterilen AI'ın cevap bekleyen izin sorusu varsa balonda İzin ver / Reddet düğmeleri
+    @Published private(set) var approval: ApprovalPrompt?
+    /// Düğmelerin pencere içindeki yeri (bubbleFrame gibi)
+    var approvalFrames: [ApprovalChoice: CGRect] = [:]
+
+    func setApproval(_ value: ApprovalPrompt?) {
+        if approval != value { approval = value }
+        if value == nil { approvalFrames = [:] }
+    }
+
+    /// Ekrandaki bu noktada bir onay düğmesi var mı?
+    func approvalChoice(at point: NSPoint) -> ApprovalChoice? {
+        guard approval != nil else { return nil }
+        let origin = windowOrigin
+        let s = Layout.scale
+        for (choice, f) in approvalFrames {
+            let r = NSRect(x: origin.x + f.minX * s, y: origin.y + Layout.windowSize.height - f.maxY * s,
+                           width: f.width * s, height: f.height * s)
+            if r.contains(point) { return choice }
+        }
+        return nil
+    }
     /// Robotun boyutu (ayarlardan)
     @Published private(set) var scale = Layout.scale
 
@@ -305,8 +327,11 @@ final class AvatarHostingView: NSHostingView<AvatarView> {
     var onRightClick: ((NSEvent) -> Void)?
     var onDoubleClick: (() -> Void)?
     var onBubbleClick: (() -> Void)?
+    var onApproval: ((ApprovalChoice) -> Void)?
     /// Tıklanan nokta balonun üstünde mi (kafanın değil)?
     var isOverBubble: ((NSPoint) -> Bool)?
+    /// Tıklanan noktada onay düğmesi var mı?
+    var approvalAt: ((NSPoint) -> ApprovalChoice?)?
 
     private var mouseStart: NSPoint = .zero
     private var dragging = false
@@ -334,6 +359,8 @@ final class AvatarHostingView: NSHostingView<AvatarView> {
         if dragging {
             dragging = false
             onDragEnd?()
+        } else if let choice = approvalAt?(NSEvent.mouseLocation) {
+            onApproval?(choice)
         } else if isOverBubble?(NSEvent.mouseLocation) == true {
             onBubbleClick?()
         } else if event.clickCount >= 2 {
@@ -356,6 +383,7 @@ final class AvatarWindowController: NSObject {
     var onLockChanged: ((Bool) -> Void)?
     var onAlwaysOnTopChanged: ((Bool) -> Void)?
     var onBubbleClick: (() -> Void)?
+    var onApproval: ((ApprovalChoice) -> Void)?
     var onFocusChanged: (() -> Void)?
     var onOpenSettings: (() -> Void)?
     var onShowSummary: (() -> Void)?
@@ -404,6 +432,8 @@ final class AvatarWindowController: NSObject {
         host.onRightClick = { [weak self] event in self?.showMenu(event) }
         host.onDoubleClick = { [weak self] in self?.onDoubleClick?() }
         host.onBubbleClick = { [weak self] in self?.onBubbleClick?() }
+        host.onApproval = { [weak self] choice in self?.onApproval?(choice) }
+        host.approvalAt = { [weak self] point in self?.avatar.approvalChoice(at: point) }
         host.isOverBubble = { [weak self] point in
             guard let self = self, !self.avatar.headRect.contains(point) else { return false }
             return self.avatar.bubbleScreenRect?.contains(point) ?? false

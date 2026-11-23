@@ -300,6 +300,30 @@ public static class Tests
         A.True(RobotModel.SessionGroup(shown[0].Id.Split('/')[1]) != RobotModel.SessionGroup(m.BestSessionId!), "ana robotla aynı sohbet minik kafa olmaz");
     }
 
+    public static void ApprovalDecisions()
+    {
+        var body = """{"hook_event_name":"PermissionRequest","session_id":"s1","tool_name":"Bash","tool_input":{"command":"npm install"},"permission_suggestions":[{"type":"addRules","rules":[{"toolName":"Bash","ruleContent":"npm install"}],"behavior":"allow","destination":"localSettings"}]}""";
+        var sug = Approval.Suggestions(body);
+        A.True(sug != null && sug.Count == 1, "öneri okundu");
+        var allow = JsonNode.Parse(Approval.Decision(ApprovalChoice.Allow, sug))!;
+        A.Eq("PermissionRequest", allow["hookSpecificOutput"]!["hookEventName"]!.GetValue<string>());
+        A.Eq("allow", allow["hookSpecificOutput"]!["decision"]!["behavior"]!.GetValue<string>());
+        A.True(allow["hookSpecificOutput"]!["decision"]!["updatedPermissions"] == null, "tek seferlik izinde kural yok");
+        var always = JsonNode.Parse(Approval.Decision(ApprovalChoice.Always, sug))!;
+        A.Eq("npm install", always["hookSpecificOutput"]!["decision"]!["updatedPermissions"]![0]!["rules"]![0]!["ruleContent"]!.GetValue<string>());
+        var deny = JsonNode.Parse(Approval.Decision(ApprovalChoice.Deny, sug))!;
+        A.Eq("deny", deny["hookSpecificOutput"]!["decision"]!["behavior"]!.GetValue<string>());
+        A.True(deny["hookSpecificOutput"]!["decision"]!["message"] != null, "red gerekçesi var");
+        A.True(Approval.Suggestions("""{"tool_name":"Edit"}""") == null, "öneri yoksa Hep izin ver yok");
+        // Hook kurulumu: PermissionRequest bekleyen komutla, 600 sn zaman aşımıyla
+        HookInstaller.Install(HookTarget.Claude, "C:/x/TelepAIthHook.exe", false);
+        var root = JsonNode.Parse(File.ReadAllText(HookInstaller.FilePath(HookTarget.Claude)))!;
+        var pr = root["hooks"]!["PermissionRequest"]![0]!["hooks"]![0]!;
+        A.True(pr["command"]!.GetValue<string>().Contains(" permission claude "), "izin komutu");
+        A.Eq(600, pr["timeout"]!.GetValue<int>());
+        HookInstaller.Uninstall(HookTarget.Claude);
+    }
+
     public static void ModelStopNotice()
     {
         var m = new RobotModel("claude");

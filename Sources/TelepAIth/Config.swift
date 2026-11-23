@@ -69,6 +69,12 @@ enum Preferences {
         set { defaults.set(newValue, forKey: "shield") }
     }
 
+    /// Claude Code izin isteyince robotun balonunda İzin ver / Reddet düğmeleri
+    static var approveFromRobot: Bool {
+        get { defaults.object(forKey: "approveFromRobot") as? Bool ?? true }
+        set { defaults.set(newValue, forKey: "approveFromRobot") }
+    }
+
     /// Önemli anlarda (bitti, seni bekliyor, güncelleme) robot sesli söylesin.
     static var speak: Bool {
         get { defaults.object(forKey: "speak") as? Bool ?? false }

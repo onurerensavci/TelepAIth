@@ -51,6 +51,17 @@ final class AppController: NSObject {
                 self.manager.handle(event)
             }
         }
+        server.onPermission = { [weak self] query, body, respond, onClosed in
+            DispatchQueue.main.async {
+                guard let self = self, let event = EventParser.parse(path: "/permission", query: query, body: body) else {
+                    respond("")
+                    return
+                }
+                let pending = PendingApproval(event: event, body: body) { answer in respond(answer) }
+                onClosed { DispatchQueue.main.async { [weak self] in pending.closed(); self?.manager.approvalsChanged() } }
+                self.manager.onPermission(pending)
+            }
+        }
         server.start(preferredPort: AppInfo.defaultPort)
 
         Updater.shared.onChange = { [weak self] in self?.rebuildMenu() }
