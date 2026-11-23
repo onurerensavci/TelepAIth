@@ -180,6 +180,7 @@ internal sealed class RobotManager
     /// <summary>Claude Code izin istiyor: robot bekliyor durumuna geçer, balonda düğmeler çıkar.</summary>
     public void OnPermission(PendingApproval p)
     {
+        Model(p.Event.Source).ClearSay();   // önceki "izin verdim" yeni soruyu örtmesin
         Handle(p.Event);   // bekliyor durumu, bildirim; terminal penceresi (AppPid) de burada bulunur
         // Ayar kapalıysa ya da zaten terminale bakıyorsan soru terminalde çıksın
         if (!Prefs.ApproveFromRobot || TerminalInFront(p))

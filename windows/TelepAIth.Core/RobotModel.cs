@@ -333,6 +333,14 @@ public sealed class RobotModel
         Refresh(now);
     }
 
+    /// <summary>Balondaki geçici yazıyı kaldır (yeni bir soru geldiğinde eski "izin verdim" onu örtmesin)</summary>
+    public void ClearSay(DateTime? at = null)
+    {
+        _overrideUntil = null;
+        _explicitUntil = null;
+        Refresh(at ?? DateTime.Now);
+    }
+
     public void ShowHistory()
     {
         var lines = _history.TakeLast(5).ToList();

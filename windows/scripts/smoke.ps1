@@ -217,14 +217,15 @@ foreach ($case in @(@{ Session = "perm1"; Button = "allow"; Expect = '"behavior"
   for ($t = 0; $t -lt 20; $t++) { Start-Sleep -Milliseconds 400; $st = State; if ($st.approval -and $st.approval.buttons.($case.Button)) { break } }
   Shot ("11-approval-" + $case.Button)
   Check ($st.approval -ne $null) "izin sorusu balonda ($($case.Button))"
+  Check ($st.bubble -like "*npm install*") "balonda sorunun kendisi yazıyor ($($case.Button))"
   $xy = $st.approval.buttons.($case.Button)
   [Mouse]::SetCursorPos([int]$xy[0], [int]$xy[1]); Start-Sleep -Milliseconds 400
   [Mouse]::Down(); Start-Sleep -Milliseconds 60; [Mouse]::Up()
   $done = Wait-Job $job -Timeout 10
-  $out = (Receive-Job $job | Out-String).Trim()
+  $hookOut = (Receive-Job $job | Out-String).Trim()
   Remove-Job $job -Force
-  Write-Host "  hook çıktısı: $out"
-  Check ($out -like ("*" + $case.Expect + "*")) "düğmeye tıklayınca karar Claude Code'a gitti ($($case.Button))"
+  Write-Host "  hook çıktısı: $hookOut"
+  Check ($hookOut -like ("*" + $case.Expect + "*")) "düğmeye tıklayınca karar Claude Code'a gitti ($($case.Button))"
   Start-Sleep -Milliseconds 800
 }
 # Robot kapalıyken ya da ayar kapalıyken hook hemen boş döner (soru terminalde çıkar): bağlantı kurulamayan port

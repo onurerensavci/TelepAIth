@@ -154,6 +154,7 @@ final class RobotManager {
 
     /// Claude Code izin istiyor: robot bekliyor durumuna geçer, balonda düğmeler çıkar
     func onPermission(_ p: PendingApproval) {
+        model(for: p.event.source).clearSay()   // önceki "izin verdim" yeni soruyu örtmesin
         handle(p.event)   // bekliyor durumu ve bildirim
         // Ayar kapalıysa ya da zaten terminale bakıyorsan soru terminalde çıksın
         if !Preferences.approveFromRobot || terminalInFront(p) {

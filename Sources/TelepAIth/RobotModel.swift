@@ -307,6 +307,13 @@ final class RobotModel: ObservableObject {
         refresh(now: now)
     }
 
+    /// Balondaki geçici yazıyı kaldır (yeni bir soru geldiğinde eski "izin verdim" onu örtmesin)
+    func clearSay() {
+        overrideUntil = nil
+        explicitUntil = nil
+        refresh(now: Date())
+    }
+
     func showHistory() {
         let lines = history.suffix(5)
         showOverride(lines.isEmpty ? loc("Henüz bir şey olmadı", "Nothing has happened yet") : lines.joined(separator: "\n"),
