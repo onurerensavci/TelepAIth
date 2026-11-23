@@ -25,6 +25,10 @@ public sealed class FoundUi
     public List<string> Urls = new();
     public Dictionary<string, int> Roles = new();
     public string WindowsInfo = "";
+    /// <summary>Pencerenin sol tarafındaki (yan menü) öğeler: sohbet listesi ve durum noktaları</summary>
+    public List<SidebarItem> Sidebar = new();
+    /// <summary>Bu turda yan menü tarandı mı? (taranmadıysa arkadaki sohbetlerin durumu değişmez)</summary>
+    public bool SidebarScanned;
 
     public double? ComposerTop
     {
@@ -168,7 +172,11 @@ public sealed class ChatAppTracker
         Source = source;
         Pid = pid;
         AppName = appName;
+        Background = new SidebarChats(source, pid);
     }
+
+    /// <summary>Yan menüden izlenen, açık olmayan (arkada çalışan) sohbetler</summary>
+    public SidebarChats Background { get; }
 
     public string SessionId => $"app-{Pid}-{_chatCounter}";
 
@@ -332,9 +340,251 @@ public sealed class ChatAppTracker
             Approving = false;
             events.Add(Ev(Generating ? EventKind.ToolDone : EventKind.SessionEnd));
         }
+        // Arkadaki sohbetler (yan menüdeki durum noktaları)
+        if (found.SidebarScanned) events.AddRange(Background.Update(found.Sidebar, ChatKey, now));
         return events;
     }
 
     /// <summary>Uygulama kapandı: açık bir iş varsa kapat.</summary>
     public AgentEvent? Closed() => Generating || Approving ? Ev(EventKind.SessionEnd) : null;
+
+    /// <summary>Uygulama kapandı: açık sohbet ve arkadaki sohbetler için kapanış olayları</summary>
+    public List<AgentEvent> ClosedAll()
+    {
+        var events = Background.Closed();
+        if (Closed() is { } e) events.Insert(0, e);
+        return events;
+    }
+}
+
+
+/// <summary>Yan menüde görülen bir öğe: ad, ipucu/açıklama (ör. "running"), bağlantı adresi, seçili (açık) sohbet mi</summary>
+public readonly record struct SidebarItem(string Name, string Help, string? Url, RectD Rect, bool Current = false);
+
+/// <summary>
+/// Arkada çalışan sohbetler: Claude uygulaması yan menüde her sohbetin yanında bir durum noktası gösterir
+/// (üstüne gelince "running"; cevap beklerken "awaiting…"). Açık olmayan sohbetler bundan izlenir:
+/// çalışırken minik kafa olur, nokta sönünce "bitti" bildirimi gelir. (Mac'teki SidebarChats'in aynısı.)
+/// </summary>
+public sealed class SidebarChats
+{
+    public sealed record Row(string Key, string Title, string? Url, RobotState State);
+
+    private sealed class Chat
+    {
+        public required string Title;
+        public RobotState State;
+        public double Since, LastBeat;
+    }
+
+    private static readonly string[] WaitingWords =
+    {
+        "awaiting answer", "awaiting your answer", "awaiting response", "awaiting your response", "awaiting input",
+        "awaiting reply", "awaiting approval", "needs input", "needs your input", "needs attention", "needs approval",
+        "needs your approval", "waiting for you", "waiting for your answer", "waiting for input", "waiting for approval",
+        "cevap bekliyor", "cevabını bekliyor", "yanıt bekliyor", "yanıtını bekliyor", "onay bekliyor", "seni bekliyor",
+    };
+
+    private static readonly string[] WorkingWords =
+    {
+        "running", "working", "responding", "generating", "in progress", "streaming",
+        "çalışıyor", "yanıt veriyor", "yanıtlıyor", "devam ediyor",
+    };
+
+    /// <summary>Uzun süre yanıp sönen (takılı kalmış) nokta sonsuza kadar "çalışıyor" saymasın</summary>
+    public const double MaxRunSeconds = 30 * 60;
+
+    public string Source { get; }
+    public int Pid { get; }
+    private readonly Dictionary<string, Chat> _chats = new();
+
+    public SidebarChats(string source, int pid)
+    {
+        Source = source;
+        Pid = pid;
+    }
+
+    public int Count => _chats.Count;
+
+    /// <summary>Durum yazısı mı? Tam eşleşme ya da "Başlık, running" / "Başlık · running" / "Başlık (running)" gibi sonek</summary>
+    public static RobotState? StatusOf(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return null;
+        var l = text.Trim().ToLowerInvariant().TrimEnd('.', '…', ' ');
+        foreach (var w in WaitingWords) if (Matches(l, w)) return RobotState.Waiting;
+        foreach (var w in WorkingWords) if (Matches(l, w)) return RobotState.Running;
+        return null;
+    }
+
+    private static readonly string[] Separators = { ", ", " · ", " - ", " — ", " – ", ": ", " | " };
+
+    private static bool Matches(string l, string w) =>
+        l == w || l.EndsWith("(" + w + ")", StringComparison.Ordinal)
+        || Separators.Any(sep => l.EndsWith(sep + w, StringComparison.Ordinal) || l.StartsWith(w + sep, StringComparison.Ordinal));
+
+    /// <summary>Addaki durum ekini at: "Tarif, running" → "Tarif"</summary>
+    public static string StripStatus(string name)
+    {
+        var t = name.Trim();
+        var l = t.ToLowerInvariant().TrimEnd('.', '…', ' ');
+        foreach (var w in WaitingWords.Concat(WorkingWords))
+        {
+            if (l == w) return "";
+            if (l.EndsWith("(" + w + ")", StringComparison.Ordinal)) return t[..(l.Length - w.Length - 2)].Trim();
+            foreach (var sep in Separators)
+            {
+                if (l.EndsWith(sep + w, StringComparison.Ordinal)) return t[..(l.Length - w.Length - sep.Length)].Trim();
+                if (l.StartsWith(w + sep, StringComparison.Ordinal)) return t[(w.Length + sep.Length)..].Trim();
+            }
+        }
+        return t;
+    }
+
+    /// <summary>Adres: sorgu ve son eğik çizgi olmadan (aynı sohbetin adresleri eşleşsin)</summary>
+    public static string? NormalizeUrl(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url) || !Uri.TryCreate(url, UriKind.Absolute, out var u)) return null;
+        return (u.Host + u.AbsolutePath).TrimEnd('/').ToLowerInvariant();
+    }
+
+    private static string KeyOf(string? url, string title) => NormalizeUrl(url) ?? "t:" + title.ToLowerInvariant();
+
+    /// <summary>Yan menü öğelerinden durumu belli sohbetler (aynı sohbet bir kez; açık olan da dahil, Current işaretiyle)</summary>
+    public static List<(Row Row, bool Current)> Parse(IReadOnlyList<SidebarItem> items)
+    {
+        var rows = new Dictionary<string, (Row Row, bool Current)>();
+        foreach (var item in items)
+        {
+            var st = StatusOf(item.Help) ?? StatusOf(item.Name);
+            if (st == null) continue;
+            var title = StripStatus(item.Name);
+            var url = item.Url;
+            var current = item.Current;
+            if (title.Length < 2 || url == null)
+            {
+                // Nokta tek başına bir öğe: aynı satırdaki sohbet bağlantısını bul
+                var cy = item.Rect.Y + item.Rect.Height / 2;
+                SidebarItem? row = null;
+                foreach (var o in items)
+                {
+                    if (o == item || StatusOf(o.Name) != null && StripStatus(o.Name).Length < 2) continue;
+                    if (o.Url == null && StripStatus(o.Name).Length < 2) continue;
+                    var oc = o.Rect.Y + o.Rect.Height / 2;
+                    if (Math.Abs(oc - cy) > Math.Max(o.Rect.Height / 2, 12)) continue;
+                    // Bağlantısı olan, sonra satıra en yakın olan
+                    if (row == null || (o.Url != null && row.Value.Url == null)
+                        || ((o.Url != null) == (row.Value.Url != null) && Math.Abs(oc - cy) < Math.Abs(row.Value.Rect.Y + row.Value.Rect.Height / 2 - cy)))
+                        row = o;
+                }
+                if (row is { } r)
+                {
+                    if (title.Length < 2) title = StripStatus(r.Name);
+                    url ??= r.Url;
+                    current |= r.Current;
+                }
+            }
+            if (title.Length < 2) continue;
+            var key = KeyOf(url, title);
+            if (rows.TryGetValue(key, out var old) && old.Row.State.Priority() >= st.Value.Priority()) continue;
+            rows[key] = (new Row(key, title, url, st.Value), current);
+        }
+        return rows.Values.ToList();
+    }
+
+    public string SessionIdFor(string key) => $"bg-{Pid}-{Fnv(key):x8}";
+
+    private static uint Fnv(string s)
+    {
+        var h = 2166136261u;
+        foreach (var c in s) h = (h ^ c) * 16777619u;
+        return h;
+    }
+
+    /// <summary>
+    /// Bir taramanın yan menü öğelerini işler; robota gönderilecek olayları döner.
+    /// currentChat: açık sohbetin adresi (o zaten büyük kafada izleniyor, burada sayılmaz).
+    /// </summary>
+    public List<AgentEvent> Update(IReadOnlyList<SidebarItem> items, string? currentChat, double now)
+    {
+        var events = new List<AgentEvent>();
+        var currentKey = NormalizeUrl(currentChat);
+        bool IsCurrent(string key, bool flagged) => flagged || (currentKey != null && key == currentKey);
+
+        var rows = new Dictionary<string, Row>();
+        var currentRows = new HashSet<string>();
+        foreach (var (row, cur) in Parse(items))
+        {
+            if (IsCurrent(row.Key, cur)) currentRows.Add(row.Key);
+            else rows[row.Key] = row;
+        }
+        // Ekranda görünen (noktası sönmüş olsa da) sohbetler: "bitti" demek için satırın hâlâ görünmesi gerekir
+        var visible = new HashSet<string>();
+        foreach (var it in items)
+        {
+            var title = StripStatus(it.Name);
+            if (it.Url != null) visible.Add(KeyOf(it.Url, title));
+            if (title.Length >= 2) visible.Add("t:" + title.ToLowerInvariant());
+            if (it.Current && it.Url != null) currentRows.Add(KeyOf(it.Url, title));
+        }
+        if (currentKey != null) currentRows.Add(currentKey);
+
+        foreach (var row in rows.Values)
+        {
+            var id = SessionIdFor(row.Key);
+            if (!_chats.TryGetValue(row.Key, out var chat))
+            {
+                chat = new Chat { Title = row.Title, State = row.State, Since = now, LastBeat = now };
+                _chats[row.Key] = chat;
+                events.Add(row.State == RobotState.Waiting
+                    ? Ev(id, row.Title, EventKind.Waiting, RobotState.Waiting, L("Cevabını bekliyor", "Waiting for your reply"), "✋")
+                    : Ev(id, row.Title, EventKind.Prompt, RobotState.Thinking, L("Arkada çalışıyor", "Working in the background"), "🔄"));
+                continue;
+            }
+            chat.Title = row.Title;
+            if (row.State != chat.State)
+            {
+                chat.State = row.State;
+                chat.LastBeat = now;
+                events.Add(row.State == RobotState.Waiting
+                    ? Ev(id, row.Title, EventKind.Waiting, RobotState.Waiting, L("Cevabını bekliyor", "Waiting for your reply"), "✋")
+                    : Ev(id, row.Title, EventKind.Status, RobotState.Thinking, L("Arkada çalışıyor", "Working in the background"), "🔄"));
+            }
+            else if (now - chat.LastBeat > 20 && now - chat.Since < MaxRunSeconds)
+            {
+                chat.LastBeat = now;
+                events.Add(Ev(id, row.Title, EventKind.Heartbeat));
+            }
+        }
+
+        foreach (var key in _chats.Keys.Where(k => !rows.ContainsKey(k)).ToList())
+        {
+            var chat = _chats[key];
+            _chats.Remove(key);
+            var id = SessionIdFor(key);
+            // Satır görünüyor ve noktası söndüyse iş bitti; açıldıysa, kaydırıldıysa ya da menü kapandıysa sessizce bırak
+            var finished = visible.Contains(key) && !currentRows.Contains(key) && chat.State != RobotState.Waiting;
+            if (finished && now - chat.Since >= 4)
+            {
+                var stop = Ev(id, chat.Title, EventKind.Stop, RobotState.Done);
+                stop.ForceNotify = true;
+                events.Add(stop);
+            }
+            else
+            {
+                events.Add(Ev(id, chat.Title, EventKind.SessionEnd));
+            }
+        }
+        return events;
+    }
+
+    /// <summary>Uygulama kapandı: arkadaki sohbetleri kapat</summary>
+    public List<AgentEvent> Closed()
+    {
+        var events = _chats.Select(kv => Ev(SessionIdFor(kv.Key), kv.Value.Title, EventKind.SessionEnd)).ToList();
+        _chats.Clear();
+        return events;
+    }
+
+    private AgentEvent Ev(string id, string title, EventKind kind, RobotState? state = null, string? text = null, string? emoji = null) =>
+        new(Source, id, kind, state, text, project: Clip(title, 40), emoji: emoji) { AppPid = Pid };
 }

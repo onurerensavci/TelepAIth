@@ -98,7 +98,7 @@ internal sealed class AppWatcher
         }
         // Kapanırken açık işleri kapat
         foreach (var t in _trackers.Values)
-            if (t.Closed() is { } e) EventFound?.Invoke(e);
+            foreach (var e in t.ClosedAll()) EventFound?.Invoke(e);
         _trackers.Clear();
     }
 
@@ -133,7 +133,7 @@ internal sealed class AppWatcher
         // Kapanan uygulamalar
         foreach (var pid in _trackers.Keys.Where(k => !alive.Contains(k)).ToList())
         {
-            if (_trackers[pid].Closed() is { } e) EventFound?.Invoke(e);
+            foreach (var e in _trackers[pid].ClosedAll()) EventFound?.Invoke(e);
             _trackers.Remove(pid);
             lock (_nextScan) _nextScan.Remove(pid);
             lock (_diag) _diag.Remove(pid);
@@ -172,7 +172,7 @@ internal sealed class AppWatcher
             }
             var took = Now - started;
             // Çalışırken ya da öndeyken sık, boştayken seyrek bak
-            var busy = tracker.Generating || tracker.Approving || app.Pid == _foregroundPid;
+            var busy = tracker.Generating || tracker.Approving || tracker.Background.Count > 0 || app.Pid == _foregroundPid;
             lock (_nextScan) _nextScan[app.Pid] = Now + Math.Max(busy ? 0.8 : 2.0, took * 1.5);
 
             lock (_diag)
@@ -180,7 +180,8 @@ internal sealed class AppWatcher
                                  $"  roles: {string.Join(", ", found.Roles.OrderByDescending(r => r.Value).Take(8).Select(r => $"{r.Key}={r.Value}"))}\n" +
                                  $"  buttons: {string.Join(" | ", found.ButtonLabels.Take(14))}\n" +
                                  $"  composer: {(found.Composer != null ? "✓" : "✗")}  stop: {(found.Stop != null ? "✓" : "✗")}  send: {(found.Send != null ? "✓" : "✗")}  approve: {(found.Approve ? "✓" : "✗")}\n" +
-                                 $"  {found.WindowsInfo}";
+                                 $"  {found.WindowsInfo}\n" +
+                                 $"  {SidebarDiag(found, tracker)}";
         }
 
         _firstTick = false;
@@ -212,6 +213,8 @@ internal sealed class AppWatcher
         c.Add(AutomationElement.IsEnabledProperty);
         c.Add(AutomationElement.IsOffscreenProperty);
         c.Add(AutomationElement.LocalizedControlTypeProperty);
+        c.Add(AutomationElement.HelpTextProperty);
+        c.Add(AutomationElement.ItemStatusProperty);
         c.Add(ValuePattern.ValueProperty);
         c.TreeFilter = Automation.ControlViewCondition;
         return c;
@@ -235,6 +238,16 @@ internal sealed class AppWatcher
             return found;
         }
 
+        // Yan menü: pencerenin sol %40'ı (sohbet listesi ve yanlarındaki durum noktaları)
+        RectD? sidebar = null;
+        try
+        {
+            if (root.Cached.BoundingRectangle is var wr && !wr.IsEmpty && wr.Width >= 600)
+                sidebar = new RectD(wr.X, wr.Y, wr.Width * 0.4, wr.Height);
+        }
+        catch { }
+        found.SidebarScanned = sidebar != null;
+
         var count = 0;
         RectD? composer = null;
         var stack = new Stack<AutomationElement>();
@@ -245,7 +258,7 @@ internal sealed class AppWatcher
             count++;
             try
             {
-                Visit(el, found, ref composer);
+                Visit(el, found, ref composer, sidebar);
                 var children = el.CachedChildren;
                 for (var i = children.Count - 1; i >= 0; i--) stack.Push(children[i]);
             }
@@ -256,7 +269,7 @@ internal sealed class AppWatcher
         return found;
     }
 
-    private static void Visit(AutomationElement el, FoundUi found, ref RectD? composer)
+    private static void Visit(AutomationElement el, FoundUi found, ref RectD? composer, RectD? sidebar)
     {
         var type = el.GetCachedPropertyValue(AutomationElement.ControlTypeProperty) as ControlType;
         var name = el.GetCachedPropertyValue(AutomationElement.NameProperty) as string ?? "";
@@ -267,6 +280,20 @@ internal sealed class AppWatcher
         var r = el.GetCachedPropertyValue(AutomationElement.BoundingRectangleProperty) is Rect rr && !rr.IsEmpty
             ? new RectD(rr.X, rr.Y, rr.Width, rr.Height)
             : (RectD?)null;
+
+        // Yan menüdeki öğeler: arkada çalışan sohbetlerin durum noktaları burada
+        if (sidebar is { } zone && r is { } sr && sr.X + sr.Width / 2 < zone.MaxX && found.Sidebar.Count < 1500)
+        {
+            var help = string.Join(" ", new[]
+            {
+                el.GetCachedPropertyValue(AutomationElement.HelpTextProperty) as string,
+                el.GetCachedPropertyValue(AutomationElement.ItemStatusProperty) as string,
+            }.Where(t => !string.IsNullOrWhiteSpace(t)));
+            var link = type == ControlType.Hyperlink && el.GetCachedPropertyValue(ValuePattern.ValueProperty) is string href
+                       && href.Contains("://", StringComparison.Ordinal) ? href : null;
+            if (name.Length > 0 || help.Length > 0 || link != null)
+                found.Sidebar.Add(new SidebarItem(name, help, link, sr));
+        }
 
         if (type == ControlType.Button || type == ControlType.SplitButton)
         {
@@ -291,6 +318,18 @@ internal sealed class AppWatcher
         if (type == ControlType.Document && el.GetCachedPropertyValue(ValuePattern.ValueProperty) is string url &&
             url.Contains("://", StringComparison.Ordinal))
             found.Urls.Add(url);
+    }
+
+    /// <summary>Teşhis: yan menüde durum gibi görünen öğeler ve ipucu/açıklaması olanlar (algılamayı ayarlamak için)</summary>
+    private static string SidebarDiag(FoundUi found, ChatAppTracker tracker)
+    {
+        if (!found.SidebarScanned) return "sidebar: —";
+        var rows = SidebarChats.Parse(found.Sidebar);
+        var hinted = found.Sidebar.Where(i => i.Help.Length > 0 || SidebarChats.StatusOf(i.Name) != null)
+            .Take(12).Select(i => $"{Text.Clip(i.Name, 30)}{(i.Help.Length > 0 ? " {" + Text.Clip(i.Help, 30) + "}" : "")}");
+        return $"sidebar: {found.Sidebar.Count} öğe, {found.Sidebar.Count(i => i.Url != null)} bağlantı · " +
+               $"durumlu: {string.Join(", ", rows.Select(r => $"{Text.Clip(r.Row.Title, 24)}={r.Row.State}{(r.Current ? "*" : "")}"))} · " +
+               $"arkada izlenen: {tracker.Background.Count}\n  sidebar ipuçları: {string.Join(" | ", hinted)}";
     }
 
     private static bool IsComposerHint(string name)

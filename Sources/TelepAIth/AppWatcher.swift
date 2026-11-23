@@ -43,6 +43,10 @@ final class AppWatcher {
         var lastDebugDump: TimeInterval = 0
         var lastAXRequest: TimeInterval = -100
         var sawComposer = false
+        /// Yan menüden izlenen, açık olmayan (arkada çalışan) sohbetler
+        var background: SidebarChats?
+        var lastSidebarScan: TimeInterval = -100
+        var sidebarInfo = "—"
     }
 
     private enum ButtonKind {
@@ -238,7 +242,7 @@ final class AppWatcher {
         busy = true
         queue.async {
             let (status, diagnostics) = self.scan(targets)
-            let generating = self.states.values.contains { $0.generating }
+            let generating = self.states.values.contains { $0.generating || ($0.background?.count ?? 0) > 0 }
             DispatchQueue.main.async {
                 self.busy = false
                 self.anyGenerating = generating
@@ -284,6 +288,7 @@ final class AppWatcher {
         let alive = Set(targets.map { $0.pid })
         for pid in states.keys where !alive.contains(pid) {
             if let st = states[pid], st.generating { emit(stop: pid, state: st) }
+            states[pid]?.background?.closed().forEach { emitMain($0) }
             states.removeValue(forKey: pid)
         }
 
@@ -388,6 +393,18 @@ final class AppWatcher {
             let generatingNow = found.stop != nil || streaming
             update(&st, pid: target.pid, found: found, generatingNow: generatingNow, streaming: streaming, now: now)
 
+            // Arkadaki sohbetler: yan menüdeki durum noktaları (1,5 sn'de bir)
+            if now - st.lastSidebarScan > 1.5, let main = windows.first, let wf = AppWatcher.frame(main), wf.width >= 600 {
+                st.lastSidebarScan = now
+                let zone = CGRect(x: wf.minX, y: wf.minY, width: wf.width * 0.4, height: wf.height)
+                var items: [SidebarItem] = []
+                AppWatcher.walkSidebar(main, zone: zone, budget: 5000, items: &items)
+                let bg = st.background ?? SidebarChats(source: st.source, pid: target.pid)
+                st.background = bg
+                for e in bg.update(items, currentChat: st.chatKey, now: now) { emitMain(e) }
+                st.sidebarInfo = AppWatcher.sidebarInfo(items, background: bg)
+            }
+
             if !st.sawComposer {
                 status[target.name] = loc("yazı kutusu bulunamadı", "can't find the input box")
             } else if st.approving {
@@ -410,7 +427,8 @@ final class AppWatcher {
                 chat: st.chatKey.map { clip($0, 70) } ?? "—",
                 buttons: Array(found.buttonLabels.prefix(25)),
                 roles: found.roles.sorted { $0.value > $1.value }.prefix(10).map { "\($0.key)=\($0.value)" }.joined(separator: ", "),
-                texts: Array(found.sampleTexts.prefix(6))))
+                texts: Array(found.sampleTexts.prefix(6)),
+                sidebar: st.sidebarInfo))
             states[target.pid] = st
         }
         return (status, diagnostics)
@@ -615,6 +633,48 @@ final class AppWatcher {
             guard depth < 70, let children = AppWatcher.children(element) else { continue }
             for child in children { stack.append((child, depth + 1)) }
         }
+    }
+
+    /// Yan menüdeki öğeleri toplar (sohbet bağlantıları, durum noktaları): ad, ipucu, adres, seçili mi
+    private static func walkSidebar(_ root: AXUIElement, zone: CGRect, budget: Int, items: inout [SidebarItem]) {
+        var stack: [(AXUIElement, Int)] = [(root, 0)]
+        var visited = 0
+        while visited < budget, items.count < 1500, let item = stack.popLast() {
+            visited += 1
+            let element = item.0
+            let f = frame(element)
+            if let f = f, f.width > 0, f.height > 0, !f.intersects(zone) { continue }
+            let role = string(element, kAXRoleAttribute) ?? ""
+            if let f = f, f.width > 0, f.midX < zone.maxX, role != "AXWebArea", role != kAXWindowRole {
+                let title = string(element, kAXTitleAttribute) ?? ""
+                let desc = string(element, kAXDescriptionAttribute) ?? ""
+                let valueText = (value(element, kAXValueAttribute) as? String) ?? ""
+                let name = [title, desc, valueText].first { !$0.isEmpty } ?? ""
+                var helpParts = [string(element, kAXHelpAttribute) ?? ""]
+                if !desc.isEmpty && desc != name { helpParts.append(desc) }
+                let help = helpParts.filter { !$0.isEmpty }.joined(separator: " ")
+                let link = role == "AXLink" ? (value(element, "AXURL") as? URL)?.absoluteString : nil
+                let aria = string(element, "AXARIACurrent") ?? ""
+                let current = (!aria.isEmpty && aria != "false") || (value(element, kAXSelectedAttribute) as? Bool) == true
+                if !name.isEmpty || !help.isEmpty || link != nil {
+                    items.append(SidebarItem(name: name, help: help, url: link, rect: f, current: current && role == "AXLink"))
+                }
+            }
+            if role == kAXImageRole || role == kAXStaticTextRole { continue }
+            guard item.1 < 70, let kids = children(element) else { continue }
+            for child in kids { stack.append((child, item.1 + 1)) }
+        }
+    }
+
+    /// Teşhis: yan menüde durum gibi görünen öğeler ve ipucu/açıklaması olanlar (algılamayı ayarlamak için)
+    private static func sidebarInfo(_ items: [SidebarItem], background: SidebarChats) -> String {
+        let rows = SidebarChats.parse(items)
+            .map { "\(clip($0.row.title, 24))=\($0.row.state)\($0.current ? "*" : "")" }
+        let hinted = items.filter { !$0.help.isEmpty || SidebarChats.statusOf($0.name) != nil }
+            .prefix(12)
+            .map { clip($0.name, 30) + ($0.help.isEmpty ? "" : " {" + clip($0.help, 30) + "}") }
+        return "\(items.count) öğe, \(items.filter { $0.url != nil }.count) bağlantı · durumlu: \(rows.joined(separator: ", "))"
+            + " · arkada izlenen: \(background.count) · ipuçları: \(hinted.joined(separator: " | "))"
     }
 
     /// Algılama tutmazsa düğme adlarını dosyaya yazar (düzeltmek için).

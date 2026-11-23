@@ -17,6 +17,7 @@ struct AppDiagnostics: Identifiable, Equatable {
     var buttons: [String]
     var roles: String
     var texts: [String]
+    var sidebar: String = "—"
 }
 
 /// Teşhis paneline giden canlı veriler.
@@ -41,6 +42,7 @@ final class Diagnostics: ObservableObject {
             lines.append("Sohbet: \(app.chat)")
             lines.append("Roller: \(app.roles)")
             lines.append("Düğmeler: " + app.buttons.joined(separator: " | "))
+            lines.append("Yan menü: " + app.sidebar)
             if includeTexts { lines.append("Metinler: " + app.texts.joined(separator: " | ")) }
         }
         return lines.joined(separator: "\n")
@@ -89,6 +91,7 @@ struct DiagnosticsView: View {
                             row(loc("Düğmeler", "Buttons"), app.buttons.isEmpty ? "—" : app.buttons.joined(separator: " | "))
                             row(loc("Metinler", "Texts"), app.texts.isEmpty ? "—" : app.texts.joined(separator: " | "))
                             row(loc("Roller", "Roles"), app.roles)
+                            row(loc("Yan menü", "Sidebar"), app.sidebar)
                         }
                         .padding(10)
                         .background(RoundedRectangle(cornerRadius: 8).fill(Color(nsColor: .controlBackgroundColor)))

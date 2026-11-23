@@ -258,6 +258,12 @@ public static class FakeClaude {
   public static void Main() {
     var f = new Form { Text = "Claude", Width = 900, Height = 650, StartPosition = FormStartPosition.CenterScreen };
     f.Controls.Add(new TextBox { Multiline = true, Dock = DockStyle.Bottom, Height = 80 });
+    // Yan menü: arkada çalışan bir sohbet (8 sn sonra biter)
+    var side = new Label { Text = "Sohbet B · running", Left = 10, Top = 40, Width = 250 };
+    f.Controls.Add(side);
+    var timer = new Timer { Interval = 8000 };
+    timer.Tick += (s, e) => { side.Text = "Sohbet B"; timer.Stop(); };
+    timer.Start();
     Application.Run(f);
   }
 }
@@ -277,6 +283,26 @@ for ($round = 1; $round -le 2; $round++) {
   Stop-Process -Id $fp.Id -Force
   Start-Sleep 4
 }
+
+# Arkadaki sohbet: yan menüde "· running" yazan sohbet izlenir (minik kafa), yazı kaybolunca "bitti" gelir
+$fp = Start-Process -FilePath $fake -PassThru
+$bg = $false
+for ($t = 0; $t -lt 14 -and -not $bg; $t++) {
+  Start-Sleep -Milliseconds 500
+  $st = State
+  $bg = @($st.sessions | Where-Object { $_ -like "claude/bg-*" }).Count -gt 0
+}
+Shot "11-background-chat"
+Check $bg "yan menüde çalışan sohbet arkada izleniyor ($($st.sessions -join ', '))"
+$done = $false
+for ($t = 0; $t -lt 30 -and -not $done; $t++) {
+  Start-Sleep -Milliseconds 500
+  $st = State
+  $done = @($st.recent | Where-Object { $_ -like "*claude/bg-* Stop*" }).Count -gt 0
+}
+Check $done "arkadaki sohbet bitince 'bitti' geldi"
+Stop-Process -Id $fp.Id -Force
+Start-Sleep 2
 
 Check (-not (Test-Path (Join-Path $home2 "error.log"))) "hata günlüğü boş"
 Start-Sleep 2

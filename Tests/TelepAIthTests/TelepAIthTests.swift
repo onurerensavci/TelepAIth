@@ -197,6 +197,60 @@ final class TelepAIthTests: XCTestCase {
         XCTAssertTrue(RobotModel.pinWins(claude, among: all))
     }
 
+    func testSidebarStatusWords() {
+        XCTAssertEqual(SidebarChats.statusOf("Running"), .running)
+        XCTAssertEqual(SidebarChats.statusOf("Tarif önerisi, running"), .running)
+        XCTAssertEqual(SidebarChats.statusOf("Kod incelemesi · Awaiting answer"), .waiting)
+        XCTAssertNil(SidebarChats.statusOf("Running a marathon plan"))
+        XCTAssertNil(SidebarChats.statusOf("Working with CSV files"))
+        XCTAssertEqual(SidebarChats.stripStatus("Tarif önerisi, running"), "Tarif önerisi")
+        XCTAssertEqual(SidebarChats.stripStatus("Kod (running)"), "Kod")
+    }
+
+    func testSidebarBackgroundChats() {
+        let bg = SidebarChats(source: "claude", pid: 77)
+        func row(_ i: Int) -> CGRect { CGRect(x: 10, y: 100 + i * 30, width: 240, height: 28) }
+        func dot(_ i: Int) -> CGRect { CGRect(x: 230, y: 108 + i * 30, width: 8, height: 8) }
+        var items = [
+            SidebarItem(name: "Sohbet A", help: "", url: "https://claude.ai/chat/aaa", rect: row(0), current: true),
+            SidebarItem(name: "", help: "Running", url: nil, rect: dot(0)),
+            SidebarItem(name: "Sohbet B", help: "", url: "https://claude.ai/chat/bbb", rect: row(1)),
+            SidebarItem(name: "", help: "Running", url: nil, rect: dot(1)),
+            SidebarItem(name: "Sohbet C", help: "", url: "https://claude.ai/chat/ccc", rect: row(2)),
+        ]
+        var ev = bg.update(items, currentChat: "https://claude.ai/chat/aaa", now: 0)
+        XCTAssertEqual(ev.count, 1)
+        XCTAssertEqual(ev.first?.kind, .prompt)
+        XCTAssertEqual(ev.first?.project, "Sohbet B")
+        XCTAssertEqual(ev.first?.appPID, 77)
+        let id = ev[0].sessionID
+        XCTAssertTrue(id.hasPrefix("bg-77-"))
+        XCTAssertNotEqual(RobotModel.sessionGroup(id), "desktop")
+        XCTAssertTrue(bg.update(items, currentChat: "https://claude.ai/chat/aaa", now: 10).isEmpty)
+        ev = bg.update(items, currentChat: "https://claude.ai/chat/aaa", now: 25)
+        XCTAssertEqual(ev.map { $0.kind }, [.heartbeat])
+        items[2] = SidebarItem(name: "Sohbet B, awaiting answer", help: "", url: "https://claude.ai/chat/bbb", rect: row(1))
+        items.remove(at: 3)
+        ev = bg.update(items, currentChat: "https://claude.ai/chat/aaa", now: 30)
+        XCTAssertEqual(ev.map { $0.kind }, [.waiting])
+        items[2] = SidebarItem(name: "Sohbet B", help: "", url: "https://claude.ai/chat/bbb", rect: row(1))
+        items.append(SidebarItem(name: "", help: "Running", url: nil, rect: dot(1)))
+        ev = bg.update(items, currentChat: "https://claude.ai/chat/aaa", now: 40)
+        XCTAssertEqual(ev.map { $0.kind }, [.status])
+        items.removeLast()
+        ev = bg.update(items, currentChat: "https://claude.ai/chat/aaa", now: 60)
+        XCTAssertEqual(ev.map { $0.kind }, [.stop])
+        XCTAssertTrue(ev[0].forceNotify)
+        XCTAssertEqual(ev[0].sessionID, id)
+        XCTAssertEqual(bg.count, 0)
+        // Açılan sohbet ya da görünmeyen satır "bitti" sayılmaz
+        let b = SidebarItem(name: "Sohbet B · running", help: "", url: "https://claude.ai/chat/bbb?x=1", rect: row(1))
+        _ = bg.update([b], currentChat: "https://claude.ai/chat/aaa", now: 100)
+        XCTAssertEqual(bg.update([b], currentChat: "https://claude.ai/chat/bbb", now: 130).map { $0.kind }, [.sessionEnd])
+        _ = bg.update([b], currentChat: "https://claude.ai/chat/aaa", now: 140)
+        XCTAssertEqual(bg.update([], currentChat: "https://claude.ai/chat/aaa", now: 180).map { $0.kind }, [.sessionEnd])
+    }
+
     func testDraftChatAddress() {
         XCTAssertTrue(AppWatcher.isDraftChat("https://claude.ai/new"))
         XCTAssertTrue(AppWatcher.isDraftChat("https://chatgpt.com/"))

@@ -524,6 +524,104 @@ public static class Tests
         A.True(DisplayPicker.PinWins(claude, all), "kimse çalışmıyorsa öndeki gösterilir");
     }
 
+    public static void SidebarStatusWords()
+    {
+        A.Eq(RobotState.Running, SidebarChats.StatusOf("Running"));
+        A.Eq(RobotState.Running, SidebarChats.StatusOf("Tarif önerisi, running"));
+        A.Eq(RobotState.Waiting, SidebarChats.StatusOf("Kod incelemesi · Awaiting answer"));
+        A.Eq(RobotState.Waiting, SidebarChats.StatusOf("Yanıt bekliyor"));
+        A.True(SidebarChats.StatusOf("Running a marathon plan") == null, "başlıktaki kelime durum değil");
+        A.True(SidebarChats.StatusOf("Working with CSV files") == null);
+        A.Eq("Tarif önerisi", SidebarChats.StripStatus("Tarif önerisi, running"));
+        A.Eq("Kod", SidebarChats.StripStatus("Kod (running)"));
+    }
+
+    public static void SidebarBackgroundChats()
+    {
+        var bg = new SidebarChats("claude", 77);
+        RectD Row(int i) => new(10, 100 + i * 30, 240, 28);
+        RectD Dot(int i) => new(230, 108 + i * 30, 8, 8);
+        // Açık sohbet A (seçili), arkada B çalışıyor (nokta ayrı öğe, ipucu "running"), C boşta
+        var items = new List<SidebarItem>
+        {
+            new("Sohbet A", "", "https://claude.ai/chat/aaa", Row(0), Current: true),
+            new("", "Running", null, Dot(0)),   // açık sohbetin noktası: sayılmaz
+            new("Sohbet B", "", "https://claude.ai/chat/bbb", Row(1)),
+            new("", "Running", null, Dot(1)),
+            new("Sohbet C", "", "https://claude.ai/chat/ccc", Row(2)),
+        };
+        var ev = bg.Update(items, "https://claude.ai/chat/aaa", 0);
+        A.Eq(1, ev.Count);
+        A.Eq(EventKind.Prompt, ev[0].Kind);
+        A.Eq("Sohbet B", ev[0].Project);
+        A.Eq(77, ev[0].AppPid);
+        A.True(ev[0].SessionId.StartsWith("bg-77-"));
+        A.True(RobotModel.SessionGroup(ev[0].SessionId) != "desktop", "açık sohbetle birleşmesin");
+        var id = ev[0].SessionId;
+        // Çalışmaya devam: 20 sn'de bir canlı tut
+        A.Eq(0, bg.Update(items, "https://claude.ai/chat/aaa", 10).Count);
+        ev = bg.Update(items, "https://claude.ai/chat/aaa", 25);
+        A.True(ev.Count == 1 && ev[0].Kind == EventKind.Heartbeat);
+        // B cevap bekliyor (satırın kendi adında durum)
+        items[2] = new("Sohbet B, awaiting answer", "", "https://claude.ai/chat/bbb", Row(1));
+        items.RemoveAt(3);
+        ev = bg.Update(items, "https://claude.ai/chat/aaa", 30);
+        A.True(ev.Count == 1 && ev[0].Kind == EventKind.Waiting && ev[0].SessionId == id);
+        // Tekrar çalışıyor, sonra nokta söner → bitti (bildirimli)
+        items[2] = new("Sohbet B", "", "https://claude.ai/chat/bbb", Row(1));
+        items.Add(new("", "Running", null, Dot(1)));
+        ev = bg.Update(items, "https://claude.ai/chat/aaa", 40);
+        A.True(ev.Count == 1 && ev[0].Kind == EventKind.Status);
+        items.RemoveAt(items.Count - 1);
+        ev = bg.Update(items, "https://claude.ai/chat/aaa", 60);
+        A.True(ev.Count == 1 && ev[0].Kind == EventKind.Stop && ev[0].ForceNotify && ev[0].SessionId == id);
+        A.Eq(0, bg.Count);
+    }
+
+    public static void SidebarChatOpenedOrHidden()
+    {
+        var bg = new SidebarChats("claude", 5);
+        var b = new SidebarItem("Sohbet B · running", "", "https://claude.ai/chat/bbb?x=1", new RectD(10, 130, 240, 28));
+        bg.Update(new[] { b }, "https://claude.ai/chat/aaa", 0);
+        A.Eq(1, bg.Count);
+        // B'ye tıkladın: artık açık sohbet → "bitti" değil, sessizce bırak (büyük kafa izler)
+        var ev = bg.Update(new[] { b }, "https://claude.ai/chat/bbb", 30);
+        A.True(ev.Count == 1 && ev[0].Kind == EventKind.SessionEnd);
+        // Menü kapandı / kaydırıldı: satır görünmüyor → bitti deme
+        bg.Update(new[] { b }, "https://claude.ai/chat/aaa", 40);
+        ev = bg.Update(Array.Empty<SidebarItem>(), "https://claude.ai/chat/aaa", 80);
+        A.True(ev.Count == 1 && ev[0].Kind == EventKind.SessionEnd);
+        // Takılı kalan nokta: 30 dk'dan sonra canlı tutma
+        bg.Update(new[] { b }, null, 100);
+        var beats = 0;
+        for (var t = 120.0; t < 100 + SidebarChats.MaxRunSeconds + 200; t += 21)
+            beats += bg.Update(new[] { b }, null, t).Count(e => e.Kind == EventKind.Heartbeat);
+        A.True(beats > 50 && beats < 90, "takılı noktada canlı tutma sınırlı: " + beats);
+        // Tracker üzerinden: yan menü olayları açık sohbetin olaylarıyla birlikte gelir
+        var tr = new ChatAppTracker("claude", 9, "Claude");
+        var ui = new FoundUi { Composer = new RectD(0, 800, 600, 60), SidebarScanned = true };
+        ui.Urls.Add("https://claude.ai/chat/aaa");
+        ui.Sidebar.Add(b);
+        A.True(tr.Update(ui, "Claude", 0).Any(e => e.Kind == EventKind.Prompt && e.SessionId.StartsWith("bg-9-")));
+        A.True(tr.ClosedAll().Any(e => e.Kind == EventKind.SessionEnd));
+    }
+
+    public static void BackgroundChatMiniAndDone()
+    {
+        // Açık sohbet bitti, arkadaki hâlâ çalışıyor: Claude çalışıyor sayılır, minik kafa çıkar
+        var m = new RobotModel("claude");
+        var t0 = DateTime.Now;
+        m.Apply(new AgentEvent("claude", "app-1-0", EventKind.Prompt, RobotState.Thinking, "a"), t0);
+        m.Apply(new AgentEvent("claude", "bg-1-abc", EventKind.Prompt, RobotState.Thinking, "Arkada çalışıyor", project: "Sohbet B"), t0.AddSeconds(1));
+        m.Apply(new AgentEvent("claude", "app-1-0", EventKind.Stop, RobotState.Done), t0.AddSeconds(10));
+        A.True(m.State.IsWorking(), "arkadaki sohbet çalışırken Claude çalışıyor görünür");
+        m.Refresh(t0.AddSeconds(11));
+        A.True(!DisplayPicker.CanGaze(new[] { m }, t0.AddSeconds(11)), "arkadaki sohbet çalışırken gözler imleci izlemez");
+        var stop = new AgentEvent("claude", "bg-1-abc", EventKind.Stop, RobotState.Done, project: "Sohbet B") { ForceNotify = true };
+        var notice = m.Apply(stop, t0.AddSeconds(12));
+        A.True(notice != null && notice.Body.Contains("Sohbet B"), "arkadaki sohbet bitince bildirim");
+    }
+
     public static void DailySummaryText()
     {
         var stats = new DailyStats(null);
