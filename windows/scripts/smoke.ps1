@@ -160,7 +160,7 @@ Check ($st.window.x -ge $sb.Left -and $st.window.y -ge $sb.Top -and ($st.window.
 Shot "6-clicked-chat-list"
 $st = State
 Check (@($st.chatList).Count -ge 1) "tıklayınca sohbet listesi açıldı ($($st.chatList -join ' | '))"
-Check (@($st.chatList | Where-Object { $_ -match "(çalışıyor|bitti|seni bekliyor) · " }).Count -ge 1) "listede durum ve süre yazıyor"
+Check (@($st.chatList | Where-Object { $_ -match "(çalışıyor|bitti|seni bekliyor|working|done|waiting for you) · " }).Count -ge 1) "listede durum ve süre yazıyor"
 # Tekrar tıkla → liste kapanır
 Start-Sleep -Milliseconds 700
 [Mouse]::Down(); Start-Sleep -Milliseconds 60; [Mouse]::Up(); Start-Sleep -Milliseconds 800
