@@ -673,6 +673,44 @@ public static class Tests
         A.Eq("Tarif", SidebarChats.CurrentTitle(items, "https://claude.ai/chat/aaa/"));
     }
 
+    public static void TrackerHoldsWhenBlind()
+    {
+        // Uygulama arkadayken ağaç boş gelirse "bitti" deme; gerçekten bitince (yazı kutusu var, Durdur yok) de
+        var t = new ChatAppTracker("claude", 21, "Claude");
+        var composer = new RectD(0, 800, 600, 60);
+        var working = new FoundUi { Stop = new RectD(650, 810, 30, 30), Composer = composer };
+        t.Update(working, "Claude", 0);
+        var blind = new FoundUi();
+        for (var s = 1.0; s < 20; s += 1) A.True(!t.Update(blind, "Claude", s).Any(e => e.Kind is EventKind.Stop or EventKind.SessionEnd), "boş ağaç: bitti değil");
+        A.True(t.Generating);
+        var idle = new FoundUi { Send = new RectD(650, 810, 30, 30), Composer = composer };
+        idle.ButtonLabels.Add("Send");
+        t.Update(idle, "Claude", 21);
+        A.True(t.Update(idle, "Claude", 23).Any(e => e.Kind == EventKind.Stop), "görünür ve Durdur yok: bitti");
+        // Kayıtlı sohbetler: açık sohbetin adı ve adresi oturumla eşleşir, sohbet değişse de bulunur
+        var tr = new ChatAppTracker("claude", 22, "Claude");
+        var ui = new FoundUi { Composer = composer, SidebarScanned = true };
+        ui.Urls.Add("https://claude.ai/chat/aaa");
+        ui.Sidebar.Add(new SidebarItem("Tarif", "", "https://claude.ai/chat/aaa", new RectD(0, 100, 200, 20)));
+        tr.Update(ui, "Claude", 0);
+        var firstId = tr.SessionId;
+        var ui2 = new FoundUi { Composer = composer, SidebarScanned = true };
+        ui2.Urls.Add("https://claude.ai/chat/bbb");
+        ui2.Sidebar.Add(new SidebarItem("Kod", "", "https://claude.ai/chat/bbb", new RectD(0, 130, 200, 20)));
+        tr.Update(ui2, "Claude", 5);
+        A.True(tr.SessionId != firstId);
+        A.Eq("Tarif", tr.FindChat(firstId)?.Title);
+        A.Eq("https://claude.ai/chat/aaa", tr.FindChat(firstId)?.Url);
+        A.Eq("Kod", tr.FindChat(tr.SessionId)?.Title);
+        // Biten arkadaki sohbet de bulunur
+        var bg = new SidebarChats("claude", 3);
+        var row = new SidebarItem("Sohbet B · running", "", "https://claude.ai/chat/ccc", new RectD(0, 0, 200, 20));
+        var id = bg.Update(new[] { row }, null, 0)[0].SessionId;
+        bg.Update(new[] { row with { Name = "Sohbet B" } }, null, 30);
+        A.Eq(0, bg.Count);
+        A.Eq("Sohbet B", bg.Find(id)?.Title);
+    }
+
     public static void DailySummaryText()
     {
         var stats = new DailyStats(null);

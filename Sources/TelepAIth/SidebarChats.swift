@@ -48,6 +48,8 @@ final class SidebarChats {
     let source: String
     let pid: pid_t
     private var chats: [String: Chat] = [:]
+    /// Bitmiş ya da açılmış olsa da görülen sohbetler (oturum → ad, adres): listeden tıklayınca açabilmek için
+    private var known: [String: (title: String, url: String?)] = [:]
 
     init(source: String, pid: pid_t) {
         self.source = source
@@ -184,6 +186,8 @@ final class SidebarChats {
         for k in rowOrder {
             guard let row = rows[k] else { continue }
             let id = sessionID(for: k)
+            if known.count > 300 { known.removeAll() }
+            known[id] = (row.title, row.url)
             guard var chat = chats[k] else {
                 chats[k] = Chat(title: row.title, url: row.url, state: row.state, since: now, lastBeat: now)
                 events.append(row.state == .waiting
@@ -225,7 +229,7 @@ final class SidebarChats {
     /// Bu oturum hangi sohbet? (yan menüde bulup açmak için: ad ve adres)
     func find(_ sessionID: String) -> (title: String, url: String?)? {
         for (k, chat) in chats where self.sessionID(for: k) == sessionID { return (chat.title, chat.url) }
-        return nil
+        return known[sessionID]
     }
 
     /// Yan menüde açık sohbetin adı (seçili satır ya da adresi açık sohbetinkiyle aynı olan)

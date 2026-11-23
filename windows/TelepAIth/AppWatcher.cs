@@ -321,22 +321,30 @@ internal sealed class AppWatcher
     }
 
     /// <summary>
-    /// Arkadaki bir sohbeti aç: uygulamayı öne getir, yan menüde o sohbetin bağlantısını bul ve bas.
-    /// Bulunamazsa sadece uygulama öne gelir. false: bu oturum bilinmiyor.
+    /// Listeden seçilen sohbeti aç: uygulamayı öne getir; açık sohbet değilse yan menüde o sohbetin bağlantısını bul ve bas.
+    /// false: oturum bir masaüstü uygulamasının değil ya da uygulama kapalı.
     /// </summary>
-    public bool OpenBackgroundChat(string sessionId)
+    public bool OpenChat(string sessionId)
     {
         var parts = sessionId.Split('-');
-        if (parts.Length < 3 || !int.TryParse(parts[1], out var pid)) return false;
-        (string Title, string? Url)? chat;
-        try { chat = _trackers.TryGetValue(pid, out var tr) ? tr.Background.Find(sessionId) : null; }
-        catch { chat = null; }   // izleyici aynı anda güncelliyor olabilir
+        if (parts.Length < 3 || parts[0] is not ("app" or "bg") || !int.TryParse(parts[1], out var pid)) return false;
+        (string Title, string? Url)? chat = null;
+        var isOpen = false;
+        try
+        {
+            if (_trackers.TryGetValue(pid, out var tr))
+            {
+                chat = tr.FindChat(sessionId);
+                isOpen = tr.SessionId == sessionId;
+            }
+        }
+        catch { }   // izleyici aynı anda güncelliyor olabilir
         IntPtr hwnd;
         try { using var p = Process.GetProcessById(pid); hwnd = p.MainWindowHandle; }
         catch { return false; }
         if (hwnd == IntPtr.Zero) return false;
         Native.Activate(hwnd);
-        if (chat is not { } c) return true;
+        if (isOpen || chat is not { } c) return true;   // zaten açık sohbet ya da adı bilinmiyor: uygulama öne gelsin yeter
         System.Threading.Tasks.Task.Run(() =>
         {
             try { ClickSidebarLink(hwnd, c.Title, c.Url); }

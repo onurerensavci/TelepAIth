@@ -371,8 +371,8 @@ internal sealed class RobotManager
             _pinnedSource = row.Source;
             Show(m);
         }
-        // Arkadaki Claude sohbeti: uygulamayı öne getir ve yan menüdeki bağlantısına bas
-        if (row.SessionId.StartsWith("bg-", StringComparison.Ordinal) && _watcher.OpenBackgroundChat(row.SessionId)) return;
+        // Masaüstü uygulamasındaki sohbet (açık, önceden açılmış ya da arkadaki): uygulamayı öne getir, yan menüde o sohbete bas
+        if (_watcher.OpenChat(row.SessionId)) return;
         // Claude Code: çalıştığı terminal; uygulama sohbeti: uygulamanın penceresi
         if (row.Target is { IsEmpty: false } target)
         {

@@ -178,6 +178,13 @@ public sealed class ChatAppTracker
     /// <summary>Yan menüden izlenen, açık olmayan (arkada çalışan) sohbetler</summary>
     public SidebarChats Background { get; }
 
+    /// <summary>Bu uygulamada açılmış sohbetler (oturum → ad, adres): listeden tıklayınca geri açabilmek için</summary>
+    private readonly Dictionary<string, (string Title, string? Url)> _known = new();
+
+    /// <summary>Oturum hangi sohbet? (açık sohbet, daha önce açılmış ya da arkadaki)</summary>
+    public (string Title, string? Url)? FindChat(string sessionId) =>
+        _known.TryGetValue(sessionId, out var k) ? k : Background.Find(sessionId);
+
     public string SessionId => $"app-{Pid}-{_chatCounter}";
 
     /// <summary>
@@ -309,6 +316,12 @@ public sealed class ChatAppTracker
                 }
             }
         }
+        else if (Generating && !asking && found.ButtonLabels.Count == 0 && found.Texts.Count == 0 && found.Composer == null)
+        {
+            // Hiçbir şey okunamadı (uygulama arkadayken erişilebilirlik ağacı boş gelebilir): bu "bitti" demek değil,
+            // son bilinen durum kalsın. Gerçekten takılırsa 5 dk sonra kendiliğinden boşa düşer.
+            _quietPolls = 0;
+        }
         else if (Generating && !asking)
         {
             _quietPolls++;
@@ -349,6 +362,11 @@ public sealed class ChatAppTracker
         {
             events.AddRange(Background.Update(found.Sidebar, ChatKey, now));
             ChatTitle = SidebarChats.CurrentTitle(found.Sidebar, ChatKey) ?? ChatTitle;
+            if (ChatTitle != null)
+            {
+                if (_known.Count > 300) _known.Clear();
+                _known[SessionId] = (ChatTitle, SidebarChats.NormalizeUrl(ChatKey) != null ? ChatKey : null);
+            }
         }
         return events;
     }
@@ -406,6 +424,8 @@ public sealed class SidebarChats
     public string Source { get; }
     public int Pid { get; }
     private readonly Dictionary<string, Chat> _chats = new();
+    /// <summary>Bitmiş ya da açılmış olsa da görülen sohbetler (oturum → ad, adres): listeden tıklayınca açabilmek için</summary>
+    private readonly Dictionary<string, (string Title, string? Url)> _known = new();
 
     public SidebarChats(string source, int pid)
     {
@@ -540,6 +560,8 @@ public sealed class SidebarChats
         foreach (var row in rows.Values)
         {
             var id = SessionIdFor(row.Key);
+            if (_known.Count > 300) _known.Clear();
+            _known[id] = (row.Title, row.Url);
             if (!_chats.TryGetValue(row.Key, out var chat))
             {
                 chat = new Chat { Title = row.Title, Url = row.Url, State = row.State, Since = now, LastBeat = now };
@@ -592,7 +614,7 @@ public sealed class SidebarChats
     {
         foreach (var (key, chat) in _chats)
             if (SessionIdFor(key) == sessionId) return (chat.Title, chat.Url);
-        return null;
+        return _known.TryGetValue(sessionId, out var k) ? k : null;
     }
 
     /// <summary>Yan menüde açık sohbetin adı (seçili satır ya da adresi açık sohbetinkiyle aynı olan)</summary>

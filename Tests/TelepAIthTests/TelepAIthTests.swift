@@ -299,6 +299,18 @@ final class TelepAIthTests: XCTestCase {
         XCTAssertEqual(SidebarChats.currentTitle(items, currentChat: "https://claude.ai/chat/aaa/"), "Tarif")
     }
 
+    func testFinishedBackgroundChatStillFound() {
+        let bg = SidebarChats(source: "claude", pid: 3)
+        let row = SidebarItem(name: "Sohbet B · running", help: "", url: "https://claude.ai/chat/ccc", rect: .zero)
+        let id = bg.update([row], currentChat: nil, now: 0)[0].sessionID
+        var done = row
+        done.name = "Sohbet B"
+        _ = bg.update([done], currentChat: nil, now: 30)
+        XCTAssertEqual(bg.count, 0)
+        XCTAssertEqual(bg.find(id)?.title, "Sohbet B")
+        XCTAssertEqual(bg.find(id)?.url, "https://claude.ai/chat/ccc")
+    }
+
     func testDraftChatAddress() {
         XCTAssertTrue(AppWatcher.isDraftChat("https://claude.ai/new"))
         XCTAssertTrue(AppWatcher.isDraftChat("https://chatgpt.com/"))

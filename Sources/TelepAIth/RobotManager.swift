@@ -463,8 +463,8 @@ final class RobotManager {
             pinnedSource = row.source
             show(m)
         }
-        // Arkadaki Claude sohbeti: uygulamayı öne getir ve yan menüdeki bağlantısına bas
-        if row.sessionID.hasPrefix("bg-"), watcher.openBackgroundChat(row.sessionID) { return }
+        // Masaüstü uygulamasındaki sohbet (açık, önceden açılmış ya da arkadaki): uygulamayı öne getir, yan menüde o sohbete bas
+        if watcher.openChat(row.sessionID) { return }
         // Claude Code: çalıştığı terminal; uygulama sohbeti: uygulamanın penceresi
         if let target = row.target, !target.isEmpty {
             RobotManager.activate(target)
