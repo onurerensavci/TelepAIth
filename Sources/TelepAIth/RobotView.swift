@@ -306,7 +306,7 @@ struct HeadFigure: View {
             if state == .sleeping {
                 ZzzView(time: time)
             }
-            // El hareketleri: iş bitti (başparmak/alkış), merhaba (el sallama), onay bekliyor (balonu göster)
+            // El hareketleri: büyük iş bitti (alkış), merhaba (el sallama), onay bekliyor (balonu göster)
             Group {
                 if model.gesture == .clap && gt >= 0 && gt <= 2.0 {
                     HandCanvas(kind: .clap, t: gt, right: right)
@@ -323,13 +323,6 @@ struct HeadFigure: View {
                 SnowView(time: time)
                     .frame(width: 130, height: 140)
                     .position(x: 50, y: 45)
-            }
-            if model.gesture == .thumbsUp && gt >= 0 && gt <= ThumbsUpView.duration {
-                ThumbsUpView(t: gt)
-                    .frame(width: 34, height: 44)
-                    .scaleEffect(x: look > 0 ? -1 : 1, y: 1)   // başparmak hep dışa (başın tersine) baksın
-                    .position(x: look > 0 ? 92 : 8, y: 74)
-                    .offset(y: -lift)
             }
             // Uzun süredir seni bekliyor: "!" rozeti
             if isNudging {
@@ -826,44 +819,6 @@ struct IdleMotion {
     var look: Double { kind == .lookAround ? sin(p * .pi * 2) * 1.6 * env : 0 }
 }
 
-/// Robot elinde başparmak ("işi bitirdim"): yaylanarak çıkar, sallanır, kaybolur.
-struct ThumbsUpView: View {
-    static let duration = 2.4
-    let t: Double
-
-    var body: some View {
-        Canvas { ctx, _ in
-            let edge = Color(red: 0.54, green: 0.51, blue: 0.65)
-            let fill = Color(red: 0.96, green: 0.945, blue: 0.965)
-            // Elin merkezi (17, 28): yumruk, üstünde başparmak, altta bilek
-            func rr(_ x: CGFloat, _ y: CGFloat, _ w: CGFloat, _ h: CGFloat, _ r: CGFloat) -> Path {
-                Path(roundedRect: CGRect(x: 17 + x, y: 28 + y, width: w, height: h), cornerRadius: r)
-            }
-            ctx.fill(rr(-8, 11, 16, 5, 2), with: .color(Color(red: 0.74, green: 0.71, blue: 0.84)))
-            for p in [rr(-12, -6, 24, 18, 7), rr(-10, -22, 9.5, 20, 4.75)] {
-                ctx.fill(p, with: .color(fill))
-                ctx.stroke(p, with: .color(edge), lineWidth: 1.4)
-            }
-            for y: CGFloat in [-1, 4, 9] {
-                var line = Path()
-                line.move(to: CGPoint(x: 20, y: 28 + y))
-                line.addLine(to: CGPoint(x: 27, y: 28 + y))
-                ctx.stroke(line, with: .color(edge), style: StrokeStyle(lineWidth: 1.2, lineCap: .round))
-            }
-        }
-        .scaleEffect(ThumbsUpView.scale(t), anchor: UnitPoint(x: 0.5, y: 1))
-        .rotationEffect(.degrees(sin(t * 12) * 10 * Swift.max(0, 1 - t / 1.2)), anchor: UnitPoint(x: 0.5, y: 1))
-        .opacity(t > ThumbsUpView.duration - 0.3 ? Swift.max(0, (ThumbsUpView.duration - t) / 0.3) : 1)
-    }
-
-    /// Hafif taşan yay (easeOutBack)
-    static func scale(_ t: Double) -> CGFloat {
-        let x = Swift.min(1, t / 0.35)
-        let c1 = 1.70158, c3 = c1 + 1
-        return CGFloat(1 + c3 * pow(x - 1, 3) + c1 * pow(x - 1, 2))
-    }
-}
-
 struct SparklesView: View {
     let time: TimeInterval
     let color: Color
@@ -1024,7 +979,7 @@ final class PointerTracker {
 
 // MARK: - El hareketleri
 
-/// Başparmak dışındaki el hareketleri (Windows'taki çizimin aynısı, kafa alanı 100 × 100):
+/// El hareketleri (Windows'taki çizimin aynısı, kafa alanı 100 × 100):
 /// el sallama (merhaba), balonu gösterme (onay bekliyor), alkış (gurur verici iş bitti), alnına vurma (hata).
 struct HandCanvas: View {
     enum Kind { case wave, point, clap, facepalm }

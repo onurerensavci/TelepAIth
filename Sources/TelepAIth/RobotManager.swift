@@ -561,7 +561,7 @@ final class RobotManager {
         // Minik kafalar: gösterilenin dışında çalışan/bekleyen tüm oturumlar
         if now - lastMiniCheck > 0.5, let avatar = avatar {
             lastMiniCheck = now
-            chooseDisplay()   // başparmak bitince sıradaki çalışana geç
+            chooseDisplay()   // bitiş kutlaması bitince sıradaki çalışana geç
             // Gösterilen AI'ın kendisi zaten büyük kafada; başka AI'ların tek oturumu da minik kafa olur
             avatar.setMinis(RobotModel.minis(allModels, current: avatar.current, now: date))
         }

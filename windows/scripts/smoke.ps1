@@ -126,16 +126,16 @@ Start-Sleep -Milliseconds 1200
 Shot "4-done"
 $st = State
 Check ($st.state -eq "Done" -or $st.minis -ge 1) "bitti / sıradaki oturum"
-# İş bitince başparmak
+# İş bitince kutlama (zıplama/parıltı; başparmak kaldırıldı)
 HookEvent "claude" '{"hook_event_name":"Stop","session_id":"s2","cwd":"C:\\proj\\mobile"}'
 Start-Sleep -Milliseconds 500
 Shot "4b-thumbs-up"
 $st = State
-Check ($st.celebrating -eq $true -and $st.source -eq "claude") "iş bitince başparmak (Claude ekranda kalır)"
-Check ($st.gesture -eq "ThumbsUp" -or $st.gesture -eq "Clap") "el hareketi: başparmak/alkış ($($st.gesture))"
+Check ($st.celebrating -eq $true -and $st.source -eq "claude") "iş bitince kutlama (Claude ekranda kalır)"
+Check ($st.gesture -ne "ThumbsUp") "başparmak yok ($($st.gesture))"
 Start-Sleep 3
 $st = State
-Check ($st.source -eq "gpt") "başparmaktan sonra hâlâ çalışan GPT'ye geçti"
+Check ($st.source -eq "gpt") "kutlamadan sonra hâlâ çalışan GPT'ye geçti"
 
 # Fareyle: sürükleyip sol üst köşeye bırak → köşeye yapışmalı
 $st = State

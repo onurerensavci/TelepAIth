@@ -129,7 +129,7 @@ final class TelepAIthTests: XCTestCase {
         XCTAssertEqual(m.eyeGlyph(at: t0.addingTimeInterval(2.5)), "?")
         _ = m.apply(AgentEvent(source: "claude", sessionID: "s", kind: .toolDone, state: .thinking), now: t0.addingTimeInterval(3))
         _ = m.apply(AgentEvent(source: "claude", sessionID: "s", kind: .stop, state: .done), now: t0.addingTimeInterval(4))
-        XCTAssertEqual(m.gesture, .thumbsUp)
+        XCTAssertEqual(m.gesture, Gesture.none)   // başparmak kaldırıldı; normal bitişte el hareketi yok
         XCTAssertEqual(m.eyeGlyph(at: m.visualChangedAt.addingTimeInterval(0.5)), "✓")
         XCTAssertNil(m.eyeGlyph(at: m.visualChangedAt.addingTimeInterval(2)))
         _ = m.apply(AgentEvent(source: "claude", sessionID: "s", kind: .prompt, state: .thinking, text: "y"), now: t0.addingTimeInterval(10))

@@ -4,7 +4,7 @@ import Combine
 /// Bir AI'ın (kaynağın) durumu: oturumları takip eder, robotun ne söyleyeceğini hesaplar.
 /// Ekrandaki tek robot, o an gösterilen kaynağın modelini çizer.
 /// Robotun el hareketleri
-enum Gesture { case none, thumbsUp, clap, wave, facepalm }
+enum Gesture { case none, clap, wave, facepalm }
 
 final class RobotModel: ObservableObject {
     struct Session {
@@ -48,7 +48,7 @@ final class RobotModel: ObservableObject {
     @Published private(set) var celebrateStart: Date?
     @Published private(set) var errorStart: Date?
     @Published private(set) var mood: Mood?
-    /// El hareketi (başparmak, alkış, el sallama, alnına vurma) ve başladığı an
+    /// El hareketi (alkış, el sallama, alnına vurma) ve başladığı an
     private(set) var gesture: Gesture = .none
     private(set) var gestureStart: Date?
     /// Seni bekleyen şey bir soru mu (onay değil)? Gözlerde "?" çıkar.
@@ -292,8 +292,8 @@ final class RobotModel: ObservableObject {
                 }
                 s.turnStart = nil
                 celebrateStart = now
-                // Gurur/parti anında alkış, yoksa başparmak
-                doGesture(mood == .proud || mood == .party ? .clap : .thumbsUp, now: now)
+                // Gurur/parti anında alkış (normal bitişte el hareketi yok: zıplama ve parıltı yeter)
+                if mood == .proud || mood == .party { doGesture(.clap, now: now) }
                 RobotModel.play("Glass")
                 remember(withEmoji(s.emoji, text), now: now)
                 // Anlatıcının "bitti"si bildirim atmaz (izleyici ya da hook zaten haber veriyor)

@@ -7,7 +7,7 @@ namespace TelepAIth.Core;
 /// Ekrandaki tek robot, o an gösterilen kaynağın modelini çizer. (Mac sürümündeki RobotModel'in aynısı.)
 /// </summary>
 /// <summary>Robotun el hareketleri</summary>
-public enum Gesture { None, ThumbsUp, Clap, Wave, Facepalm }
+public enum Gesture { None, Clap, Wave, Facepalm }
 
 public sealed class RobotModel
 {
@@ -42,7 +42,7 @@ public sealed class RobotModel
     public DateTime? CelebrateStart { get; private set; }
     public DateTime? ErrorStart { get; private set; }
     public Mood? Mood { get; private set; }
-    /// <summary>El hareketi (başparmak, alkış, el sallama, alnına vurma) ve başladığı an</summary>
+    /// <summary>El hareketi (alkış, el sallama, alnına vurma) ve başladığı an</summary>
     public Gesture Gesture { get; private set; }
     public DateTime? GestureStart { get; private set; }
     /// <summary>Seni bekleyen şey bir soru mu (onay değil)? Gözlerde "?" çıkar.</summary>
@@ -313,8 +313,8 @@ public sealed class RobotModel
                             DailyStats.Shared.RecordTurn(Source, duration, s.Tools, s.Edits, now);
                         s.TurnStart = null;
                         CelebrateStart = now;
-                        // Gurur/parti anında alkış, yoksa başparmak
-                        DoGesture(Mood is Core.Mood.Proud or Core.Mood.Party ? Gesture.Clap : Gesture.ThumbsUp, now);
+                        // Gurur/parti anında alkış (normal bitişte el hareketi yok: zıplama ve parıltı yeter)
+                        if (Mood is Core.Mood.Proud or Core.Mood.Party) DoGesture(Gesture.Clap, now);
                         Play("Glass");
                         Remember(WithEmoji(s.Emoji, text), now);
                         // Anlatıcının "bitti"si bildirim atmaz (izleyici ya da hook zaten haber veriyor)

@@ -605,7 +605,7 @@ internal sealed class RobotManager
         if (now - _lastMiniCheck > 0.5 && _avatar != null)
         {
             _lastMiniCheck = now;
-            ChooseDisplay();   // başparmak bitince sıradaki çalışana geç
+            ChooseDisplay();   // bitiş kutlaması bitince sıradaki çalışana geç
             _avatar.Minis = DisplayPicker.Minis(AllModels, _avatar.Current, date);
         }
         // Toplantı, odak süresi, günlük özet (5 sn'de bir)

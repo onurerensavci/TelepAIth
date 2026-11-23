@@ -359,10 +359,10 @@ public static class Tests
         m.Apply(new AgentEvent("claude", "s", EventKind.Waiting, RobotState.Waiting, "Bir soru?") { Emoji = "❓" }, t0.AddSeconds(2));
         A.True(m.IsAsking, "soru");
         A.Eq('?', m.EyeGlyph(t0.AddSeconds(2.5)));
-        // Bitti → başparmak ve kısa süre "✓"
+        // Bitti → başparmak yok (kaldırıldı), kısa süre "✓"
         m.Apply(new AgentEvent("claude", "s", EventKind.ToolDone, RobotState.Thinking), t0.AddSeconds(3));
         m.Apply(new AgentEvent("claude", "s", EventKind.Stop, RobotState.Done), t0.AddSeconds(4));
-        A.Eq(Gesture.ThumbsUp, m.Gesture);
+        A.Eq(Gesture.None, m.Gesture);   // normal bitişte el hareketi yok
         A.Eq('✓', m.EyeGlyph(m.VisualChangedAt.AddSeconds(0.5)));
         A.Eq('\0', m.EyeGlyph(m.VisualChangedAt.AddSeconds(2)));
         // Hata → alnına vurur
