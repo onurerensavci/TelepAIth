@@ -420,7 +420,22 @@ final class RobotModel: ObservableObject {
         if explicit != bubbleIsExplicit { bubbleIsExplicit = explicit }
         if text != bubbleText { bubbleText = text }
         if subtitle != bubbleSubtitle { bubbleSubtitle = subtitle }
+        // Yüz değiştiyse (durum ya da ruh hâli) çizim eskisinden yenisine yumuşakça geçsin
+        if state != visualState || mood != visualMood {
+            previousState = visualState
+            previousMood = visualMood
+            visualChangedAt = now
+            visualState = state
+            visualMood = mood
+        }
     }
+
+    private var visualState: RobotState = .idle
+    private var visualMood: Mood?
+    /// Bir önceki yüz (durum + ruh hâli) ve değiştiği an: çizim aradaki geçişi yumuşatır
+    private(set) var previousState: RobotState = .idle
+    private(set) var previousMood: Mood?
+    private(set) var visualChangedAt: Date = .distantPast
 
     /// Bu AI'ın, ekranda gösterilen dışında kalan çalışan/bekleyen oturumları.
     /// Masaüstü uygulamasından izlenen sohbet ("app-…") ile Anlatıcı'nın ("mcp") anlattığı aynı sohbettir:

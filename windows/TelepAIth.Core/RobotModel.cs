@@ -455,7 +455,23 @@ public sealed class RobotModel
         BubbleIsExplicit = _explicitUntil is { } eu && eu > now && text != null;
         BubbleText = text;
         BubbleSubtitle = subtitle;
+        // Yüz değiştiyse (durum ya da ruh hâli) çizim eskisinden yenisine yumuşakça geçsin
+        if (State != _visualState || Mood != _visualMood)
+        {
+            PreviousState = _visualState;
+            PreviousMood = _visualMood;
+            VisualChangedAt = now;
+            _visualState = State;
+            _visualMood = Mood;
+        }
     }
+
+    private RobotState _visualState = RobotState.Idle;
+    private Mood? _visualMood;
+    /// <summary>Bir önceki yüz (durum + ruh hâli) ve değiştiği an: çizim aradaki geçişi yumuşatır.</summary>
+    public RobotState PreviousState { get; private set; } = RobotState.Idle;
+    public Mood? PreviousMood { get; private set; }
+    public DateTime VisualChangedAt { get; private set; } = DateTime.MinValue;
 
     /// <summary>Bu AI'ın, ekranda gösterilen dışında kalan çalışan/bekleyen oturumları.</summary>
     /// <summary>

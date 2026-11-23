@@ -329,10 +329,14 @@ internal sealed class RobotView : FrameworkElement
         var eyeColor = C(baseColor.Mix(Rgb.White, 0.18));
         var accent = C(baseColor.Mix(Rgb.White, 0.55));
 
+        // Yüz değişince (ör. düşünüyor → bitti) 0,35 sn'de yumuşak geçiş
+        var blend = IdleMotion.Smooth((time - Seconds(model.VisualChangedAt == DateTime.MinValue ? Epoch : model.VisualChangedAt)) / 0.35);
+        var idle = state == RobotState.Idle && mood == null ? IdleMotion.At(time) : default;
         var hop = HopHeight(model, time);
-        var flt = FloatOffset(state, mood, time);
-        var shake = ShakeOffset(model, time) + NudgeOffset(model, time);
-        var lift = hop - flt;
+        var flt = Mix(FloatOffset(model.PreviousState, model.PreviousMood, time), FloatOffset(state, mood, time), blend);
+        var shake = ShakeOffset(model, time) + NudgeOffset(model, time) + idle.Dx;
+        var lift = hop - flt + idle.Lift;
+        var tilt = Mix(HeadTilt(model.PreviousState, model.PreviousMood, time), HeadTilt(state, mood, time), blend) + idle.Tilt;
 
         // Gölge
         dc.DrawEllipse(B(Colors.Black, 0.14), null, new Point(50, 96), Math.Max(24, 58 - lift * 1.5) / 2, 3);
@@ -341,12 +345,12 @@ internal sealed class RobotView : FrameworkElement
 
         if (model.QuotaLeft is { } left) DrawQuota(dc, left, C(baseColor.Mix(Rgb.White, 0.25)));
 
-        dc.PushTransform(new RotateTransform(HeadTilt(state, mood, time), 50, 90));
+        dc.PushTransform(new RotateTransform(tilt, 50, 90));
         var skin = Skins.Image(model.Source, state);
         if (skin != null)
             dc.DrawImage(skin, FitRect(skin, new Rect(2, 3, 96, 90)));
         else
-            DrawFace(dc, state, mood, time, look, eyeColor);
+            DrawFace(dc, state, mood, time, look, eyeColor, model.PreviousState, model.PreviousMood, blend, idle);
         dc.Pop();
 
         if (state is RobotState.Thinking or RobotState.Delegating or RobotState.Reading or RobotState.Searching)
@@ -392,13 +396,16 @@ internal sealed class RobotView : FrameworkElement
     private FormattedText Txt(string s, Typeface face, double size, Color color) =>
         new(s, CultureInfo.InvariantCulture, FlowDirection.LeftToRight, face, size, B(color), VisualTreeHelper.GetDpi(this).PixelsPerDip);
 
-    private void DrawFace(DrawingContext dc, RobotState state, Mood? mood, double time, double look, Color eyeColor)
+    private static double Mix(double a, double b, double t) => a + (b - a) * t;
+
+    private void DrawFace(DrawingContext dc, RobotState state, Mood? mood, double time, double look, Color eyeColor,
+        RobotState prevState, Mood? prevMood, double blend, IdleMotion idle)
     {
         dc.DrawEllipse(B(Bolt), null, new Point(6, 50), 6, 6);
         dc.DrawEllipse(B(Bolt), null, new Point(94, 50), 6, 6);
         dc.DrawRoundedRectangle(ShellBrush, null, new Rect(7, 15, 86, 70), 24, 24);
         dc.DrawRoundedRectangle(B(Visor), null, new Rect(15, 30, 70, 44), 18, 18);
-        DrawEyes(dc, state, mood, time, look, eyeColor);
+        DrawEyes(dc, state, mood, time, look, eyeColor, prevState, prevMood, blend, idle);
 
         // Alında sağlık ışığı
         var (led, op) = _avatar.Health switch
@@ -416,7 +423,8 @@ internal sealed class RobotView : FrameworkElement
     private const int Cols = 14, Rows = 18;
     private const double Spacing = 1.75, Dot = 1.3;
 
-    private static void DrawEyes(DrawingContext dc, RobotState state, Mood? mood, double time, double look, Color color)
+    private static void DrawEyes(DrawingContext dc, RobotState state, Mood? mood, double time, double look, Color color,
+        RobotState prevState, Mood? prevMood, double blend, IdleMotion idle)
     {
         var tint = state == RobotState.Error && mood == null ? C(1, 0.42, 0.42) : color;
         var dim = B(tint, 0.09);
@@ -424,7 +432,7 @@ internal sealed class RobotView : FrameworkElement
         const double cy = 52;
         var midC = (Cols - 1) / 2.0;
         var midR = (Rows - 1) / 2.0;
-        var blinking = state != RobotState.Waiting && mood == null && (time % 4.2) < 0.12;
+        var blinking = state != RobotState.Waiting && mood == null && idle.Kind == IdleKind.None && (time % 4.2) < 0.12;
         for (var eye = 0; eye < 2; eye++)
         {
             for (var r = 0; r < Rows; r++)
@@ -435,7 +443,9 @@ internal sealed class RobotView : FrameworkElement
                     var y = cy + (r - midR) * Spacing;
                     var u = (c - midC) / 2 + 3;
                     var v = (r - midR) / 2 + 4;
-                    var b = Brightness(state, mood, u, v, eye, time, look, blinking);
+                    var b = Brightness(state, mood, u, v, eye, time, look, blinking, idle);
+                    // Yüz değiştiyse eskisiyle yenisi arasında yumuşak geçiş
+                    if (blend < 1) b = Mix(Brightness(prevState, prevMood, u, v, eye, time, look, false, default), b, blend);
                     if (b > 0.05)
                     {
                         dc.DrawEllipse(B(tint, 0.25 * b), null, new Point(x, y), Dot / 2 + 0.8, Dot / 2 + 0.8);
@@ -450,9 +460,9 @@ internal sealed class RobotView : FrameworkElement
         }
     }
 
-    private static double Brightness(RobotState state, Mood? mood, double u, double v, int eye, double time, double look, bool blinking)
+    private static double Brightness(RobotState state, Mood? mood, double u, double v, int eye, double time, double look, bool blinking, IdleMotion idle)
     {
-        var lookShift = look / 2.5;
+        var lookShift = look / 2.5 + idle.Look;
         if (mood is { } m)
         {
             return m switch
@@ -479,8 +489,29 @@ internal sealed class RobotView : FrameworkElement
             RobotState.Running or RobotState.Delegating =>
                 Capsule(u, v, 3, 4, 1.6, 2.8) * (0.75 + 0.25 * Math.Sin(time * 18 + u * 2.6 + v * 1.4)),
             RobotState.Waiting => Capsule(u, v, 3, 4, 2.5, 3.9) * (0.75 + 0.25 * Math.Sin(time * 6)),
-            _ => Capsule(u, v, 3 + lookShift, 4, 1.7, 3.3),
+            _ => IdleEyes(u, v, eye, lookShift, idle),
         };
+    }
+
+    /// Boştayken gözler: normal kapsül + o anki küçük hareket (göz kırpma, tarama, esneme)
+    private static double IdleEyes(double u, double v, int eye, double lookShift, IdleMotion idle)
+    {
+        var b = Capsule(u, v, 3 + lookShift, 4, 1.7, 3.3);
+        switch (idle.Kind)
+        {
+            case IdleKind.Wink when eye == idle.Side:
+                return Mix(b, Capsule(u, v, 3 + lookShift, 4.6, 1.9, 0.45), idle.Env);
+            case IdleKind.Scan:
+            {
+                var gx = eye * 7 + u;
+                var bar = Math.Abs(gx - (-0.5 + 14 * idle.P)) < 0.7 && Math.Abs(v - 4) < 3.4 ? 1.0 : 0.0;
+                return Mix(b, Math.Max(bar, b * 0.25), idle.Env);
+            }
+            case IdleKind.Yawn:
+                return Mix(b, Capsule(u, v, 3, 4.9, 2.0, 0.9 + 0.4 * Math.Sin(idle.P * Math.PI)), idle.Env);
+            default:
+                return b;
+        }
     }
 
     private static double Capsule(double u, double v, double cx, double cy, double rx, double ry)
@@ -609,7 +640,7 @@ internal sealed class RobotView : FrameworkElement
         const double cy = 74;
         dc.PushOpacity(opacity);
         dc.PushTransform(new TranslateTransform(cx, cy));
-        dc.PushTransform(new ScaleTransform(right ? scale : -scale, scale, 0, 16));
+        dc.PushTransform(new ScaleTransform(right ? -scale : scale, scale, 0, 16));   // başparmak hep dışa (başın tersine) baksın
         dc.PushTransform(new RotateTransform(wiggle, 0, 16));
         var edge = new Pen(B(HandEdge), 1.4);
         dc.DrawRoundedRectangle(B(Bolt), null, new Rect(-8, 11, 16, 5), 2, 2);                // bilek
@@ -736,6 +767,63 @@ internal sealed class RobotView : FrameworkElement
             dc.DrawText(more, new Point(mx, bottomY - h / 2 - more.Height / 2));
         }
     }
+}
+
+internal enum IdleKind { None, LookAround, Wink, Sway, Bounce, Scan, Yawn }
+
+/// <summary>
+/// Boştayken arada bir yapılan küçük hareketler: etrafa bakma, göz kırpma, sallanma, zıplama, tarama, esneme.
+/// 8 sn'lik dilimlerin çoğunda bir tane; başı ve sonu yumuşak (Env), süzülmenin üstüne eklenir. Mac'teki IdleMotion'un aynısı.
+/// </summary>
+internal readonly record struct IdleMotion(IdleKind Kind, double P, double Env, int Side)
+{
+    public static double Smooth(double x)
+    {
+        var t = Math.Clamp(x, 0, 1);
+        return t * t * (3 - 2 * t);
+    }
+
+    public static IdleMotion At(double time)
+    {
+        const double slot = 8;
+        var n = (long)Math.Floor(time / slot);
+        var local = time - n * slot;
+        uint x;
+        unchecked
+        {
+            x = (uint)(n * 2654435761L);
+            x ^= x >> 15;
+            x *= 2246822519u;
+            x ^= x >> 13;
+        }
+        var h = (int)(x & 0x7fffffff);
+        if (h / 3 % 10 < 3) return default;   // bazı dilimler sakin geçsin
+        var kinds = new[] { IdleKind.LookAround, IdleKind.Wink, IdleKind.Sway, IdleKind.Bounce, IdleKind.Scan, IdleKind.Yawn };
+        var kind = kinds[h % kinds.Length];
+        var dur = kind switch { IdleKind.Wink => 1.2, IdleKind.Bounce => 1.6, IdleKind.Scan => 2.2, IdleKind.Yawn => 2.6, _ => 3.0 };
+        var start = 2.0 + h / 7 % 3;
+        if (local < start || local > start + dur) return default;
+        var p = (local - start) / dur;
+        var env = kind == IdleKind.Wink ? Smooth((p - 0.2) / 0.15) * Smooth((0.8 - p) / 0.15) : Smooth(p / 0.2) * Smooth((1 - p) / 0.2);
+        return new IdleMotion(kind, p, env, h / 13 % 2);
+    }
+
+    public double Dx => Kind == IdleKind.Sway ? Math.Sin(P * Math.PI * 4) * 2.5 * Env : 0;
+    public double Lift => Kind switch
+    {
+        IdleKind.Bounce => Math.Abs(Math.Sin(P * Math.PI * 3)) * 7 * Env,
+        IdleKind.Yawn => -3 * Env,
+        _ => 0,
+    };
+    public double Tilt => Kind switch
+    {
+        IdleKind.LookAround => Math.Sin(P * Math.PI * 2) * 4 * Env,
+        IdleKind.Wink => (Side == 0 ? -5 : 5) * Env,
+        IdleKind.Sway => Math.Sin(P * Math.PI * 4) * 6 * Env,
+        IdleKind.Yawn => Math.Sin(P * Math.PI) * 3 * Env,
+        _ => 0,
+    };
+    public double Look => Kind == IdleKind.LookAround ? Math.Sin(P * Math.PI * 2) * 1.6 * Env : 0;
 }
 
 /// <summary>Kendi robot görünüşü: ~/.telepaith/skins/&lt;kaynak&gt;/&lt;durum&gt;.png (yoksa skins/default).</summary>

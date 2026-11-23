@@ -233,11 +233,16 @@ struct HeadFigure: View {
         let base = model.theme.color
         let eyeColor = Color(nsColor: base.mix(.white, 0.18))   // gözler uygulamanın renginde
         let accent = Color(nsColor: base.mix(.white, 0.55))
+        // Yüz değişince (ör. düşünüyor → bitti) 0,35 sn'de yumuşak geçiş
+        let blend = IdleMotion.smooth((time - model.visualChangedAt.timeIntervalSinceReferenceDate) / 0.35)
+        let prevState = model.previousState, prevMood = model.previousMood
+        let idle = (state == .idle && model.mood == nil) ? IdleMotion.at(time) : IdleMotion()
         let hop = hopHeight
-        let float = floatOffset(state)
-        let shake = shakeOffset + nudgeOffset
+        let float = mix(floatOffset(prevState, prevMood), floatOffset(state, model.mood), blend)
+        let shake = shakeOffset + nudgeOffset + CGFloat(idle.head.dx)
         let skin = SkinStore.shared.image(source: model.source, state: state)
-        let lift = hop - float
+        let lift = hop - float + CGFloat(idle.head.lift)
+        let tilt = Double(mix(CGFloat(headTilt(prevState, prevMood)), CGFloat(headTilt(state, model.mood)), blend)) + idle.head.tilt
 
         return ZStack {
             Ellipse()
@@ -262,10 +267,11 @@ struct HeadFigure: View {
                         .frame(width: 96, height: 90)
                         .position(x: 50, y: 48)
                 } else {
-                    FaceView(state: state, mood: model.mood, time: time, look: look, eyeColor: eyeColor, health: health)
+                    FaceView(state: state, mood: model.mood, time: time, look: look, eyeColor: eyeColor, health: health,
+                             prevState: prevState, prevMood: prevMood, blend: blend, idle: idle)
                 }
             }
-            .rotationEffect(.degrees(headTilt(state)), anchor: UnitPoint(x: 0.5, y: 0.9))
+            .rotationEffect(.degrees(tilt), anchor: UnitPoint(x: 0.5, y: 0.9))
             .offset(x: shake, y: -lift)
 
             if state == .thinking || state == .delegating || state == .reading || state == .searching {
@@ -283,7 +289,7 @@ struct HeadFigure: View {
             if let t = thumbsElapsed {
                 ThumbsUpView(t: t)
                     .frame(width: 34, height: 44)
-                    .scaleEffect(x: look > 0 ? 1 : -1, y: 1)
+                    .scaleEffect(x: look > 0 ? -1 : 1, y: 1)   // başparmak hep dışa (başın tersine) baksın
                     .position(x: look > 0 ? 92 : 8, y: 74)
                     .offset(y: -lift)
             }
@@ -319,8 +325,10 @@ struct HeadFigure: View {
     }
 
     // Havada süzülme
-    private func floatOffset(_ state: RobotState) -> CGFloat {
-        if model.mood == .scared { return CGFloat(sin(time * 40)) * 1.2 }
+    private func mix(_ a: CGFloat, _ b: CGFloat, _ t: Double) -> CGFloat { a + (b - a) * CGFloat(t) }
+
+    private func floatOffset(_ state: RobotState, _ mood: Mood?) -> CGFloat {
+        if mood == .scared { return CGFloat(sin(time * 40)) * 1.2 }
         switch state {
         case .idle: return CGFloat(sin(time * 1.6)) * 2.5
         case .running: return CGFloat(sin(time * 9)) * 1.5
@@ -331,8 +339,8 @@ struct HeadFigure: View {
         }
     }
 
-    private func headTilt(_ state: RobotState) -> Double {
-        switch model.mood {
+    private func headTilt(_ state: RobotState, _ mood: Mood?) -> Double {
+        switch mood {
         case .some(.dizzy): return sin(time * 6) * 9
         case .some(.tired): return 6
         case .some(.pleased): return sin(time * 3) * 4
@@ -380,6 +388,10 @@ struct FaceView: View {
     let look: CGFloat
     let eyeColor: Color
     let health: Health
+    var prevState: RobotState = .idle
+    var prevMood: Mood? = nil
+    var blend: Double = 1
+    var idle = IdleMotion()
 
     var body: some View {
         ZStack {
@@ -395,7 +407,8 @@ struct FaceView: View {
                 .fill(Color(red: 0.09, green: 0.08, blue: 0.16))
                 .frame(width: 70, height: 44)
                 .position(x: 50, y: 52)
-            DotEyes(state: state, mood: mood, look: look, time: time, color: eyeColor)
+            DotEyes(state: state, mood: mood, look: look, time: time, color: eyeColor,
+                    prevState: prevState, prevMood: prevMood, blend: blend, idle: idle)
                 .frame(width: 70, height: 44)
                 .position(x: 50, y: 52)
             // Alında sağlık ışığı: yeşil yolunda, turuncu güncelleme var, kırmızı çalışmıyor
@@ -438,6 +451,10 @@ struct DotEyes: View {
     let look: CGFloat
     let time: TimeInterval
     let color: Color
+    var prevState: RobotState = .idle
+    var prevMood: Mood? = nil
+    var blend: Double = 1
+    var idle = IdleMotion()
 
     private static let cols = 14
     private static let rows = 18
@@ -474,12 +491,19 @@ struct DotEyes: View {
     }
 
     private var blinking: Bool {
-        state != .waiting && mood == nil && time.truncatingRemainder(dividingBy: 4.2) < 0.12
+        state != .waiting && mood == nil && idle.kind == .none && time.truncatingRemainder(dividingBy: 4.2) < 0.12
     }
 
-    /// Bir noktanın parlaklığı (0…1)
+    /// Bir noktanın parlaklığı (0…1): yüz değiştiyse eskisiyle yenisi arasında yumuşak geçiş
     private func brightness(u: Double, v: Double, eye: Int) -> Double {
-        let lookShift = Double(look) / 2.5   // ekranın ortasına doğru bak
+        let now = pattern(state: state, mood: mood, u: u, v: v, eye: eye, idle: idle)
+        guard blend < 1 else { return now }
+        let before = pattern(state: prevState, mood: prevMood, u: u, v: v, eye: eye, idle: IdleMotion())
+        return before + (now - before) * blend
+    }
+
+    private func pattern(state: RobotState, mood: Mood?, u: Double, v: Double, eye: Int, idle: IdleMotion) -> Double {
+        let lookShift = Double(look) / 2.5 + idle.look   // ekranın ortasına doğru bak
         if let mood = mood {
             switch mood {
             case .pleased: return heart(u, v) * (0.8 + 0.2 * sin(time * 6))
@@ -512,7 +536,21 @@ struct DotEyes: View {
         case .waiting:
             return capsule(u, v, cx: 3, cy: 4, rx: 2.5, ry: 3.9) * (0.75 + 0.25 * sin(time * 6))
         case .idle:
-            return capsule(u, v, cx: 3 + lookShift, cy: 4, rx: 1.7, ry: 3.3)
+            let base = capsule(u, v, cx: 3 + lookShift, cy: 4, rx: 1.7, ry: 3.3)
+            switch idle.kind {
+            case .wink where eye == idle.side:   // göz kırpma
+                let closed = capsule(u, v, cx: 3 + lookShift, cy: 4.6, rx: 1.9, ry: 0.45)
+                return base + (closed - base) * idle.env
+            case .scan:   // iki gözün üstünden geçen tarama çizgisi
+                let gx = Double(eye) * 7 + u
+                let bar: Double = (abs(gx - (-0.5 + 14 * idle.p)) < 0.7 && abs(v - 4) < 3.4) ? 1 : 0
+                return base + (Swift.max(bar, base * 0.25) - base) * idle.env
+            case .yawn:   // esneme: gözler kısılır
+                let squint = capsule(u, v, cx: 3, cy: 4.9, rx: 2.0, ry: 0.9 + 0.4 * sin(idle.p * .pi))
+                return base + (squint - base) * idle.env
+            default:
+                return base
+            }
         }
     }
 
@@ -620,6 +658,64 @@ struct ApprovalButtons: View {
                 Color.clear.preference(key: ApprovalFramesKey.self, value: [choice: g.frame(in: .named("avatar"))])
             })
     }
+}
+
+/// Boştayken arada bir yapılan küçük hareketler: etrafa bakma, göz kırpma, sallanma, zıplama, tarama, esneme.
+/// 8 sn'lik dilimlerin çoğunda bir tane; başı ve sonu yumuşak (env), süzülmenin üstüne eklenir. Windows'ta da aynısı.
+struct IdleMotion {
+    enum Kind { case none, lookAround, wink, sway, bounce, scan, yawn }
+    var kind: Kind = .none
+    var p: Double = 0      // 0…1 ilerleme
+    var env: Double = 0    // 0…1 yumuşak giriş/çıkış
+    var side = 0
+
+    static func smooth(_ x: Double) -> Double {
+        let t = Swift.min(1, Swift.max(0, x))
+        return t * t * (3 - 2 * t)
+    }
+
+    static func at(_ time: Double) -> IdleMotion {
+        let slot = 8.0
+        let n = Int64(floor(time / slot))
+        let local = time - Double(n) * slot
+        var x = UInt32(truncatingIfNeeded: n &* 2654435761)
+        x ^= x >> 15
+        x = x &* 2246822519
+        x ^= x >> 13
+        let h = Int(x & 0x7fffffff)
+        if (h / 3) % 10 < 3 { return IdleMotion() }   // bazı dilimler sakin geçsin
+        let kinds: [Kind] = [.lookAround, .wink, .sway, .bounce, .scan, .yawn]
+        let kind = kinds[h % kinds.count]
+        let dur: Double
+        switch kind {
+        case .wink: dur = 1.2
+        case .bounce: dur = 1.6
+        case .scan: dur = 2.2
+        case .yawn: dur = 2.6
+        default: dur = 3.0
+        }
+        let start = 2.0 + Double((h / 7) % 3)
+        guard local >= start, local <= start + dur else { return IdleMotion() }
+        let p = (local - start) / dur
+        let env = kind == .wink ? smooth((p - 0.2) / 0.15) * smooth((0.8 - p) / 0.15)
+                                : smooth(p / 0.2) * smooth((1 - p) / 0.2)
+        return IdleMotion(kind: kind, p: p, env: env, side: (h / 13) % 2)
+    }
+
+    /// Kafanın ek hareketi: yatay kayma, ek yükseklik, ek eğim (derece)
+    var head: (dx: Double, lift: Double, tilt: Double) {
+        switch kind {
+        case .lookAround: return (0, 0, sin(p * .pi * 2) * 4 * env)
+        case .wink: return (0, 0, (side == 0 ? -5 : 5) * env)
+        case .sway: return (sin(p * .pi * 4) * 2.5 * env, 0, sin(p * .pi * 4) * 6 * env)
+        case .bounce: return (0, abs(sin(p * .pi * 3)) * 7 * env, 0)
+        case .yawn: return (0, -3 * env, sin(p * .pi) * 3 * env)
+        default: return (0, 0, 0)
+        }
+    }
+
+    /// Göz bakışına ek kayma (etrafa bakarken)
+    var look: Double { kind == .lookAround ? sin(p * .pi * 2) * 1.6 * env : 0 }
 }
 
 /// Robot elinde başparmak ("işi bitirdim"): yaylanarak çıkar, sallanır, kaybolur.
