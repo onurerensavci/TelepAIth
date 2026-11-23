@@ -458,6 +458,8 @@ internal sealed class RobotManager
             else best = m;
         }
         if (best == null || ReferenceEquals(best, current)) return;
+        // İşini yeni bitiren başparmağını göstersin; bu arada sadece seni bekleyen bir şey öne geçebilir
+        if (current.CelebrateStart is { } cs && (DateTime.Now - cs).TotalSeconds < 2.4 && best.State != RobotState.Waiting) return;
         var higher = best.State.Priority() > current.State.Priority();
         var sameButNewer = best.State.Priority() == current.State.Priority()
                            && best.State.Priority() >= RobotState.Thinking.Priority()
@@ -530,6 +532,7 @@ internal sealed class RobotManager
         if (now - _lastMiniCheck > 0.5 && _avatar != null)
         {
             _lastMiniCheck = now;
+            ChooseDisplay();   // başparmak bitince sıradaki çalışana geç
             var minis = new List<RobotModel.MiniSession>();
             foreach (var m in AllModels)
                 minis.AddRange(m.MiniSessions(ReferenceEquals(m, _avatar.Current) ? m.BestSessionId : null, date));

@@ -129,7 +129,10 @@ HookEvent "claude" '{"hook_event_name":"Stop","session_id":"s2","cwd":"C:\\proj\
 Start-Sleep -Milliseconds 500
 Shot "4b-thumbs-up"
 $st = State
-Check ($st.celebrating -eq $true) "iş bitince başparmak"
+Check ($st.celebrating -eq $true -and $st.source -eq "claude") "iş bitince başparmak (Claude ekranda kalır)"
+Start-Sleep 3
+$st = State
+Check ($st.source -eq "gpt") "başparmaktan sonra hâlâ çalışan GPT'ye geçti"
 
 # Fareyle: sürükleyip sol üst köşeye bırak → köşeye yapışmalı
 $st = State

@@ -447,6 +447,9 @@ final class RobotManager {
             }
         }
         guard let candidate = best, candidate !== current else { return }
+        // İşini yeni bitiren başparmağını göstersin; bu arada sadece seni bekleyen bir şey öne geçebilir
+        if let start = current.celebrateStart, Date().timeIntervalSince(start) < ThumbsUpView.duration,
+           candidate.state != .waiting { return }
         let higher = candidate.state.priority > current.state.priority
         let sameButNewer = candidate.state.priority == current.state.priority
             && candidate.state.priority >= RobotState.thinking.priority
@@ -495,6 +498,7 @@ final class RobotManager {
         // Minik kafalar: gösterilenin dışında çalışan/bekleyen tüm oturumlar
         if now - lastMiniCheck > 0.5, let avatar = avatar {
             lastMiniCheck = now
+            chooseDisplay()   // başparmak bitince sıradaki çalışana geç
             var minis: [RobotModel.MiniSession] = []
             for m in allModels {
                 minis += m.miniSessions(excluding: m === avatar.current ? m.bestSessionID : nil, now: date)
