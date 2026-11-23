@@ -287,6 +287,19 @@ public static class Tests
         A.True(awake.BubbleText?.Contains("açıldı") == true, "always: her zaman söyler");
     }
 
+    public static void MiniHeadsNoDuplicates()
+    {
+        var m = new RobotModel("claude");
+        m.Apply(new AgentEvent("claude", "app-100-0", EventKind.Prompt, RobotState.Thinking, "Düşünüyor…"));
+        m.Apply(new AgentEvent("claude", "mcp", EventKind.Status, RobotState.Editing, "Düzenliyor"));
+        m.Apply(new AgentEvent("claude", "term-1", EventKind.Tool, RobotState.Running, "npm test") { Project = "api" });
+        var all = m.MiniSessions(null, DateTime.Now);
+        A.Eq(2, all.Count);   // masaüstü sohbeti (app + anlatıcı) tek kafa + terminal
+        var shown = m.MiniSessions(m.BestSessionId, DateTime.Now);
+        A.Eq(1, shown.Count); // ana robot birini gösteriyor, diğeri minik kafa
+        A.True(RobotModel.SessionGroup(shown[0].Id.Split('/')[1]) != RobotModel.SessionGroup(m.BestSessionId!), "ana robotla aynı sohbet minik kafa olmaz");
+    }
+
     public static void ModelStopNotice()
     {
         var m = new RobotModel("claude");

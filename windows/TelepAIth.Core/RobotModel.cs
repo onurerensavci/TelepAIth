@@ -450,18 +450,29 @@ public sealed class RobotModel
     }
 
     /// <summary>Bu AI'ın, ekranda gösterilen dışında kalan çalışan/bekleyen oturumları.</summary>
+    /// <summary>
+    /// Masaüstü uygulamasından izlenen sohbet ("app-…") ile Anlatıcı'nın ("mcp") anlattığı aynı sohbettir:
+    /// ikisi ayrı minik kafa olmasın.
+    /// </summary>
+    public static string SessionGroup(string id) => id == "mcp" || id.StartsWith("app-", StringComparison.Ordinal) ? "desktop" : id;
+
     public List<MiniSession> MiniSessions(string? excluded, DateTime now)
     {
-        var list = new List<MiniSession>();
+        var excludedGroup = excluded != null ? SessionGroup(excluded) : null;
+        var best = new Dictionary<string, (string Id, Session S, RobotState St)>();
         foreach (var (id, s) in _sessions)
         {
-            if (id == excluded) continue;
+            var group = SessionGroup(id);
+            if (group == excludedGroup) continue;
             var st = EffectiveState(s, id, now);
             if (!st.IsWorking() && st != RobotState.Waiting) continue;
-            var label = string.Join(" · ", new[] { Theme.DisplayName, s.Project, s.Text != null ? Clip(s.Text, 40) : null }.Where(x => x != null));
-            list.Add(new MiniSession(Source + "/" + id, Source, st, label));
+            if (best.TryGetValue(group, out var b) && (b.St.Priority() > st.Priority() || (b.St.Priority() == st.Priority() && b.S.Updated >= s.Updated))) continue;
+            best[group] = (id, s, st);
         }
-        return list.OrderBy(m => m.Id, StringComparer.Ordinal).ToList();
+        return best.Values
+            .Select(x => new MiniSession(Source + "/" + x.Id, Source, x.St,
+                string.Join(" · ", new[] { Theme.DisplayName, x.S.Project, x.S.Text != null ? Clip(x.S.Text, 40) : null }.Where(t => t != null))))
+            .OrderBy(m => m.Id, StringComparer.Ordinal).ToList();
     }
 
     private static RobotState EffectiveState(Session s, string id, DateTime now)

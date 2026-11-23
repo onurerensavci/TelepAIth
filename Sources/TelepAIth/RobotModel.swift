@@ -416,13 +416,24 @@ final class RobotModel: ObservableObject {
     }
 
     /// Bu AI'ın, ekranda gösterilen dışında kalan çalışan/bekleyen oturumları.
+    /// Masaüstü uygulamasından izlenen sohbet ("app-…") ile Anlatıcı'nın ("mcp") anlattığı aynı sohbettir:
+    /// ikisi ayrı minik kafa olmasın.
+    static func sessionGroup(_ id: String) -> String { id == "mcp" || id.hasPrefix("app-") ? "desktop" : id }
+
     func miniSessions(excluding excluded: String?, now: Date = Date()) -> [MiniSession] {
-        sessions.compactMap { (id, s) -> MiniSession? in
-            guard id != excluded else { return nil }
+        let excludedGroup = excluded.map(RobotModel.sessionGroup)
+        var best: [String: (id: String, s: Session, st: RobotState)] = [:]
+        for (id, s) in sessions {
+            let group = RobotModel.sessionGroup(id)
+            guard group != excludedGroup else { continue }
             let st = effectiveState(s, id: id, now: now)
-            guard st.isWorking || st == .waiting else { return nil }
-            let label = [theme.displayName, s.project, s.text.map { clip($0, 40) }].compactMap { $0 }.joined(separator: " · ")
-            return MiniSession(id: source + "/" + id, source: source, state: st, label: label)
+            guard st.isWorking || st == .waiting else { continue }
+            if let b = best[group], b.st.priority > st.priority || (b.st.priority == st.priority && b.s.updated >= s.updated) { continue }
+            best[group] = (id, s, st)
+        }
+        return best.values.map { x in
+            let label = [theme.displayName, x.s.project, x.s.text.map { clip($0, 40) }].compactMap { $0 }.joined(separator: " · ")
+            return MiniSession(id: source + "/" + x.id, source: source, state: x.st, label: label)
         }
         .sorted { $0.id < $1.id }
     }

@@ -124,6 +124,12 @@ Start-Sleep -Milliseconds 1200
 Shot "4-done"
 $st = State
 Check ($st.state -eq "Done" -or $st.minis -ge 1) "bitti / sıradaki oturum"
+# İş bitince başparmak
+HookEvent "claude" '{"hook_event_name":"Stop","session_id":"s2","cwd":"C:\\proj\\mobile"}'
+Start-Sleep -Milliseconds 500
+Shot "4b-thumbs-up"
+$st = State
+Check ($st.celebrating -eq $true) "iş bitince başparmak"
 
 # Fareyle: sürükleyip sol üst köşeye bırak → köşeye yapışmalı
 $st = State

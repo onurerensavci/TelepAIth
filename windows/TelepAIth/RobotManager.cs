@@ -481,6 +481,7 @@ internal sealed class RobotManager
             ["alignLeft"] = _avatar?.AlignLeft,
             ["bubbleBelow"] = _avatar?.BubbleBelow,
             ["focus"] = FocusMode.IsActive,
+            ["celebrating"] = _avatar?.Current.CelebrateStart is { } cs && (DateTime.Now - cs).TotalSeconds is >= 0 and <= 2.4,
             ["recent"] = new System.Text.Json.Nodes.JsonArray(_recent.Select(r => (System.Text.Json.Nodes.JsonNode?)r).ToArray()),
             ["sessions"] = new System.Text.Json.Nodes.JsonArray(AllModels.SelectMany(m => m.SessionStates.Select(x => (System.Text.Json.Nodes.JsonNode?)$"{m.Source}/{x.Id}={x.State}")).ToArray()),
         };

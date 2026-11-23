@@ -297,6 +297,14 @@ internal sealed class RobotView : FrameworkElement
         }
         if (state == RobotState.Sleeping) DrawZzz(dc, time);
 
+        // İş bitti: başparmak (balonun açıldığı tarafta, başın alt köşesinde)
+        if (model.CelebrateStart is { } done && Seconds(DateTime.Now) - Seconds(done) is var tu and >= 0 and <= ThumbsDuration)
+        {
+            dc.PushTransform(new TranslateTransform(0, -lift));
+            DrawThumbsUp(dc, tu, look > 0);
+            dc.Pop();
+        }
+
         if (IsNudging(model, time))
         {
             dc.PushTransform(new TranslateTransform(shake, -lift));
@@ -515,6 +523,39 @@ internal sealed class RobotView : FrameworkElement
         var phase = age % 4;
         if (phase >= 0.6) return 0;
         return Math.Sin(phase * 40) * (1 - phase / 0.6) * 4;
+    }
+
+    // MARK: Başparmak ("işi bitirdim")
+
+    private const double ThumbsDuration = 2.4;
+    private static readonly Color HandEdge = C(0.54, 0.51, 0.65);
+    private static readonly Color HandFill = C(0.96, 0.945, 0.965);
+
+    /// <summary>Robot elinde başparmak: yaylanarak çıkar, sallanır, kaybolur. right: başın sağ alt köşesinde.</summary>
+    private static void DrawThumbsUp(DrawingContext dc, double t, bool right)
+    {
+        var x = Math.Min(1, t / 0.35);
+        const double c1 = 1.70158, c3 = c1 + 1;
+        var scale = 1 + c3 * Math.Pow(x - 1, 3) + c1 * Math.Pow(x - 1, 2);   // hafif taşan yay
+        var wiggle = Math.Sin(t * 12) * 10 * Math.Max(0, 1 - t / 1.2);
+        var opacity = t > ThumbsDuration - 0.3 ? Math.Max(0, (ThumbsDuration - t) / 0.3) : 1;
+
+        var cx = right ? 92 : 8;
+        const double cy = 74;
+        dc.PushOpacity(opacity);
+        dc.PushTransform(new TranslateTransform(cx, cy));
+        dc.PushTransform(new ScaleTransform(right ? scale : -scale, scale, 0, 16));
+        dc.PushTransform(new RotateTransform(wiggle, 0, 16));
+        var edge = new Pen(B(HandEdge), 1.4);
+        dc.DrawRoundedRectangle(B(Bolt), null, new Rect(-8, 11, 16, 5), 2, 2);                // bilek
+        dc.DrawRoundedRectangle(B(HandFill), edge, new Rect(-12, -6, 24, 18), 7, 7);          // yumruk
+        dc.DrawRoundedRectangle(B(HandFill), edge, new Rect(-10, -22, 9.5, 20), 4.75, 4.75);  // başparmak
+        var crease = new Pen(B(HandEdge), 1.2) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round };
+        foreach (var y in new[] { -1.0, 4, 9 }) dc.DrawLine(crease, new Point(3, y), new Point(10, y));
+        dc.Pop();
+        dc.Pop();
+        dc.Pop();
+        dc.Pop();
     }
 
     // MARK: Efektler
