@@ -320,6 +320,19 @@ public sealed class RobotModel
         Refresh(now);
     }
 
+    /// <summary>
+    /// Uyuyorsa uyandır (AI uygulaması açıldı, öne geldi ya da robota tıklandı).
+    /// greet: kısa bir balon; always değilse sadece uyuyorduysa gösterilir.
+    /// </summary>
+    public void Wake(string? greet = null, bool always = false, DateTime? at = null)
+    {
+        var now = at ?? DateTime.Now;
+        var wasSleeping = State == RobotState.Sleeping;
+        _lastEventAt = now;
+        if ((wasSleeping || always) && greet != null) ShowOverride(greet, 3, now);
+        Refresh(now);
+    }
+
     public void ShowHistory()
     {
         var lines = _history.TakeLast(5).ToList();

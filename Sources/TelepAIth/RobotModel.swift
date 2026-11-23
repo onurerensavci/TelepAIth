@@ -297,6 +297,16 @@ final class RobotModel: ObservableObject {
         refresh(now: now)
     }
 
+    /// Uyuyorsa uyandır (AI uygulaması açıldı, öne geldi ya da robota tıklandı).
+    /// greet: kısa bir balon; always değilse sadece uyuyorduysa gösterilir.
+    func wake(greet: String? = nil, always: Bool = false) {
+        let now = Date()
+        let wasSleeping = state == .sleeping
+        lastEventAt = now
+        if wasSleeping || always, let greet = greet { showOverride(greet, for: 3, now: now) }
+        refresh(now: now)
+    }
+
     func showHistory() {
         let lines = history.suffix(5)
         showOverride(lines.isEmpty ? loc("Henüz bir şey olmadı", "Nothing has happened yet") : lines.joined(separator: "\n"),

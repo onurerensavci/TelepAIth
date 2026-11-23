@@ -44,6 +44,9 @@ internal sealed class AppWatcher
 {
     public event Action<AgentEvent>? EventFound;
     public event Action<Dictionary<string, string>>? StatusChanged;
+    /// <summary>Bir AI uygulaması açıldı (izleme başladıktan sonra): kaynak, uygulama adı</summary>
+    public event Action<string, string>? AppOpened;
+    private bool _firstTick = true;
 
     /// <summary>Tanılama: her uygulamada son taramada ne görüldü</summary>
     public string Diagnostics { get; private set; } = "";
@@ -64,6 +67,7 @@ internal sealed class AppWatcher
     {
         if (_running) return;
         _running = true;
+        _firstTick = true;
         _thread = new Thread(Loop) { IsBackground = true, Name = "TelepAIth AppWatcher" };
         _thread.SetApartmentState(ApartmentState.MTA);
         _thread.Start();
@@ -143,6 +147,8 @@ internal sealed class AppWatcher
                 tracker = new ChatAppTracker(app.Source, app.Pid, app.Name);
                 _trackers[app.Pid] = tracker;
                 lock (_nextScan) _nextScan[app.Pid] = 0;
+                // Yeni açıldı (ilk taramada zaten açık olanlar sayılmaz)
+                if (!_firstTick) AppOpened?.Invoke(app.Source, Themes.Shared.Theme(app.Source).DisplayName);
             }
             double due;
             lock (_nextScan) due = _nextScan.TryGetValue(app.Pid, out var d) ? d : 0;
@@ -169,6 +175,7 @@ internal sealed class AppWatcher
                                  $"  {found.WindowsInfo}";
         }
 
+        _firstTick = false;
         lock (_diag) Diagnostics = _diag.Count == 0 ? "" : string.Join("\n", _diag.Values);
 
         var status = new Dictionary<string, string>();

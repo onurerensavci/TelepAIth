@@ -112,6 +112,13 @@ final class RobotManager {
         Notifier.shared.onClick = { target in RobotManager.activate(target) }
 
         watcher.onEvent = { [weak self] event in self?.handle(event) }
+        // Claude/ChatGPT (yeniden) açıldı: robot uyansın ve söylesin
+        watcher.onAppOpened = { [weak self] source, name in
+            guard let self = self else { return }
+            let m = self.model(for: source)
+            m.wake(greet: withEmoji("👋", loc("\(name) açıldı, buradayım!", "\(name) is open, I'm here!")), always: true)
+            self.chooseDisplay()
+        }
         watcher.onDiagnostics = { diagnostics in
             if Diagnostics.shared.apps != diagnostics { Diagnostics.shared.apps = diagnostics }
         }
@@ -354,6 +361,7 @@ final class RobotManager {
             avatar.current.say(withEmoji("🔴", reason), for: 8)
             if Preferences.watchApps && !AppWatcher.isTrusted { AppWatcher.resetAndRequestTrust() }
         case .ok:
+            avatar.current.wake()
             avatar.current.showHistory()
         }
     }
@@ -363,7 +371,8 @@ final class RobotManager {
     private func frontmostChanged(_ app: NSRunningApplication?) {
         guard let app = app, app.bundleIdentifier != Bundle.main.bundleIdentifier else { return }
         pinnedSource = AppMatcher.source(for: app)
-        if let source = pinnedSource { model(for: source) }
+        // AI uygulamasına geçince robot uyuyorsa uyansın
+        if let source = pinnedSource { model(for: source).wake(greet: withEmoji("👋", loc("Uyandım!", "I'm up!"))) }
         chooseDisplay()
 
         // Sadece AI uygulamasına geçince robot o pencerenin sağ-alt köşesine uçsun.

@@ -196,6 +196,35 @@ foreach ($ui in @("robotmenu", "traymenu", "settings&page=0", "settings&page=1",
   Dbg "ui?open=close" | Out-Null
   Start-Sleep -Milliseconds 300
 }
+# Sahte "Claude" uygulaması: açılınca robot fark etsin, kapatıp yeniden açınca yine fark etsin
+$fakeDir = Join-Path $env:RUNNER_TEMP "fake-claude"
+New-Item -ItemType Directory -Force $fakeDir | Out-Null
+$fake = Join-Path $fakeDir "claude.exe"
+Add-Type -OutputAssembly $fake -OutputType WindowsApplication -ReferencedAssemblies System.Windows.Forms, System.Drawing -TypeDefinition @"
+using System.Windows.Forms;
+public static class FakeClaude {
+  public static void Main() {
+    var f = new Form { Text = "Claude", Width = 900, Height = 650, StartPosition = FormStartPosition.CenterScreen };
+    f.Controls.Add(new TextBox { Multiline = true, Dock = DockStyle.Bottom, Height = 80 });
+    Application.Run(f);
+  }
+}
+"@
+for ($round = 1; $round -le 2; $round++) {
+  $fp = Start-Process -FilePath $fake -PassThru
+  $seen = $false
+  for ($t = 0; $t -lt 16 -and -not $seen; $t++) {
+    Start-Sleep -Milliseconds 500
+    $st = State
+    $seen = ($st.bubble -like "*açıldı*" -or $st.bubble -like "*is open*")
+  }
+  Shot ("10-fake-claude-" + $round)
+  Check $seen "Claude açılınca robot fark etti (tur $round)"
+  Check ($st.state -ne "Sleeping") "robot uyanık (tur $round)"
+  Stop-Process -Id $fp.Id -Force
+  Start-Sleep 4
+}
+
 Check (-not (Test-Path (Join-Path $home2 "error.log"))) "hata günlüğü boş"
 Start-Sleep 2
 if ($p.HasExited) { Get-Content (Join-Path $home2 "error.log") -ErrorAction SilentlyContinue; throw "Uygulama çöktü (kod $($p.ExitCode))" }

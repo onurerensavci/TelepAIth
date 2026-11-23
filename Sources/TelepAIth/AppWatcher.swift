@@ -7,6 +7,10 @@ import ApplicationServices
 /// Çalışırken yazı kutusunun hemen üstündeki son satırı (ör. "Mapping the dot grid…") okuyup söyler.
 final class AppWatcher {
     var onEvent: ((AgentEvent) -> Void)?
+    /// Bir AI uygulaması açıldı (izleme başladıktan sonra): kaynak, uygulama adı
+    var onAppOpened: ((String, String) -> Void)?
+    private var knownPIDs: Set<pid_t> = []
+    private var firstTick = true
     /// Menü için: uygulama adı → ne görüyorum
     var onStatus: (([String: String]) -> Void)?
     /// Teşhis paneli için ayrıntılar
@@ -37,7 +41,7 @@ final class AppWatcher {
         func session(_ pid: pid_t) -> String { "app-\(pid)-\(chatCounter)" }
         var lastFullScan: TimeInterval = 0
         var lastDebugDump: TimeInterval = 0
-        var enabledElectronAX = false
+        var lastAXRequest: TimeInterval = -100
         var sawComposer = false
     }
 
@@ -183,6 +187,8 @@ final class AppWatcher {
         timer?.invalidate()
         timer = nil
         for pid in Array(observers.keys) { unobserve(pid) }
+        knownPIDs = []
+        firstTick = true
         queue.async { self.states = [:] }
         onStatus?([:])
     }
@@ -221,6 +227,12 @@ final class AppWatcher {
             return Target(pid: app.processIdentifier, source: source, name: app.localizedName ?? source)
         }
         let alive = Set(targets.map { $0.pid })
+        // Yeni açılan AI uygulamaları (ilk taramada zaten açık olanlar sayılmaz)
+        for target in targets where !knownPIDs.contains(target.pid) && !firstTick {
+            onAppOpened?(target.source, target.name)
+        }
+        knownPIDs = alive
+        firstTick = false
         for pid in Array(observers.keys) where !alive.contains(pid) { unobserve(pid) }
         for target in targets { observe(target.pid) }
         busy = true
@@ -281,10 +293,11 @@ final class AppWatcher {
             var st = states[target.pid] ?? AppState(source: target.source, name: target.name)
             let app = AXUIElementCreateApplication(target.pid)
             AXUIElementSetMessagingTimeout(app, 0.5)
-            if !st.enabledElectronAX {
-                // Electron uygulamaları (Claude) erişilebilirlik ağacını ancak istenince kurar
+            // Electron uygulamaları (Claude) erişilebilirlik ağacını ancak istenince kurar. Uygulama yeni açıldıysa
+            // ilk istek boşa gidebilir: yazı kutusu görülene kadar 3 sn'de bir, sonra 30 sn'de bir yeniden iste.
+            if now - st.lastAXRequest > (st.sawComposer ? 30 : 3) {
                 AXUIElementSetAttributeValue(app, "AXManualAccessibility" as CFString, kCFBooleanTrue)
-                st.enabledElectronAX = true
+                st.lastAXRequest = now
             }
 
             var found = Found()

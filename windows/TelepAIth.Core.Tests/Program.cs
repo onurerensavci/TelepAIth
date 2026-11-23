@@ -270,6 +270,23 @@ public static class Tests
         A.Eq("1.5 / 60.0 MB", UpdatePlan.Progress(1572864, 62914560));
     }
 
+    public static void WakeFromSleep()
+    {
+        var m = new RobotModel("claude");
+        var later = DateTime.Now.AddSeconds(700);
+        m.Refresh(later);
+        A.Eq(RobotState.Sleeping, m.State);
+        m.Wake("👋 Uyandım!", at: later);
+        A.Eq(RobotState.Idle, m.State);
+        A.True(m.BubbleText?.Contains("Uyandım") == true, "uyanınca selam verir");
+        // Uyanıkken (always olmadan) selam vermez
+        var awake = new RobotModel("gpt");
+        awake.Wake("👋 Uyandım!");
+        A.True(awake.BubbleText?.Contains("Uyandım") != true, "uyanıkken sessiz");
+        awake.Wake("ChatGPT açıldı", always: true);
+        A.True(awake.BubbleText?.Contains("açıldı") == true, "always: her zaman söyler");
+    }
+
     public static void ModelStopNotice()
     {
         var m = new RobotModel("claude");

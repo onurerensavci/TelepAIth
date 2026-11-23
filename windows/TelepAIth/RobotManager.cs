@@ -77,6 +77,13 @@ internal sealed class RobotManager
         Notifier.OnClick = Activate;
 
         _watcher.EventFound += e => Application.Current.Dispatcher.BeginInvoke(() => Handle(e));
+        // Claude/ChatGPT (yeniden) açıldı: robot uyansın ve söylesin
+        _watcher.AppOpened += (source, name) => Application.Current.Dispatcher.BeginInvoke(() =>
+        {
+            Model(source).Wake(WithEmoji("👋", L($"{name} açıldı, buradayım!", $"{name} is open, I'm here!")), always: true);
+            ChooseDisplay();
+            Changed?.Invoke();
+        });
         _watcher.StatusChanged += st => Application.Current.Dispatcher.BeginInvoke(() =>
         {
             WatcherStatus = st;
@@ -252,6 +259,7 @@ internal sealed class RobotManager
                 _avatar.Current.Say(WithEmoji("🔴", _avatar.HealthText), 8);
                 break;
             default:
+                _avatar.Current.Wake();
                 _avatar.Current.ShowHistory();
                 break;
         }
@@ -399,7 +407,8 @@ internal sealed class RobotManager
         if (pid == Environment.ProcessId) return;   // kendi pencerelerimiz (ayarlar, menü)
         var name = AppMatcher.ProcessName(pid);
         _pinnedSource = AppMatcher.Source(name);
-        if (_pinnedSource != null) Model(_pinnedSource);
+        // AI uygulamasına geçince robot uyuyorsa uyansın
+        if (_pinnedSource != null) Model(_pinnedSource).Wake(WithEmoji("👋", L("Uyandım!", "I'm up!")));
         ChooseDisplay();
         if (Prefs.WatchApps) _watcher.Kick(pid);
 
