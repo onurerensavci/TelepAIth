@@ -1,5 +1,6 @@
 import AppKit
 import ApplicationServices
+import Darwin
 
 /// Claude, ChatGPT ve Codex masaüstü uygulamalarını Erişilebilirlik API'siyle izler.
 /// Bu uygulamaların hook'u yok; pencerenin alt kısmında "Durdur" düğmesi görünüyorsa AI çalışıyordur,
@@ -43,6 +44,17 @@ final class AppWatcher {
         var lastDebugDump: TimeInterval = 0
         var lastAXRequest: TimeInterval = -100
         var sawComposer = false
+        /// İlk görüldüğü an; ekran 8 sn boyunca okunamazsa işlemciden tahmin (yedek yol)
+        var firstSeen: TimeInterval?
+        var askedEnhancedUI = false
+        var lastCPUSeconds: Double?
+        var lastCPUAt: TimeInterval?
+        var cpuPercent: Double = 0
+        var cpuHighPolls = 0
+        var cpuLowSince: TimeInterval?
+        func cpuMode(_ now: TimeInterval) -> Bool {
+            !sawComposer && firstSeen.map { now - $0 >= AppWatcher.cpuModeAfter } == true
+        }
         /// Yan menüden izlenen, açık olmayan (arkada çalışan) sohbetler
         var background: SidebarChats?
         var lastSidebarScan: TimeInterval = -100
@@ -310,6 +322,13 @@ final class AppWatcher {
                 st.lastAXRequest = now
             }
 
+            if st.firstSeen == nil { st.firstSeen = now }
+            // Yerli uygulamalar (ChatGPT) ağacı ancak bir ekran okuyucu "tam arayüz" isteyince kurabilir: ağaç boşsa bir kez iste
+            if !st.sawComposer, !st.askedEnhancedUI, let first = st.firstSeen, now - first >= 3 {
+                AXUIElementSetAttributeValue(app, "AXEnhancedUserInterface" as CFString, kCFBooleanTrue)
+                st.askedEnhancedUI = true
+            }
+
             var found = Found()
             var windowTitle: String?
             let windows = AppWatcher.windows(of: app)
@@ -396,8 +415,12 @@ final class AppWatcher {
             st.lastTail = tail
             let streaming = st.growthPolls >= 2 && now - st.lastGrowthAt < 2.5
 
-            let generatingNow = found.stop != nil || streaming
-            update(&st, pid: target.pid, found: found, generatingNow: generatingNow, streaming: streaming, now: now)
+            // Yedek yol: ekran okunamıyorsa (Mac'te ChatGPT) işlemci kullanımından tahmin
+            let cpuMode = st.cpuMode(now)
+            let cpuBusy = cpuMode && AppWatcher.cpuWorking(&st, pid: target.pid, now: now)
+            let generatingNow = found.stop != nil || streaming || cpuBusy
+            update(&st, pid: target.pid, found: found, generatingNow: generatingNow, streaming: streaming, now: now,
+                   cpuMode: cpuMode)
 
             // Arkadaki sohbetler: yan menüdeki durum noktaları (1,5 sn'de bir)
             if now - st.lastSidebarScan > 1.5, let main = windows.first, let wf = AppWatcher.frame(main), wf.width >= 600 {
@@ -417,7 +440,12 @@ final class AppWatcher {
                 }
             }
 
-            if !st.sawComposer {
+            if cpuMode {
+                let pct = Int(st.cpuPercent.rounded())
+                status[target.name] = st.generating
+                    ? loc("ekran okunamıyor, işlemciden tahmini: çalışıyor (%\(pct))", "screen unreadable, guessing from CPU: working (\(pct)%)")
+                    : loc("ekran okunamıyor, işlemciden tahmini: boşta (%\(pct))", "screen unreadable, guessing from CPU: idle (\(pct)%)")
+            } else if !st.sawComposer {
                 status[target.name] = loc("yazı kutusu bulunamadı", "can't find the input box")
             } else if st.approving {
                 status[target.name] = loc("onay bekliyor", "waiting for approval")
@@ -473,7 +501,8 @@ final class AppWatcher {
         return nil
     }
 
-    private func update(_ st: inout AppState, pid: pid_t, found: Found, generatingNow: Bool, streaming: Bool, now: TimeInterval) {
+    private func update(_ st: inout AppState, pid: pid_t, found: Found, generatingNow: Bool, streaming: Bool, now: TimeInterval,
+                        cpuMode: Bool = false) {
         let session = st.session(pid)
         let question = AppWatcher.question(found.texts)
         let asking = question != nil
@@ -508,7 +537,7 @@ final class AppWatcher {
                                         text: p.phrase, emoji: p.emoji))
                 }
             }
-        } else if st.generating && !asking && found.buttonLabels.isEmpty && found.texts.isEmpty && found.composer == nil {
+        } else if st.generating && !asking && !cpuMode && found.buttonLabels.isEmpty && found.texts.isEmpty && found.composer == nil {
             // Hiçbir şey okunamadı (uygulama arkadayken erişilebilirlik ağacı boş gelebilir): bu "bitti" demek değil,
             // son bilinen durum kalsın. Gerçekten takılırsa 5 dk sonra kendiliğinden boşa düşer. (Windows'ta ChatAppTracker)
             st.quietPolls = 0
@@ -811,7 +840,51 @@ final class AppWatcher {
     }
 
     private static func children(_ element: AXUIElement) -> [AXUIElement]? {
-        value(element, kAXChildrenAttribute) as? [AXUIElement]
+        if let kids = value(element, kAXChildrenAttribute) as? [AXUIElement], !kids.isEmpty { return kids }
+        // Bazı yerli (SwiftUI) uygulamalar alt öğeleri başka adla verir
+        for attr in ["AXChildrenInNavigationOrder", kAXVisibleChildrenAttribute, kAXContentsAttribute] {
+            if let kids = value(element, attr) as? [AXUIElement], !kids.isEmpty { return kids }
+        }
+        return nil
+    }
+
+    // MARK: - Yedek yol: işlemci kullanımı (Windows'ta ChatAppTracker.CpuWorking'in aynısı)
+
+    static let cpuModeAfter: TimeInterval = 8
+    static let cpuBusyPercent = 12.0
+    static let cpuIdlePercent = 5.0
+
+    /// Sürecin şimdiye kadar kullandığı işlemci süresi (saniye)
+    private static func cpuSeconds(_ pid: pid_t) -> Double? {
+        var info = rusage_info_v2()
+        let result = withUnsafeMutablePointer(to: &info) { ptr in
+            ptr.withMemoryRebound(to: rusage_info_t?.self, capacity: 1) { proc_pid_rusage(pid, RUSAGE_INFO_V2, $0) }
+        }
+        guard result == 0 else { return nil }
+        var timebase = mach_timebase_info_data_t()
+        mach_timebase_info(&timebase)
+        let ticks = Double(info.ri_user_time + info.ri_system_time)
+        return ticks * Double(timebase.numer) / Double(timebase.denom) / 1_000_000_000
+    }
+
+    /// İşlemci kullanımından "çalışıyor mu": 2 tarama üst üste yüksekse başlar, 3 sn düşük kalınca biter
+    private static func cpuWorking(_ st: inout AppState, pid: pid_t, now: TimeInterval) -> Bool {
+        guard let cpu = cpuSeconds(pid) else { return false }
+        if let lc = st.lastCPUSeconds, let la = st.lastCPUAt, now > la {
+            st.cpuPercent = Swift.max(0, (cpu - lc) / (now - la) * 100)
+        }
+        st.lastCPUSeconds = cpu
+        st.lastCPUAt = now
+        if st.cpuPercent >= cpuBusyPercent {
+            st.cpuHighPolls += 1
+            st.cpuLowSince = nil
+        } else {
+            st.cpuHighPolls = 0
+            if st.cpuPercent < cpuIdlePercent && st.cpuLowSince == nil { st.cpuLowSince = now }
+        }
+        if !st.generating { return st.cpuHighPolls >= 2 }
+        if let low = st.cpuLowSince, now - low >= 3 { return false }
+        return true
     }
 
     /// Ekran koordinatında çerçeve (sol-üst köken, AX'in kullandığı)

@@ -710,6 +710,35 @@ public static class Tests
         A.Eq("Sohbet B", bg.Find(id)?.Title);
     }
 
+    public static void TrackerCpuFallback()
+    {
+        // Ekran hiç okunamıyor (Mac'te ChatGPT gibi): 8 sn sonra işlemci kullanımından tahmin
+        var t = new ChatAppTracker("gpt", 31, "ChatGPT");
+        var blind = new FoundUi();
+        double cpu = 0;
+        var events = new List<AgentEvent>();
+        for (var s = 0.0; s <= 8; s += 1) { cpu += 0.01; events.AddRange(t.Update(blind, "ChatGPT", s, cpu)); }
+        A.True(t.CpuMode, "8 sn sonra yedek yol");
+        A.True(!events.Any(e => e.Kind == EventKind.Prompt), "boştayken çalışıyor sanma");
+        // Cevap yazıyor: işlemci %40
+        for (var s = 9.0; s <= 12; s += 1) { cpu += 0.4; events.AddRange(t.Update(blind, "ChatGPT", s, cpu)); }
+        A.True(events.Any(e => e.Kind == EventKind.Prompt) && t.Generating, "işlemci yükselince çalışıyor");
+        // Kısa bir düşüş bitirmez
+        cpu += 0.02; t.Update(blind, "ChatGPT", 13, cpu);
+        cpu += 0.4; t.Update(blind, "ChatGPT", 14, cpu);
+        A.True(t.Generating, "kısa düşüş bitirmez");
+        // Bitti: işlemci düştü ve 3 sn+ düşük kaldı
+        events.Clear();
+        for (var s = 15.0; s <= 22; s += 1) { cpu += 0.01; events.AddRange(t.Update(blind, "ChatGPT", s, cpu)); }
+        A.True(events.Any(e => e.Kind == EventKind.Stop) && !t.Generating, "işlemci düşünce bitti");
+        A.True(t.StatusText.Contains("%") || t.StatusText.Contains("CPU"), t.StatusText);
+        // Ekranı okunabilen uygulamada yedek yol devreye girmez
+        var c = new ChatAppTracker("claude", 32, "Claude");
+        var ui = new FoundUi { Composer = new RectD(0, 800, 600, 60) };
+        for (var s = 0.0; s <= 12; s += 1) c.Update(ui, "Claude", s, s * 0.5);
+        A.True(!c.CpuMode && !c.Generating);
+    }
+
     public static void DailySummaryText()
     {
         var stats = new DailyStats(null);

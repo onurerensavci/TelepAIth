@@ -164,6 +164,40 @@ public sealed class ChatAppTracker
     private int _quietPolls;
     private int _chatCounter;
     private double _startedAt, _lastPhaseAt, _lastHeartbeat, _lastGrowthAt, _lastActiveAt;
+    private double? _firstSeen;
+
+    /// <summary>
+    /// Yedek yol: uygulamanın ekranı hiç okunamıyorsa (ör. Mac'te ChatGPT) çalışıp çalışmadığını işlemci kullanımından tahmin et.
+    /// Cevap yazarken işlemci belirgin yükselir; 8 sn boyunca yazı kutusu görülemezse bu yola geçilir.
+    /// </summary>
+    public bool CpuMode => !SawComposer && _firstSeen is { } f && _lastNow - f >= CpuModeAfter;
+    public const double CpuModeAfter = 8, CpuBusyPercent = 12, CpuIdlePercent = 5;
+    public double CpuPercent { get; private set; }
+    private double? _lastCpuSeconds, _lastCpuAt, _cpuLowSince;
+    private int _cpuHighPolls;
+    private double _lastNow;
+
+    /// <summary>İşlemci kullanımından "çalışıyor mu" (yedek yol): 2 tarama üst üste yüksekse başlar, 3 sn düşük kalınca biter</summary>
+    private bool CpuWorking(double? cpuSeconds, double now)
+    {
+        if (cpuSeconds is not { } cpu) return false;
+        if (_lastCpuSeconds is { } lc && _lastCpuAt is { } la && now > la)
+            CpuPercent = Math.Max(0, (cpu - lc) / (now - la) * 100);
+        _lastCpuSeconds = cpu;
+        _lastCpuAt = now;
+        if (CpuPercent >= CpuBusyPercent)
+        {
+            _cpuHighPolls++;
+            _cpuLowSince = null;
+        }
+        else
+        {
+            _cpuHighPolls = 0;
+            if (CpuPercent < CpuIdlePercent) _cpuLowSince ??= now;
+        }
+        if (!Generating) return _cpuHighPolls >= 2;
+        return !(_cpuLowSince is { } low && now - low >= 3);
+    }
     private string? _lastTail;
     private int _growthPolls;
 
@@ -198,7 +232,10 @@ public sealed class ChatAppTracker
         return path.Length == 0 || path.EndsWith("/new", StringComparison.OrdinalIgnoreCase);
     }
 
-    public string StatusText => !SawComposer ? L("yazı kutusu bulunamadı", "can't find the input box")
+    public string StatusText => CpuMode
+            ? L($"ekran okunamıyor, işlemciden tahmini: {(Generating ? "çalışıyor" : "boşta")} (%{CpuPercent:0})",
+                $"screen unreadable, guessing from CPU: {(Generating ? "working" : "idle")} ({CpuPercent:0}%)")
+        : !SawComposer ? L("yazı kutusu bulunamadı", "can't find the input box")
         : Approving ? L("onay bekliyor", "waiting for approval")
         : Generating ? L("çalışıyor", "working")
         : L("izleniyor", "watching");
@@ -230,8 +267,10 @@ public sealed class ChatAppTracker
     }
 
     /// <summary>Bir tarama sonucunu işler; robota gönderilecek olayları döner. now: saniye (monoton).</summary>
-    public List<AgentEvent> Update(FoundUi found, string? windowTitle, double now)
+    public List<AgentEvent> Update(FoundUi found, string? windowTitle, double now, double? cpuSeconds = null)
     {
+        _firstSeen ??= now;
+        _lastNow = now;
         var events = new List<AgentEvent>();
         var question = Question(found);
         var asking = question != null;
@@ -283,7 +322,8 @@ public sealed class ChatAppTracker
         }
         _lastTail = tail;
         var streaming = _growthPolls >= 2 && now - _lastGrowthAt < 2.5;
-        var generatingNow = found.Stop != null || streaming;
+        var cpuMode = CpuMode;
+        var generatingNow = found.Stop != null || streaming || (cpuMode && CpuWorking(cpuSeconds, now));
 
         if (generatingNow)
         {
@@ -316,7 +356,7 @@ public sealed class ChatAppTracker
                 }
             }
         }
-        else if (Generating && !asking && found.ButtonLabels.Count == 0 && found.Texts.Count == 0 && found.Composer == null)
+        else if (Generating && !asking && !cpuMode && found.ButtonLabels.Count == 0 && found.Texts.Count == 0 && found.Composer == null)
         {
             // Hiçbir şey okunamadı (uygulama arkadayken erişilebilirlik ağacı boş gelebilir): bu "bitti" demek değil,
             // son bilinen durum kalsın. Gerçekten takılırsa 5 dk sonra kendiliğinden boşa düşer.

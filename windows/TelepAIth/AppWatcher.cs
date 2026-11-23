@@ -165,7 +165,14 @@ internal sealed class AppWatcher
             var started = Now;
             var found = Scan(app);
             var title = Native.WindowTitle(app.Window);
-            foreach (var e in tracker.Update(found, title, Now))
+            // Ekran okunamıyorsa yedek yol: işlemci kullanımı
+            double? cpu = null;
+            if (tracker.CpuMode || !tracker.SawComposer)
+            {
+                try { using var proc = Process.GetProcessById(app.Pid); cpu = proc.TotalProcessorTime.TotalSeconds; }
+                catch { }
+            }
+            foreach (var e in tracker.Update(found, title, Now, cpu))
             {
                 e.AppProcess ??= app.Name;
                 EventFound?.Invoke(e);
