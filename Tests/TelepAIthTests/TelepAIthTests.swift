@@ -116,6 +116,33 @@ final class TelepAIthTests: XCTestCase {
         XCTAssertTrue(HookInstaller.command(source: "claude").contains("app=${__CFBundleIdentifier:-}"))
     }
 
+    func testGesturesAndEyeGlyphs() {
+        let m = RobotModel(source: "claude")
+        let t0 = Date()
+        _ = m.apply(AgentEvent(source: "claude", sessionID: "s", kind: .prompt, state: .thinking, text: "x"), now: t0)
+        _ = m.apply(AgentEvent(source: "claude", sessionID: "s", kind: .waiting, state: .waiting, text: "onay"), now: t0.addingTimeInterval(1))
+        XCTAssertEqual(m.eyeGlyph(at: t0.addingTimeInterval(1.5)), "!")
+        var q = AgentEvent(source: "claude", sessionID: "s", kind: .waiting, state: .waiting, text: "Bir soru?")
+        q.emoji = "❓"
+        _ = m.apply(q, now: t0.addingTimeInterval(2))
+        XCTAssertTrue(m.isAsking)
+        XCTAssertEqual(m.eyeGlyph(at: t0.addingTimeInterval(2.5)), "?")
+        _ = m.apply(AgentEvent(source: "claude", sessionID: "s", kind: .toolDone, state: .thinking), now: t0.addingTimeInterval(3))
+        _ = m.apply(AgentEvent(source: "claude", sessionID: "s", kind: .stop, state: .done), now: t0.addingTimeInterval(4))
+        XCTAssertEqual(m.gesture, .thumbsUp)
+        XCTAssertEqual(m.eyeGlyph(at: m.visualChangedAt.addingTimeInterval(0.5)), "✓")
+        XCTAssertNil(m.eyeGlyph(at: m.visualChangedAt.addingTimeInterval(2)))
+        _ = m.apply(AgentEvent(source: "claude", sessionID: "s", kind: .prompt, state: .thinking, text: "y"), now: t0.addingTimeInterval(10))
+        _ = m.apply(AgentEvent(source: "claude", sessionID: "s", kind: .failure, state: .error, text: "patladı"), now: t0.addingTimeInterval(11))
+        XCTAssertEqual(m.gesture, .facepalm)
+        let w = RobotModel(source: "gpt")
+        w.wake(greet: "Merhaba", always: true)
+        XCTAssertEqual(w.gesture, .wave)
+        w.react(.dizzy, for: 2.5, say: "Başım döndü!")
+        XCTAssertEqual(w.mood, .dizzy)
+        XCTAssertNil(w.eyeGlyph(at: Date()))
+    }
+
     func testSessionTargetAndMinis() {
         let m = RobotModel(source: "claude")
         var a = AgentEvent(source: "claude", sessionID: "a", kind: .prompt, state: .thinking, text: "x")

@@ -36,6 +36,8 @@
 - Eyleme göre emojiyle konuşur: düşünürken 🔮, okurken 📖, test çalıştırırken 🧪, paket kurarken 📦, `git push`'ta 🚀, bitince 🎉, seni beklerken ✋.
 - İş bitince tur özeti verir: *Tamamdır! · 2 dk · 12 araç · 4 düzenleme*.
 - Ruh hâlleri var: teşekkür edince gözleri kalp olur, BÜYÜK HARFLE yazınca şaşırır, `rm -rf` görünce korkar, testler geçince parti yapar, üst üste 3 hatada başı döner.
+- El hareketleri ve gözleri: iş bitince başparmak kaldırır (büyük işlerde alkışlar), uygulama açılınca el sallar, onay beklerken balonu gösterir, hatada eliyle alnına vurur. Gözlerinde ? (soru soruyor), ! (onay bekliyor), ✓ (bitti) ve % (kota azaldı) yanar. Boştayken gözleriyle imleci izler, üstüne gelince gülümser; art arda tıklarsan başı döner.
+- Aralık – 6 Ocak arası bere takar, etrafında kar yağar (Ayarlar → Genel → Kostüm).
 - Türkçe ya da İngilizce konuşur. İstersen sesli söyler, kısa sesler çalar.
 
 **🔔 Haber verir**

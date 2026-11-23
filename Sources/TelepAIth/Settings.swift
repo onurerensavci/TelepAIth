@@ -99,6 +99,16 @@ struct SettingsView: View {
                         Text(loc(option.1, option.2) + " (%\(Int(option.0 * 100)))").tag(option.0)
                     }
                 }
+                Picker(loc("Kostüm", "Costume"), selection: Binding(get: {
+                    ["winter", "off"].contains(Preferences.costume) ? Preferences.costume : "auto"
+                }, set: { value in
+                    Preferences.costume = value
+                    model.changed()
+                })) {
+                    Text(loc("Otomatik (Aralık – 6 Ocak)", "Automatic (Dec – Jan 6)")).tag("auto")
+                    Text(loc("Kış", "Winter")).tag("winter")
+                    Text(loc("Kapalı", "Off")).tag("off")
+                }
                 Toggle(loc("Mac açılınca başlasın", "Open at login"),
                        isOn: model.toggle({ LaunchAtLogin.isEnabled || LaunchAtLogin.needsApproval }, { LaunchAtLogin.set($0) }))
                 if LaunchAtLogin.needsApproval {

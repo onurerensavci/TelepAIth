@@ -31,6 +31,7 @@ internal sealed class RobotView : FrameworkElement
 
     private RichLayout? _body;
     private string? _bodyKey;
+    private double _hover, _lastFaceTime;
 
     public RobotView(RobotAvatar avatar)
     {
@@ -338,6 +339,34 @@ internal sealed class RobotView : FrameworkElement
         var lift = hop - flt + idle.Lift;
         var tilt = Mix(HeadTilt(model.PreviousState, model.PreviousMood, time), HeadTilt(state, mood, time), blend) + idle.Tilt;
 
+        // Gözde simge: ? soru, ! onay bekliyor, ✓ yeni bitti, % kota azaldı
+        var stateAge = time - Seconds(model.VisualChangedAt == DateTime.MinValue ? Epoch : model.VisualChangedAt);
+        var glyph = model.EyeGlyph(DateTime.Now);
+        var prevGlyph = model.PreviousState == RobotState.Waiting ? '!' : '\0';
+
+        // Boştayken imlece bak; üstüne gelince gözlerini kısıp gülümse
+        var dt = Math.Clamp(time - _lastFaceTime, 0, 0.1);
+        _lastFaceTime = time;
+        double lookU = look / 2.5, lookV = 0, hoverTarget = 0;
+        if (state == RobotState.Idle && mood == null)
+        {
+            var c = Native.Cursor();
+            var px = _avatar.PixelScale;
+            double cdx = c.X - _avatar.HeadX, cdy = c.Y - _avatar.HeadY;
+            var dist = Math.Sqrt(cdx * cdx + cdy * cdy);
+            if (dist < 900 * px)
+            {
+                lookU = Math.Clamp(cdx / (220 * px), -1, 1) * 1.6;
+                lookV = Math.Clamp(cdy / (220 * px), -1, 1) * 0.9;
+            }
+            if (dist < _avatar.HeadPx * 0.45) hoverTarget = 1;
+        }
+        _hover += (hoverTarget - _hover) * Math.Min(1, dt * 8);
+        var winter = WinterActive;
+        var face = new FaceCtx(state, mood, model.PreviousState, model.PreviousMood, blend, idle, glyph, prevGlyph, lookU, lookV, _hover, winter);
+        var gt = model.GestureStart is { } gs ? Seconds(DateTime.Now) - Seconds(gs) : -1;
+        var right = look > 0;   // balonun açıldığı taraf (ekranın içi)
+
         // Gölge
         dc.DrawEllipse(B(Colors.Black, 0.14), null, new Point(50, 96), Math.Max(24, 58 - lift * 1.5) / 2, 3);
 
@@ -350,7 +379,9 @@ internal sealed class RobotView : FrameworkElement
         if (skin != null)
             dc.DrawImage(skin, FitRect(skin, new Rect(2, 3, 96, 90)));
         else
-            DrawFace(dc, state, mood, time, look, eyeColor, model.PreviousState, model.PreviousMood, blend, idle);
+            DrawFace(dc, time, eyeColor, face, C(baseColor));
+        // Hata: eli alnına (yüzle birlikte hareket etsin)
+        if (model.Gesture == Gesture.Facepalm && gt is >= 0 and <= 1.6) DrawFacepalm(dc, gt, right);
         dc.Pop();
 
         if (state is RobotState.Thinking or RobotState.Delegating or RobotState.Reading or RobotState.Searching)
@@ -366,13 +397,18 @@ internal sealed class RobotView : FrameworkElement
         }
         if (state == RobotState.Sleeping) DrawZzz(dc, time);
 
-        // İş bitti: başparmak (balonun açıldığı tarafta, başın alt köşesinde)
-        if (model.CelebrateStart is { } done && Seconds(DateTime.Now) - Seconds(done) is var tu and >= 0 and <= ThumbsDuration)
+        // El hareketleri: iş bitti (başparmak/alkış), merhaba (el sallama), onay bekliyor (balonu göster)
+        dc.PushTransform(new TranslateTransform(0, -lift));
+        switch (model.Gesture)
         {
-            dc.PushTransform(new TranslateTransform(0, -lift));
-            DrawThumbsUp(dc, tu, look > 0);
-            dc.Pop();
+            case Gesture.ThumbsUp when gt is >= 0 and <= ThumbsDuration: DrawThumbsUp(dc, gt, right); break;
+            case Gesture.Clap when gt is >= 0 and <= 2.0: DrawClap(dc, gt); break;
+            case Gesture.Wave when gt is >= 0 and <= 1.8: DrawWave(dc, gt, right); break;
         }
+        if (state == RobotState.Waiting && (stateAge < 3.2 || (stateAge > 30 && stateAge % 10 < 2.2)))
+            DrawPoint(dc, stateAge < 3.2 ? stateAge : stateAge % 10, right, _avatar.BubbleBelow);
+        dc.Pop();
+        if (winter) DrawSnow(dc, time);
 
         if (IsNudging(model, time))
         {
@@ -398,41 +434,83 @@ internal sealed class RobotView : FrameworkElement
 
     private static double Mix(double a, double b, double t) => a + (b - a) * t;
 
-    private void DrawFace(DrawingContext dc, RobotState state, Mood? mood, double time, double look, Color eyeColor,
-        RobotState prevState, Mood? prevMood, double blend, IdleMotion idle)
+    /// <summary>Yüzü çizmek için gereken her şey (durum, geçiş, boştaki hareket, göz simgesi, imlece bakış, kostüm)</summary>
+    private readonly record struct FaceCtx(
+        RobotState State, Mood? Mood, RobotState PrevState, Mood? PrevMood, double Blend, IdleMotion Idle,
+        char Glyph, char PrevGlyph, double LookU, double LookV, double Hover, bool Winter);
+
+    private void DrawFace(DrawingContext dc, double time, Color eyeColor, FaceCtx f, Color theme)
     {
         dc.DrawEllipse(B(Bolt), null, new Point(6, 50), 6, 6);
         dc.DrawEllipse(B(Bolt), null, new Point(94, 50), 6, 6);
         dc.DrawRoundedRectangle(ShellBrush, null, new Rect(7, 15, 86, 70), 24, 24);
         dc.DrawRoundedRectangle(B(Visor), null, new Rect(15, 30, 70, 44), 18, 18);
-        DrawEyes(dc, state, mood, time, look, eyeColor, prevState, prevMood, blend, idle);
+        DrawEyes(dc, time, eyeColor, f);
 
-        // Alında sağlık ışığı
+        // Alında sağlık ışığı (berede ponpon o renkte yanar)
         var (led, op) = _avatar.Health switch
         {
             Health.Update => (C(1.0, 0.6, 0.2), 0.6 + 0.4 * Math.Sin(time * 3)),
             Health.Broken => (C(0.97, 0.3, 0.3), Math.Sin(time * 6) > 0 ? 1.0 : 0.3),
-            _ => (C(0.2, 0.83, 0.47), state == RobotState.Sleeping ? 0.45 : 0.85 + 0.15 * Math.Sin(time * 2)),
+            _ => (C(0.2, 0.83, 0.47), f.State == RobotState.Sleeping ? 0.45 : 0.85 + 0.15 * Math.Sin(time * 2)),
         };
+        if (f.Winter)
+        {
+            DrawBeanie(dc, theme, _avatar.Health == Health.Ok ? null : led, op);
+            return;
+        }
         dc.DrawEllipse(B(led, 0.3 * op), null, new Point(50, 22.5), 5.5, 5.5);
         dc.DrawEllipse(B(led, op), null, new Point(50, 22.5), 2.5, 2.5);
     }
+
+    // MARK: Kış kostümü
+
+    private static readonly Geometry BeanieDome = Frozen(Geometry.Parse("M 15,23 C 15,8 30,1 50,1 C 70,1 85,8 85,23 Z"));
+
+    private static void DrawBeanie(DrawingContext dc, Color theme, Color? pompomGlow, double glowOpacity)
+    {
+        var edge = new Pen(B(HandEdge), 1);
+        dc.DrawGeometry(B(theme), null, BeanieDome);
+        var rib = new Pen(B(Color.FromRgb((byte)(theme.R * 0.82), (byte)(theme.G * 0.82), (byte)(theme.B * 0.82))), 1.2);
+        foreach (var x in new[] { 32.0, 41, 50, 59, 68 }) dc.DrawLine(rib, new Point(x, x == 50 ? 5 : 8), new Point(x, 19));
+        dc.DrawRoundedRectangle(B(C(0.965, 0.953, 0.933)), edge, new Rect(11, 17, 78, 10), 5, 5);
+        if (pompomGlow is { } g) dc.DrawEllipse(B(g, 0.35 * glowOpacity), null, new Point(50, 2), 9, 9);
+        dc.DrawEllipse(pompomGlow is { } g2 ? B(g2, Math.Max(0.5, glowOpacity)) : B(C(0.965, 0.953, 0.933)), edge, new Point(50, 2), 5.5, 5.5);
+    }
+
+    private static void DrawSnow(DrawingContext dc, double time)
+    {
+        for (var i = 0; i < 12; i++)
+        {
+            var speed = 9 + i % 4 * 3;
+            var y = (time * speed + i * 37) % 140 - 25;
+            var x = (i * 53 % 130) - 15 + Math.Sin(time * 0.9 + i) * 5;
+            var r = 0.9 + i % 3 * 0.4;
+            dc.DrawEllipse(B(Colors.White, 0.75 * Math.Min(1, (115 - y) / 30)), null, new Point(x, y), r, r);
+        }
+    }
+
+    public static bool WinterActive => Prefs.Costume switch
+    {
+        "winter" => true,
+        "off" => false,
+        _ => DateTime.Now is { Month: 12 } or { Month: 1, Day: <= 6 },
+    };
 
     // MARK: Nokta matris gözler (her göz 14 × 18 nokta)
 
     private const int Cols = 14, Rows = 18;
     private const double Spacing = 1.75, Dot = 1.3;
 
-    private static void DrawEyes(DrawingContext dc, RobotState state, Mood? mood, double time, double look, Color color,
-        RobotState prevState, Mood? prevMood, double blend, IdleMotion idle)
+    private static void DrawEyes(DrawingContext dc, double time, Color color, FaceCtx f)
     {
-        var tint = state == RobotState.Error && mood == null ? C(1, 0.42, 0.42) : color;
+        var tint = f.State == RobotState.Error && f.Mood == null ? C(1, 0.42, 0.42) : color;
         var dim = B(tint, 0.09);
         double[] centers = { 50 - 14, 50 + 14 };
         const double cy = 52;
         var midC = (Cols - 1) / 2.0;
         var midR = (Rows - 1) / 2.0;
-        var blinking = state != RobotState.Waiting && mood == null && idle.Kind == IdleKind.None && (time % 4.2) < 0.12;
+        var blinking = f.State != RobotState.Waiting && f.Mood == null && f.Idle.Kind == IdleKind.None && f.Hover < 0.5 && (time % 4.2) < 0.12;
         for (var eye = 0; eye < 2; eye++)
         {
             for (var r = 0; r < Rows; r++)
@@ -443,9 +521,9 @@ internal sealed class RobotView : FrameworkElement
                     var y = cy + (r - midR) * Spacing;
                     var u = (c - midC) / 2 + 3;
                     var v = (r - midR) / 2 + 4;
-                    var b = Brightness(state, mood, u, v, eye, time, look, blinking, idle);
+                    var b = Brightness(f.State, f.Mood, u, v, eye, time, blinking, f.Idle, f.Glyph, f.LookU, f.LookV, f.Hover);
                     // Yüz değiştiyse eskisiyle yenisi arasında yumuşak geçiş
-                    if (blend < 1) b = Mix(Brightness(prevState, prevMood, u, v, eye, time, look, false, default), b, blend);
+                    if (f.Blend < 1) b = Mix(Brightness(f.PrevState, f.PrevMood, u, v, eye, time, false, default, f.PrevGlyph, f.LookU, f.LookV, 0), b, f.Blend);
                     if (b > 0.05)
                     {
                         dc.DrawEllipse(B(tint, 0.25 * b), null, new Point(x, y), Dot / 2 + 0.8, Dot / 2 + 0.8);
@@ -460,9 +538,12 @@ internal sealed class RobotView : FrameworkElement
         }
     }
 
-    private static double Brightness(RobotState state, Mood? mood, double u, double v, int eye, double time, double look, bool blinking, IdleMotion idle)
+    private static double Brightness(RobotState state, Mood? mood, double u, double v, int eye, double time, bool blinking,
+        IdleMotion idle, char glyph, double lookU, double lookV, double hover)
     {
-        var lookShift = look / 2.5 + idle.Look;
+        // Gözde simge: ? soru soruyor, ! onay bekliyor, ✓ bitti, % kota azaldı
+        if (glyph != '\0') return Glyph(glyph, u, v) * (0.85 + 0.15 * Math.Sin(time * 6));
+        var lookShift = lookU + idle.Look;
         if (mood is { } m)
         {
             return m switch
@@ -489,14 +570,14 @@ internal sealed class RobotView : FrameworkElement
             RobotState.Running or RobotState.Delegating =>
                 Capsule(u, v, 3, 4, 1.6, 2.8) * (0.75 + 0.25 * Math.Sin(time * 18 + u * 2.6 + v * 1.4)),
             RobotState.Waiting => Capsule(u, v, 3, 4, 2.5, 3.9) * (0.75 + 0.25 * Math.Sin(time * 6)),
-            _ => IdleEyes(u, v, eye, lookShift, idle),
+            _ => Mix(IdleEyes(u, v, eye, lookShift, lookV, idle), Arc(u, v, 3, 6.2, 2.7), hover),
         };
     }
 
-    /// Boştayken gözler: normal kapsül + o anki küçük hareket (göz kırpma, tarama, esneme)
-    private static double IdleEyes(double u, double v, int eye, double lookShift, IdleMotion idle)
+    /// <summary>Boştayken gözler: imlece bakan kapsül + o anki küçük hareket (göz kırpma, tarama, esneme)</summary>
+    private static double IdleEyes(double u, double v, int eye, double lookShift, double lookV, IdleMotion idle)
     {
-        var b = Capsule(u, v, 3 + lookShift, 4, 1.7, 3.3);
+        var b = Capsule(u, v, 3 + lookShift, 4 + lookV, 1.7, 3.3);
         switch (idle.Kind)
         {
             case IdleKind.Wink when eye == idle.Side:
@@ -511,6 +592,43 @@ internal sealed class RobotView : FrameworkElement
                 return Mix(b, Capsule(u, v, 3, 4.9, 2.0, 0.9 + 0.4 * Math.Sin(idle.P * Math.PI)), idle.Env);
             default:
                 return b;
+        }
+    }
+
+    // MARK: Göz simgeleri (nokta matriste çizilen işaretler)
+
+    private static double Seg(double u, double v, double ax, double ay, double bx, double by, double w)
+    {
+        double dx = bx - ax, dy = by - ay, l = dx * dx + dy * dy;
+        var t = l > 0 ? Math.Clamp(((u - ax) * dx + (v - ay) * dy) / l, 0, 1) : 0;
+        double px = ax + t * dx - u, py = ay + t * dy - v;
+        return px * px + py * py <= w * w ? 1 : 0;
+    }
+
+    private static double DotAt(double u, double v, double cx, double cy, double r) => (u - cx) * (u - cx) + (v - cy) * (v - cy) <= r * r ? 1 : 0;
+
+    private static double Glyph(char g, double u, double v)
+    {
+        switch (g)
+        {
+            case '!':
+                return Math.Max(Seg(u, v, 3, 0.8, 3, 5.0, 0.62), DotAt(u, v, 3, 6.9, 0.72));
+            case '?':
+            {
+                var d = Math.Sqrt((u - 3) * (u - 3) + (v - 2.4) * (v - 2.4));
+                var ring = Math.Abs(d - 1.55) < 0.55 && (v <= 2.4 || (u >= 3 && v <= 3.3)) ? 1 : 0;
+                return new[] { ring, Seg(u, v, 4.3, 3.3, 3.0, 4.4, 0.58), Seg(u, v, 3.0, 4.4, 3.0, 5.1, 0.58), DotAt(u, v, 3, 6.9, 0.72) }.Max();
+            }
+            case '✓':
+                return Math.Max(Seg(u, v, 0.9, 4.4, 2.5, 6.1, 0.6), Seg(u, v, 2.5, 6.1, 5.3, 1.9, 0.6));
+            case '%':
+            {
+                var a = Math.Abs(Math.Sqrt((u - 1.6) * (u - 1.6) + (v - 1.9) * (v - 1.9)) - 0.75) < 0.4 ? 1 : 0;
+                var b = Math.Abs(Math.Sqrt((u - 4.4) * (u - 4.4) + (v - 6.1) * (v - 6.1)) - 0.75) < 0.4 ? 1 : 0;
+                return new[] { a, b, Seg(u, v, 5.0, 1.0, 1.0, 7.0, 0.45) }.Max();
+            }
+            default:
+                return 0;
         }
     }
 
@@ -652,6 +770,95 @@ internal sealed class RobotView : FrameworkElement
         dc.Pop();
         dc.Pop();
         dc.Pop();
+    }
+
+    // MARK: Diğer el hareketleri
+
+    /// <summary>Elin belirmesi: hafif taşan yay; sonda solarak kaybolur</summary>
+    private static (double Scale, double Opacity) Pop(double t, double duration)
+    {
+        var x = Math.Min(1, t / 0.3);
+        const double c1 = 1.70158, c3 = c1 + 1;
+        var scale = 1 + c3 * Math.Pow(x - 1, 3) + c1 * Math.Pow(x - 1, 2);
+        var opacity = t > duration - 0.3 ? Math.Max(0, (duration - t) / 0.3) : 1;
+        return (scale, opacity);
+    }
+
+    /// <summary>Açık el (avuç): başparmak solda (-x), parmak çizgileri üstte. Bilek (0, 16).</summary>
+    private static void DrawPalm(DrawingContext dc)
+    {
+        var edge = new Pen(B(HandEdge), 1.4);
+        dc.DrawRoundedRectangle(B(Bolt), null, new Rect(-6, 13, 12, 5), 2, 2);
+        dc.DrawRoundedRectangle(B(HandFill), edge, new Rect(-10, -14, 20, 28), 9, 9);
+        dc.DrawRoundedRectangle(B(HandFill), edge, new Rect(-17, -2, 9, 12), 4.5, 4.5);
+        var crease = new Pen(B(HandEdge), 1.2) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round };
+        foreach (var x in new[] { -4.5, 0.5, 5.5 }) dc.DrawLine(crease, new Point(x, -14), new Point(x, -7));
+    }
+
+    /// <summary>İşaret eden el: işaret parmağı +x yönünde</summary>
+    private static void DrawPointingHand(DrawingContext dc)
+    {
+        var edge = new Pen(B(HandEdge), 1.4);
+        dc.DrawRoundedRectangle(B(Bolt), null, new Rect(-8, 11, 16, 5), 2, 2);
+        dc.DrawRoundedRectangle(B(HandFill), edge, new Rect(-12, -6, 24, 18), 7, 7);
+        dc.DrawRoundedRectangle(B(HandFill), edge, new Rect(8, -6, 16, 7), 3.5, 3.5);
+        var crease = new Pen(B(HandEdge), 1.2) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round };
+        foreach (var y in new[] { 3.0, 8 }) dc.DrawLine(crease, new Point(2, y), new Point(10, y));
+    }
+
+    /// <summary>Merhaba: başın yanında el sallar (başparmak başa dönük)</summary>
+    private static void DrawWave(DrawingContext dc, double t, bool right)
+    {
+        var (scale, opacity) = Pop(t, 1.8);
+        dc.PushOpacity(opacity);
+        dc.PushTransform(new TranslateTransform(right ? 95 : 5, 60));
+        dc.PushTransform(new ScaleTransform(right ? scale : -scale, scale, 0, 16));
+        dc.PushTransform(new RotateTransform(Math.Sin(t * 14) * 22, 0, 16));
+        DrawPalm(dc);
+        dc.Pop(); dc.Pop(); dc.Pop(); dc.Pop();
+    }
+
+    /// <summary>Onay bekliyor: balonu işaret eder (balon üstteyse yukarı, alttaysa aşağı doğru), dürter gibi</summary>
+    private static void DrawPoint(DrawingContext dc, double t, bool right, bool bubbleBelow)
+    {
+        var (scale, opacity) = Pop(t, 2.2 + (t < 3.2 ? 1 : 0));
+        dc.PushOpacity(opacity);
+        dc.PushTransform(new TranslateTransform(right ? 90 : 10, 76));
+        dc.PushTransform(new ScaleTransform(right ? scale : -scale, scale, 0, 16));
+        dc.PushTransform(new RotateTransform(bubbleBelow ? 25 : -25, 0, 4));
+        dc.PushTransform(new TranslateTransform(Math.Sin(t * 8) * 2.5, 0));
+        DrawPointingHand(dc);
+        dc.Pop(); dc.Pop(); dc.Pop(); dc.Pop(); dc.Pop();
+    }
+
+    /// <summary>Uzun ya da gurur verici iş bitti: önde iki el alkışlar</summary>
+    private static void DrawClap(DrawingContext dc, double t)
+    {
+        var (scale, opacity) = Pop(t, 2.0);
+        var sep = 6 + Math.Abs(Math.Cos(t * 9)) * 9;
+        dc.PushOpacity(opacity);
+        foreach (var side in new[] { -1.0, 1.0 })
+        {
+            dc.PushTransform(new TranslateTransform(50 + side * sep, 84));
+            dc.PushTransform(new ScaleTransform(-side * scale * 0.85, scale * 0.85, 0, 16));
+            dc.PushTransform(new RotateTransform(side * -12, 0, 16));
+            DrawPalm(dc);
+            dc.Pop(); dc.Pop(); dc.Pop();
+        }
+        dc.Pop();
+    }
+
+    /// <summary>Hata: aşağıdan gelip bir gözünü kapatır (alnına vurur)</summary>
+    private static void DrawFacepalm(DrawingContext dc, double t, bool right)
+    {
+        var (_, opacity) = Pop(t, 1.6);
+        var rise = 1 - IdleMotion.Smooth(t / 0.35);
+        dc.PushOpacity(opacity);
+        dc.PushTransform(new TranslateTransform(right ? 64 : 36, 58 + rise * 30));
+        dc.PushTransform(new ScaleTransform(right ? -1 : 1, 1, 0, 16));
+        dc.PushTransform(new RotateTransform(-10, 0, 16));
+        DrawPalm(dc);
+        dc.Pop(); dc.Pop(); dc.Pop(); dc.Pop();
     }
 
     // MARK: Efektler

@@ -57,6 +57,12 @@ final class RobotAvatar: ObservableObject {
 
     /// Kafanın merkezi (ekran koordinatı, ana ekranın sol-alt köşesi köken)
     private(set) var head: CGPoint = .zero
+    /// Boştayken gözlerin imleci izlemesi için
+    lazy var pointer: PointerTracker = {
+        let p = PointerTracker()
+        p.avatar = self
+        return p
+    }()
     private(set) var isDragging = false
     private var dragStartHead: CGPoint = .zero
     private var target: CGPoint?
@@ -326,6 +332,8 @@ final class AvatarHostingView: NSHostingView<AvatarView> {
     var onDragEnd: (() -> Void)?
     var onRightClick: ((NSEvent) -> Void)?
     var onDoubleClick: (() -> Void)?
+    /// Kafaya art arda hızlıca (1,5 sn'de 4 kez) tıklandı
+    var onRapidClick: (() -> Void)?
     var onBubbleClick: (() -> Void)?
     var onApproval: ((ApprovalChoice) -> Void)?
     /// Tıklanan nokta balonun üstünde mi (kafanın değil)?
@@ -335,12 +343,24 @@ final class AvatarHostingView: NSHostingView<AvatarView> {
 
     private var mouseStart: NSPoint = .zero
     private var dragging = false
+    private var presses: [Date] = []
+    private var swallowUp = false
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
     override func mouseDown(with event: NSEvent) {
         mouseStart = NSEvent.mouseLocation
         dragging = false
+        swallowUp = false
+        guard approvalAt?(mouseStart) == nil, isOverBubble?(mouseStart) != true else { return }
+        let now = Date()
+        presses.append(now)
+        presses.removeAll { now.timeIntervalSince($0) > 1.5 }
+        if presses.count >= 4 {
+            presses.removeAll()
+            swallowUp = true
+            onRapidClick?()
+        }
     }
 
     override func mouseDragged(with event: NSEvent) {
@@ -356,6 +376,10 @@ final class AvatarHostingView: NSHostingView<AvatarView> {
     }
 
     override func mouseUp(with event: NSEvent) {
+        if swallowUp {
+            swallowUp = false
+            return
+        }
         if dragging {
             dragging = false
             onDragEnd?()
@@ -363,9 +387,9 @@ final class AvatarHostingView: NSHostingView<AvatarView> {
             onApproval?(choice)
         } else if isOverBubble?(NSEvent.mouseLocation) == true {
             onBubbleClick?()
-        } else if event.clickCount >= 2 {
+        } else if event.clickCount == 2 {
             onDoubleClick?()
-        } else {
+        } else if event.clickCount == 1 {
             onClick?()
         }
     }
@@ -380,6 +404,7 @@ final class AvatarWindowController: NSObject {
     var onHide: (() -> Void)?
     var onClick: (() -> Void)?
     var onDoubleClick: (() -> Void)?
+    var onRapidClick: (() -> Void)?
     var onLockChanged: ((Bool) -> Void)?
     var onAlwaysOnTopChanged: ((Bool) -> Void)?
     var onBubbleClick: (() -> Void)?
@@ -422,6 +447,7 @@ final class AvatarWindowController: NSObject {
             guard let self = self else { return }
             if let handler = self.onClick { handler() } else { self.avatar.current.showHistory() }
         }
+        host.onRapidClick = { [weak self] in self?.onRapidClick?() }
         host.onDragStart = { [weak self] in self?.avatar.beginDrag() }
         host.onDrag = { [weak self] dx, dy in
             guard let self = self else { return }

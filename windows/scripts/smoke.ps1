@@ -117,6 +117,7 @@ Shot "3-waiting-minis"
 $st = State
 Check ($st.state -eq "Waiting") "onay bekliyor"
 Check ($st.bubble -like "*npm install*") "balonda komut yazıyor"
+Check ($st.glyph -eq "!") "onay beklerken gözde ! var ($($st.glyph))"
 for ($t = 0; $t -lt 6 -and $st.minis -lt 2; $t++) { Start-Sleep -Milliseconds 500; $st = State }
 Check ($st.minis -ge 2) "diğer oturumlar minik kafa"
 Post '{"agent":"claude","session":"s1","project":"web","state":"done","text":"Bitti"}'
@@ -130,6 +131,7 @@ Start-Sleep -Milliseconds 500
 Shot "4b-thumbs-up"
 $st = State
 Check ($st.celebrating -eq $true -and $st.source -eq "claude") "iş bitince başparmak (Claude ekranda kalır)"
+Check ($st.gesture -eq "ThumbsUp" -or $st.gesture -eq "Clap") "el hareketi: başparmak/alkış ($($st.gesture))"
 Start-Sleep 3
 $st = State
 Check ($st.source -eq "gpt") "başparmaktan sonra hâlâ çalışan GPT'ye geçti"
@@ -156,6 +158,14 @@ Check ($st.window.x -ge $sb.Left -and $st.window.y -ge $sb.Top -and ($st.window.
 Shot "6-clicked"
 $st = State
 Check ($st.bubble -ne $null) "tıklayınca balon açıldı"
+# Art arda hızlı tıklayınca başı döner
+Start-Sleep -Milliseconds 1700
+for ($i = 0; $i -lt 4; $i++) { [Mouse]::Down(); Start-Sleep -Milliseconds 50; [Mouse]::Up(); Start-Sleep -Milliseconds 150 }
+Start-Sleep -Milliseconds 300
+Shot "6b-dizzy"
+$st = State
+Check ($st.mood -eq "Dizzy") "hızlı tıklayınca başı döndü ($($st.mood))"
+Start-Sleep 3
 # Sağ tık → menü (Esc ile kapat)
 [Mouse]::RightClick(); Start-Sleep -Milliseconds 800
 Shot "7-menu"
@@ -259,6 +269,7 @@ for ($round = 1; $round -le 2; $round++) {
     $st = State
     $seen = ($st.bubble -like "*açıldı*" -or $st.bubble -like "*is open*")
   }
+  if ($round -eq 1) { Check ($st.gesture -eq "Wave") "uygulama açılınca el salladı ($($st.gesture))" }
   Shot ("10-fake-claude-" + $round)
   Check $seen "Claude açılınca robot fark etti (tur $round)"
   Check ($st.state -ne "Sleeping") "robot uyanık (tur $round)"

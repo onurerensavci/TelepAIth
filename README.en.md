@@ -36,6 +36,8 @@
 - Speaks with an emoji for each action: 🔮 thinking, 📖 reading, 🧪 running tests, 📦 installing packages, 🚀 on `git push`, 🎉 when done, ✋ when waiting for you.
 - Wraps up each turn: *Done! · 2 min · 12 tools · 4 edits*.
 - Has moods: heart eyes when you say thanks, shocked by ALL CAPS, scared of `rm -rf`, throws a party when tests pass, gets dizzy after 3 errors in a row.
+- Gestures and eyes: a thumbs-up when a task finishes (applause for big ones), a wave when the app opens, points at the bubble while waiting for you, a facepalm on errors. Its eyes show ? (asking), ! (needs approval), ✓ (done) and % (quota low). When idle its eyes follow your cursor and it smiles when you hover; click it rapidly and it gets dizzy.
+- Wears a beanie with falling snow from Dec 1 to Jan 6 (Settings → General → Costume).
 - Speaks Turkish or English. Can read things out loud and play short sounds if you like.
 
 **🔔 Lets you know**

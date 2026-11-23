@@ -75,6 +75,23 @@ enum Preferences {
         set { defaults.set(newValue, forKey: "launchAtLoginChosen") }
     }
 
+    /// Mevsimlik kostüm: "auto" (Aralık – 6 Ocak kış), "winter" (hep), "off"
+    static var costume: String {
+        get { defaults.string(forKey: "costume") ?? "auto" }
+        set { defaults.set(newValue, forKey: "costume") }
+    }
+
+    /// Kış kostümü şu an takılı mı?
+    static var winterActive: Bool {
+        switch costume {
+        case "winter": return true
+        case "off": return false
+        default:
+            let c = Calendar.current.dateComponents([.month, .day], from: Date())
+            return c.month == 12 || (c.month == 1 && (c.day ?? 99) <= 6)
+        }
+    }
+
     /// Claude Code izin isteyince robotun balonunda İzin ver / Reddet düğmeleri
     static var approveFromRobot: Bool {
         get { defaults.object(forKey: "approveFromRobot") as? Bool ?? true }

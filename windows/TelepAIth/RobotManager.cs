@@ -69,6 +69,8 @@ internal sealed class RobotManager
         var window = new RobotWindow(avatar);
         window.Clicked += RobotClicked;
         window.DoubleClicked += OpenCurrentApp;
+        // Art arda hızlı tıklanınca başı döner
+        window.RapidClicked += () => _avatar?.Current.React(Mood.Dizzy, 2.5, WithEmoji("😵‍💫", L("Başım döndü!", "I'm dizzy!")));
         window.BubbleClicked += BubbleClicked;
         window.ApprovalClicked += Choose;
         window.BuildMenu = () => BuildRobotMenu!();
@@ -558,6 +560,9 @@ internal sealed class RobotManager
                 ["always"] = ap.HasAlways,
                 ["buttons"] = _window?.ApprovalButtonsJson(),
             } : null,
+            ["gesture"] = _avatar?.Current is { GestureStart: { } gs } gm && (DateTime.Now - gs).TotalSeconds <= 2.5 ? gm.Gesture.ToString() : "None",
+            ["glyph"] = _avatar?.Current.EyeGlyph(DateTime.Now) is { } g && g != '\0' ? g.ToString() : "",
+            ["mood"] = _avatar?.Current.Mood?.ToString(),
             ["celebrating"] = _avatar?.Current.CelebrateStart is { } cs && (DateTime.Now - cs).TotalSeconds is >= 0 and <= 2.4,
             ["recent"] = new System.Text.Json.Nodes.JsonArray(_recent.Select(r => (System.Text.Json.Nodes.JsonNode?)r).ToArray()),
             ["sessions"] = new System.Text.Json.Nodes.JsonArray(AllModels.SelectMany(m => m.SessionStates.Select(x => (System.Text.Json.Nodes.JsonNode?)$"{m.Source}/{x.Id}={x.State}")).ToArray()),

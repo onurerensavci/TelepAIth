@@ -6,6 +6,9 @@ namespace TelepAIth.Core;
 /// Bir AI'ın (kaynağın) durumu: oturumları takip eder, robotun ne söyleyeceğini hesaplar.
 /// Ekrandaki tek robot, o an gösterilen kaynağın modelini çizer. (Mac sürümündeki RobotModel'in aynısı.)
 /// </summary>
+/// <summary>Robotun el hareketleri</summary>
+public enum Gesture { None, ThumbsUp, Clap, Wave, Facepalm }
+
 public sealed class RobotModel
 {
     private sealed class Session
@@ -39,6 +42,40 @@ public sealed class RobotModel
     public DateTime? CelebrateStart { get; private set; }
     public DateTime? ErrorStart { get; private set; }
     public Mood? Mood { get; private set; }
+    /// <summary>El hareketi (başparmak, alkış, el sallama, alnına vurma) ve başladığı an</summary>
+    public Gesture Gesture { get; private set; }
+    public DateTime? GestureStart { get; private set; }
+    /// <summary>Seni bekleyen şey bir soru mu (onay değil)? Gözlerde "?" çıkar.</summary>
+    public bool IsAsking { get; private set; }
+
+    /// <summary>Gözde çıkan simge: ? soru, ! onay bekliyor, ✓ yeni bitti (1,4 sn), % kota azaldı (10 sn'de bir yanıp söner); yoksa '\0'</summary>
+    public char EyeGlyph(DateTime now)
+    {
+        if (Mood != null) return '\0';
+        var age = (now - VisualChangedAt).TotalSeconds;
+        return State switch
+        {
+            RobotState.Waiting => IsAsking ? '?' : '!',
+            RobotState.Done when age < 1.4 => '✓',
+            RobotState.Idle when QuotaLeft is <= 20 && now.TimeOfDay.TotalSeconds % 10 < 1.6 => '%',
+            _ => '\0',
+        };
+    }
+
+    private void DoGesture(Gesture g, DateTime now)
+    {
+        Gesture = g;
+        GestureStart = now;
+    }
+
+    /// <summary>Dışarıdan kısa bir ruh hâli (ör. art arda tıklanınca başı döner)</summary>
+    public void React(Mood mood, double seconds, string? say = null)
+    {
+        var now = DateTime.Now;
+        SetMood(mood, seconds, now);
+        if (say != null) ShowOverride(say, seconds, now);
+        Refresh(now);
+    }
     public AppTarget? Target { get; private set; }
     public DateTime? WaitingSince { get; private set; }
     public int? QuotaLeft { get; private set; }
@@ -132,7 +169,7 @@ public sealed class RobotModel
             {
                 var text = WithEmoji(e.Emoji, e.Text ?? "");
                 ShowOverride(text, 10, now);
-                if (e.State == RobotState.Error) ErrorStart = now;
+                if (e.State == RobotState.Error) { ErrorStart = now; DoGesture(Gesture.Facepalm, now); }
                 if (e.QuotaLeft is { } left)
                 {
                     QuotaLeft = Math.Clamp(left, 0, 100);
@@ -267,6 +304,8 @@ public sealed class RobotModel
                             DailyStats.Shared.RecordTurn(Source, duration, s.Tools, s.Edits, now);
                         s.TurnStart = null;
                         CelebrateStart = now;
+                        // Gurur/parti anında alkış, yoksa başparmak
+                        DoGesture(Mood is Core.Mood.Proud or Core.Mood.Party ? Gesture.Clap : Gesture.ThumbsUp, now);
                         Play("Glass");
                         Remember(WithEmoji(s.Emoji, text), now);
                         // Anlatıcının "bitti"si bildirim atmaz (izleyici ya da hook zaten haber veriyor)
@@ -293,6 +332,7 @@ public sealed class RobotModel
                     }
                     case EventKind.Failure:
                         ErrorStart = now;
+                        DoGesture(Gesture.Facepalm, now);
                         Play("Basso");
                         notice = new Notice(WithEmoji(s.Emoji, Theme.DisplayName + L(" hata verdi", " hit an error") + place),
                                             s.Text ?? "", true, s.Target);
@@ -329,7 +369,11 @@ public sealed class RobotModel
         var now = at ?? DateTime.Now;
         var wasSleeping = State == RobotState.Sleeping;
         _lastEventAt = now;
-        if ((wasSleeping || always) && greet != null) ShowOverride(greet, 3, now);
+        if ((wasSleeping || always) && greet != null)
+        {
+            ShowOverride(greet, 3, now);
+            DoGesture(Gesture.Wave, now);   // el salla
+        }
         Refresh(now);
     }
 
@@ -412,6 +456,7 @@ public sealed class RobotModel
             }
         }
         BestSessionId = bestId;
+        IsAsking = bestState == RobotState.Waiting && best?.Emoji == "❓";
         Target = best?.Target;
         WaitingSince = bestState == RobotState.Waiting ? best?.WaitingSince : null;
 

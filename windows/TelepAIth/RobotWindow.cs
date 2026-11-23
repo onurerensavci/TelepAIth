@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
@@ -27,6 +28,9 @@ internal sealed class RobotWindow : Window
 
     public event Action? Clicked;
     public event Action? DoubleClicked;
+    /// <summary>Kafaya art arda hızlıca (1,5 sn'de 4 kez) tıklandı</summary>
+    public event Action? RapidClicked;
+    private readonly List<DateTime> _presses = new();
     public event Action? BubbleClicked;
     public event Action<ApprovalChoice>? ApprovalClicked;
     public Func<ContextMenu>? BuildMenu;
@@ -132,6 +136,20 @@ internal sealed class RobotWindow : Window
 
     private void OnDown(object sender, MouseButtonEventArgs e)
     {
+        if (Contains(_view.HeadRect, e.GetPosition(_view)))
+        {
+            var now = DateTime.Now;
+            _presses.Add(now);
+            _presses.RemoveAll(t => (now - t).TotalSeconds > 1.5);
+            if (_presses.Count >= 4)
+            {
+                _presses.Clear();
+                _pressAt = null;
+                RapidClicked?.Invoke();
+                return;
+            }
+        }
+        if (e.ClickCount >= 3) { _pressAt = null; return; }
         if (e.ClickCount == 2)
         {
             _pressAt = null;

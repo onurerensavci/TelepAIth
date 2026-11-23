@@ -13,7 +13,7 @@ struct AvatarView: View {
         return ZStack {
             AvatarStage(model: avatar.current, alignLeft: avatar.alignLeft, bubbleBelow: avatar.bubbleBelow,
                         health: avatar.health, locked: avatar.locked, minis: avatar.minis, focus: avatar.focus,
-                        approval: avatar.approval)
+                        approval: avatar.approval, pointer: avatar.pointer)
                 .id(avatar.current.source)
                 .transition(.scale(scale: 0.4).combined(with: .opacity))
         }
@@ -55,6 +55,7 @@ struct AvatarStage: View {
     let minis: [RobotModel.MiniSession]
     let focus: Bool
     var approval: ApprovalPrompt? = nil
+    var pointer: PointerTracker? = nil
 
     /// Odak modunda sadece seni bekleyen, hata veren ya da robotun kendi söylediği şeyler görünür
     private var urgent: Bool { model.state == .waiting || model.state == .error || model.bubbleIsExplicit }
@@ -119,7 +120,9 @@ struct AvatarStage: View {
             HeadFigure(model: model,
                        time: context.date.timeIntervalSinceReferenceDate,
                        look: alignLeft ? 2.5 : -2.5,
-                       health: health)
+                       health: health,
+                       pointer: pointer,
+                       bubbleBelow: bubbleBelow)
         }
         .frame(width: Layout.baseHeadSize.width, height: Layout.baseHeadSize.height)
         .overlay(alignment: .topTrailing) {
@@ -227,6 +230,8 @@ struct HeadFigure: View {
     let time: TimeInterval
     let look: CGFloat
     let health: Health
+    var pointer: PointerTracker? = nil
+    var bubbleBelow = false
 
     var body: some View {
         let state = model.state
@@ -243,6 +248,14 @@ struct HeadFigure: View {
         let skin = SkinStore.shared.image(source: model.source, state: state)
         let lift = hop - float + CGFloat(idle.head.lift)
         let tilt = Double(mix(CGFloat(headTilt(prevState, prevMood)), CGFloat(headTilt(state, model.mood)), blend)) + idle.head.tilt
+        // Gözde simge (? soru, ! onay, ✓ bitti, % kota), boştayken imlece bakış, kış kostümü
+        let glyph = model.eyeGlyph(at: Date(timeIntervalSinceReferenceDate: time))
+        let prevGlyph: Character? = prevState == .waiting ? "!" : nil
+        let gaze = pointer?.sample(time: time, active: state == .idle && model.mood == nil) ?? Gaze()
+        let winter = Preferences.winterActive
+        let right = look > 0   // balonun açıldığı taraf (ekranın içi)
+        let gt = model.gestureStart.map { time - $0.timeIntervalSinceReferenceDate } ?? -1
+        let stateAge = time - model.visualChangedAt.timeIntervalSinceReferenceDate
 
         return ZStack {
             Ellipse()
@@ -258,7 +271,7 @@ struct HeadFigure: View {
                     .offset(x: shake, y: -lift)
             }
 
-            Group {
+            ZStack {
                 if let skin = skin {
                     Image(nsImage: skin)
                         .resizable()
@@ -268,9 +281,15 @@ struct HeadFigure: View {
                         .position(x: 50, y: 48)
                 } else {
                     FaceView(state: state, mood: model.mood, time: time, look: look, eyeColor: eyeColor, health: health,
-                             prevState: prevState, prevMood: prevMood, blend: blend, idle: idle)
+                             prevState: prevState, prevMood: prevMood, blend: blend, idle: idle,
+                             glyph: glyph, prevGlyph: prevGlyph, gaze: gaze, winter: winter, theme: Color(nsColor: base))
+                }
+                // Hata: eli alnına (yüzle birlikte hareket etsin)
+                if model.gesture == .facepalm && gt >= 0 && gt <= 1.6 {
+                    HandCanvas(kind: .facepalm, t: gt, right: right)
                 }
             }
+            .frame(width: 100, height: 100)
             .rotationEffect(.degrees(tilt), anchor: UnitPoint(x: 0.5, y: 0.9))
             .offset(x: shake, y: -lift)
 
@@ -285,9 +304,26 @@ struct HeadFigure: View {
             if state == .sleeping {
                 ZzzView(time: time)
             }
-            // İş bitti: başparmak (balonun açıldığı tarafta, başın alt köşesinde)
-            if let t = thumbsElapsed {
-                ThumbsUpView(t: t)
+            // El hareketleri: iş bitti (başparmak/alkış), merhaba (el sallama), onay bekliyor (balonu göster)
+            Group {
+                if model.gesture == .clap && gt >= 0 && gt <= 2.0 {
+                    HandCanvas(kind: .clap, t: gt, right: right)
+                }
+                if model.gesture == .wave && gt >= 0 && gt <= 1.8 {
+                    HandCanvas(kind: .wave, t: gt, right: right)
+                }
+                if let pt = pointElapsed(stateAge) {
+                    HandCanvas(kind: .point, t: pt, right: right, bubbleBelow: bubbleBelow)
+                }
+            }
+            .offset(y: -lift)
+            if winter {
+                SnowView(time: time)
+                    .frame(width: 130, height: 140)
+                    .position(x: 50, y: 45)
+            }
+            if model.gesture == .thumbsUp && gt >= 0 && gt <= ThumbsUpView.duration {
+                ThumbsUpView(t: gt)
                     .frame(width: 34, height: 44)
                     .scaleEffect(x: look > 0 ? -1 : 1, y: 1)   // başparmak hep dışa (başın tersine) baksın
                     .position(x: look > 0 ? 92 : 8, y: 74)
@@ -362,10 +398,12 @@ struct HeadFigure: View {
 
     private var isCelebrating: Bool { celebrateElapsed != nil }
 
-    private var thumbsElapsed: Double? {
-        guard let start = model.celebrateStart else { return nil }
-        let t = time - start.timeIntervalSinceReferenceDate
-        return (t >= 0 && t <= ThumbsUpView.duration) ? t : nil
+    /// Onay beklerken balonu gösteren el: ilk 3,2 sn, 30 sn'den sonra da 10 sn'de bir
+    private func pointElapsed(_ age: Double) -> Double? {
+        guard model.state == .waiting else { return nil }
+        if age < 3.2 { return age }
+        let phase = age.truncatingRemainder(dividingBy: 10)
+        return age > 30 && phase < 2.2 ? phase : nil
     }
 
     private var hopHeight: CGFloat {
@@ -392,6 +430,11 @@ struct FaceView: View {
     var prevMood: Mood? = nil
     var blend: Double = 1
     var idle = IdleMotion()
+    var glyph: Character? = nil
+    var prevGlyph: Character? = nil
+    var gaze = Gaze()
+    var winter = false
+    var theme: Color = .purple
 
     var body: some View {
         ZStack {
@@ -408,10 +451,24 @@ struct FaceView: View {
                 .frame(width: 70, height: 44)
                 .position(x: 50, y: 52)
             DotEyes(state: state, mood: mood, look: look, time: time, color: eyeColor,
-                    prevState: prevState, prevMood: prevMood, blend: blend, idle: idle)
+                    prevState: prevState, prevMood: prevMood, blend: blend, idle: idle,
+                    glyph: glyph, prevGlyph: prevGlyph, gaze: gaze)
                 .frame(width: 70, height: 44)
                 .position(x: 50, y: 52)
-            // Alında sağlık ışığı: yeşil yolunda, turuncu güncelleme var, kırmızı çalışmıyor
+            if winter {
+                // Kış: bere (ponpon sağlık ışığı renginde yanar, sorun yoksa beyaz)
+                BeanieView(theme: theme, glow: health == .ok ? nil : ledColor, glowOpacity: ledOpacity)
+                    .frame(width: 100, height: 100)
+            } else {
+                ledView
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var ledView: some View {
+        // Alında sağlık ışığı: yeşil yolunda, turuncu güncelleme var, kırmızı çalışmıyor
+        ZStack {
             Circle()
                 .fill(ledColor.opacity(0.3))
                 .frame(width: 11, height: 11)
@@ -455,6 +512,9 @@ struct DotEyes: View {
     var prevMood: Mood? = nil
     var blend: Double = 1
     var idle = IdleMotion()
+    var glyph: Character? = nil
+    var prevGlyph: Character? = nil
+    var gaze = Gaze()
 
     private static let cols = 14
     private static let rows = 18
@@ -491,19 +551,23 @@ struct DotEyes: View {
     }
 
     private var blinking: Bool {
-        state != .waiting && mood == nil && idle.kind == .none && time.truncatingRemainder(dividingBy: 4.2) < 0.12
+        state != .waiting && mood == nil && idle.kind == .none && gaze.hover < 0.5 && time.truncatingRemainder(dividingBy: 4.2) < 0.12
     }
 
     /// Bir noktanın parlaklığı (0…1): yüz değiştiyse eskisiyle yenisi arasında yumuşak geçiş
     private func brightness(u: Double, v: Double, eye: Int) -> Double {
-        let now = pattern(state: state, mood: mood, u: u, v: v, eye: eye, idle: idle)
+        let now = pattern(state: state, mood: mood, u: u, v: v, eye: eye, idle: idle, glyph: glyph, hover: gaze.hover, blinks: true)
         guard blend < 1 else { return now }
-        let before = pattern(state: prevState, mood: prevMood, u: u, v: v, eye: eye, idle: IdleMotion())
+        let before = pattern(state: prevState, mood: prevMood, u: u, v: v, eye: eye, idle: IdleMotion(), glyph: prevGlyph, hover: 0, blinks: false)
         return before + (now - before) * blend
     }
 
-    private func pattern(state: RobotState, mood: Mood?, u: Double, v: Double, eye: Int, idle: IdleMotion) -> Double {
-        let lookShift = Double(look) / 2.5 + idle.look   // ekranın ortasına doğru bak
+    private func pattern(state: RobotState, mood: Mood?, u: Double, v: Double, eye: Int, idle: IdleMotion,
+                         glyph: Character?, hover: Double, blinks: Bool) -> Double {
+        // Gözde simge: ? soru soruyor, ! onay bekliyor, ✓ bitti, % kota azaldı
+        if let g = glyph { return DotEyes.glyph(g, u, v) * (0.85 + 0.15 * sin(time * 6)) }
+        // Boştayken imlece, değilse ekranın ortasına doğru bak
+        let lookShift = (gaze.u ?? Double(look) / 2.5) + idle.look
         if let mood = mood {
             switch mood {
             case .pleased: return heart(u, v) * (0.8 + 0.2 * sin(time * 6))
@@ -516,7 +580,7 @@ struct DotEyes: View {
             case .denied: return capsule(u, v, cx: 3, cy: 6, rx: 1.7, ry: 1.3)
             }
         }
-        if blinking { return capsule(u, v, cx: 3 + lookShift, cy: 4.5, rx: 2, ry: 0.5) }
+        if blinks && blinking { return capsule(u, v, cx: 3 + lookShift, cy: 4.5, rx: 2, ry: 0.5) }
         switch state {
         case .done:
             return arc(u, v, cx: 3, cy: 6.2, radius: 2.7)
@@ -536,21 +600,62 @@ struct DotEyes: View {
         case .waiting:
             return capsule(u, v, cx: 3, cy: 4, rx: 2.5, ry: 3.9) * (0.75 + 0.25 * sin(time * 6))
         case .idle:
-            let base = capsule(u, v, cx: 3 + lookShift, cy: 4, rx: 1.7, ry: 3.3)
-            switch idle.kind {
-            case .wink where eye == idle.side:   // göz kırpma
-                let closed = capsule(u, v, cx: 3 + lookShift, cy: 4.6, rx: 1.9, ry: 0.45)
-                return base + (closed - base) * idle.env
-            case .scan:   // iki gözün üstünden geçen tarama çizgisi
-                let gx = Double(eye) * 7 + u
-                let bar: Double = (abs(gx - (-0.5 + 14 * idle.p)) < 0.7 && abs(v - 4) < 3.4) ? 1 : 0
-                return base + (Swift.max(bar, base * 0.25) - base) * idle.env
-            case .yawn:   // esneme: gözler kısılır
-                let squint = capsule(u, v, cx: 3, cy: 4.9, rx: 2.0, ry: 0.9 + 0.4 * sin(idle.p * .pi))
-                return base + (squint - base) * idle.env
-            default:
-                return base
-            }
+            // Üstüne gelince gözlerini kısıp gülümser
+            let awake = idleEyes(u, v, eye: eye, lookShift: lookShift, idle: idle)
+            return awake + (arc(u, v, cx: 3, cy: 6.2, radius: 2.7) - awake) * hover
+        }
+    }
+
+    private func idleEyes(_ u: Double, _ v: Double, eye: Int, lookShift: Double, idle: IdleMotion) -> Double {
+        let base = capsule(u, v, cx: 3 + lookShift, cy: 4 + gaze.v, rx: 1.7, ry: 3.3)
+        switch idle.kind {
+        case .wink where eye == idle.side:   // göz kırpma
+            let closed = capsule(u, v, cx: 3 + lookShift, cy: 4.6, rx: 1.9, ry: 0.45)
+            return base + (closed - base) * idle.env
+        case .scan:   // iki gözün üstünden geçen tarama çizgisi
+            let gx = Double(eye) * 7 + u
+            let bar: Double = (abs(gx - (-0.5 + 14 * idle.p)) < 0.7 && abs(v - 4) < 3.4) ? 1 : 0
+            return base + (Swift.max(bar, base * 0.25) - base) * idle.env
+        case .yawn:   // esneme: gözler kısılır
+            let squint = capsule(u, v, cx: 3, cy: 4.9, rx: 2.0, ry: 0.9 + 0.4 * sin(idle.p * .pi))
+            return base + (squint - base) * idle.env
+        default:
+            return base
+        }
+    }
+
+    // MARK: Göz simgeleri (nokta matriste çizilen işaretler; Windows'takiyle aynı)
+
+    private static func seg(_ u: Double, _ v: Double, _ ax: Double, _ ay: Double, _ bx: Double, _ by: Double, _ w: Double) -> Double {
+        let dx = bx - ax, dy = by - ay, l = dx * dx + dy * dy
+        let t = l > 0 ? Swift.min(1, Swift.max(0, ((u - ax) * dx + (v - ay) * dy) / l)) : 0
+        let px = ax + t * dx - u, py = ay + t * dy - v
+        return px * px + py * py <= w * w ? 1 : 0
+    }
+
+    private static func dotAt(_ u: Double, _ v: Double, _ cx: Double, _ cy: Double, _ r: Double) -> Double {
+        (u - cx) * (u - cx) + (v - cy) * (v - cy) <= r * r ? 1 : 0
+    }
+
+    private static func ring(_ u: Double, _ v: Double, _ cx: Double, _ cy: Double, _ r: Double, _ w: Double) -> Bool {
+        abs(((u - cx) * (u - cx) + (v - cy) * (v - cy)).squareRoot() - r) < w
+    }
+
+    static func glyph(_ g: Character, _ u: Double, _ v: Double) -> Double {
+        switch g {
+        case "!":
+            return Swift.max(seg(u, v, 3, 0.8, 3, 5.0, 0.62), dotAt(u, v, 3, 6.9, 0.72))
+        case "?":
+            let top: Double = ring(u, v, 3, 2.4, 1.55, 0.55) && (v <= 2.4 || (u >= 3 && v <= 3.3)) ? 1 : 0
+            return [top, seg(u, v, 4.3, 3.3, 3.0, 4.4, 0.58), seg(u, v, 3.0, 4.4, 3.0, 5.1, 0.58), dotAt(u, v, 3, 6.9, 0.72)].max() ?? 0
+        case "✓":
+            return Swift.max(seg(u, v, 0.9, 4.4, 2.5, 6.1, 0.6), seg(u, v, 2.5, 6.1, 5.3, 1.9, 0.6))
+        case "%":
+            let a: Double = ring(u, v, 1.6, 1.9, 0.75, 0.4) ? 1 : 0
+            let b: Double = ring(u, v, 4.4, 6.1, 0.75, 0.4) ? 1 : 0
+            return [a, b, seg(u, v, 5.0, 1.0, 1.0, 7.0, 0.45)].max() ?? 0
+        default:
+            return 0
         }
     }
 
@@ -872,5 +977,211 @@ struct MiniHead: View {
         }
         .offset(y: -bob)
         .shadow(color: Color.black.opacity(0.12), radius: 1.5, x: 0, y: 1)
+    }
+}
+
+// MARK: - İmlece bakış
+
+/// Gözlerin bakışı: u/v imlece doğru kayma (nil: ekranın ortasına bak), hover: imleç kafanın üstünde (0…1)
+struct Gaze {
+    var u: Double? = nil
+    var v: Double = 0
+    var hover: Double = 0
+}
+
+/// İmlecin kafaya göre yeri: boştayken gözler imleci izler, üstüne gelince gözlerini kısıp gülümser.
+/// Kareler arasında yumuşak geçiş için durum tutar (RobotAvatar'da bir tane).
+final class PointerTracker {
+    weak var avatar: RobotAvatar?
+    private var hover = 0.0
+    private var last = 0.0
+
+    func sample(time: Double, active: Bool) -> Gaze {
+        let dt = Swift.min(0.1, Swift.max(0, time - last))
+        last = time
+        var gaze = Gaze()
+        var target = 0.0
+        if active, let avatar = avatar {
+            let mouse = NSEvent.mouseLocation
+            let s = Double(avatar.scale)
+            let dx = Double(mouse.x - avatar.head.x), dy = Double(mouse.y - avatar.head.y)
+            let dist = (dx * dx + dy * dy).squareRoot()
+            func clamp(_ x: Double) -> Double { Swift.min(1, Swift.max(-1, x)) }
+            if dist < 900 * s {
+                gaze.u = clamp(dx / (220 * s)) * 1.6
+                gaze.v = -clamp(dy / (220 * s)) * 0.9   // ekran koordinatında y yukarı doğru artar
+            }
+            if dist < Double(Layout.baseHeadSize.width) * s * 0.45 { target = 1 }
+        }
+        hover += (target - hover) * Swift.min(1, dt * 8)
+        gaze.hover = hover
+        return gaze
+    }
+}
+
+// MARK: - El hareketleri
+
+/// Başparmak dışındaki el hareketleri (Windows'taki çizimin aynısı, kafa alanı 100 × 100):
+/// el sallama (merhaba), balonu gösterme (onay bekliyor), alkış (gurur verici iş bitti), alnına vurma (hata).
+struct HandCanvas: View {
+    enum Kind { case wave, point, clap, facepalm }
+    let kind: Kind
+    let t: Double
+    let right: Bool
+    var bubbleBelow = false
+
+    private static let edge = Color(red: 0.54, green: 0.51, blue: 0.65)
+    private static let fill = Color(red: 0.96, green: 0.945, blue: 0.965)
+    private static let bolt = Color(red: 0.74, green: 0.71, blue: 0.84)
+
+    var body: some View {
+        Canvas { ctx, _ in
+            switch kind {
+            case .wave:
+                let (s, o) = HandCanvas.pop(t, 1.8)
+                var c = ctx
+                c.opacity = o
+                c.translateBy(x: right ? 95 : 5, y: 60)
+                HandCanvas.about(&c, sx: right ? s : -s, sy: s, degrees: sin(t * 14) * 22)
+                HandCanvas.palm(c)
+            case .point:
+                let (s, o) = HandCanvas.pop(t, 2.2 + (t < 3.2 ? 1 : 0))
+                var c = ctx
+                c.opacity = o
+                c.translateBy(x: right ? 90 : 10, y: 76)
+                HandCanvas.about(&c, sx: right ? s : -s, sy: s, degrees: 0)
+                c.translateBy(x: 0, y: 4)
+                c.rotate(by: .degrees(bubbleBelow ? 25 : -25))
+                c.translateBy(x: 0, y: -4)
+                c.translateBy(x: CGFloat(sin(t * 8) * 2.5), y: 0)
+                HandCanvas.pointing(c)
+            case .clap:
+                let (s, o) = HandCanvas.pop(t, 2.0)
+                let sep = 6 + abs(cos(t * 9)) * 9
+                for side in [-1.0, 1.0] {
+                    var c = ctx
+                    c.opacity = o
+                    c.translateBy(x: CGFloat(50 + side * sep), y: 84)
+                    HandCanvas.about(&c, sx: CGFloat(-side) * s * 0.85, sy: s * 0.85, degrees: side * -12)
+                    HandCanvas.palm(c)
+                }
+            case .facepalm:
+                let (_, o) = HandCanvas.pop(t, 1.6)
+                let rise = 1 - IdleMotion.smooth(t / 0.35)
+                var c = ctx
+                c.opacity = o
+                c.translateBy(x: right ? 64 : 36, y: CGFloat(58 + rise * 30))
+                HandCanvas.about(&c, sx: right ? -1 : 1, sy: 1, degrees: -10)
+                HandCanvas.palm(c)
+            }
+        }
+        .frame(width: 100, height: 100)
+        .allowsHitTesting(false)
+    }
+
+    /// Elin belirmesi: hafif taşan yay; sonda solarak kaybolur
+    static func pop(_ t: Double, _ duration: Double) -> (CGFloat, Double) {
+        let x = Swift.min(1, t / 0.3)
+        let c1 = 1.70158, c3 = c1 + 1
+        let scale = 1 + c3 * pow(x - 1, 3) + c1 * pow(x - 1, 2)
+        let opacity = t > duration - 0.3 ? Swift.max(0, (duration - t) / 0.3) : 1
+        return (CGFloat(scale), opacity)
+    }
+
+    /// Bileğin (0, 16) çevresinde ölçekle ve döndür
+    private static func about(_ c: inout GraphicsContext, sx: CGFloat, sy: CGFloat, degrees: Double) {
+        c.translateBy(x: 0, y: 16)
+        c.scaleBy(x: sx, y: sy)
+        c.rotate(by: .degrees(degrees))
+        c.translateBy(x: 0, y: -16)
+    }
+
+    private static func rr(_ x: CGFloat, _ y: CGFloat, _ w: CGFloat, _ h: CGFloat, _ r: CGFloat) -> Path {
+        Path(roundedRect: CGRect(x: x, y: y, width: w, height: h), cornerRadius: r)
+    }
+
+    private static func crease(_ c: GraphicsContext, _ a: CGPoint, _ b: CGPoint) {
+        var line = Path()
+        line.move(to: a)
+        line.addLine(to: b)
+        c.stroke(line, with: .color(edge), style: StrokeStyle(lineWidth: 1.2, lineCap: .round))
+    }
+
+    /// Açık el: başparmak solda (-x), parmak çizgileri üstte, bilek (0, 16)
+    private static func palm(_ c: GraphicsContext) {
+        c.fill(rr(-6, 13, 12, 5, 2), with: .color(bolt))
+        for p in [rr(-10, -14, 20, 28, 9), rr(-17, -2, 9, 12, 4.5)] {
+            c.fill(p, with: .color(fill))
+            c.stroke(p, with: .color(edge), lineWidth: 1.4)
+        }
+        for x: CGFloat in [-4.5, 0.5, 5.5] { crease(c, CGPoint(x: x, y: -14), CGPoint(x: x, y: -7)) }
+    }
+
+    /// İşaret eden el: işaret parmağı +x yönünde
+    private static func pointing(_ c: GraphicsContext) {
+        c.fill(rr(-8, 11, 16, 5, 2), with: .color(bolt))
+        for p in [rr(-12, -6, 24, 18, 7), rr(8, -6, 16, 7, 3.5)] {
+            c.fill(p, with: .color(fill))
+            c.stroke(p, with: .color(edge), lineWidth: 1.4)
+        }
+        for y: CGFloat in [3, 8] { crease(c, CGPoint(x: 2, y: y), CGPoint(x: 10, y: y)) }
+    }
+}
+
+// MARK: - Kış kostümü
+
+/// Bere: uygulamanın renginde, beyaz kenarlı ve ponponlu (ponpon sorun varsa sağlık ışığı renginde yanar)
+struct BeanieView: View {
+    let theme: Color
+    var glow: Color? = nil
+    var glowOpacity: Double = 1
+
+    var body: some View {
+        Canvas { ctx, _ in
+            let edge = Color(red: 0.54, green: 0.51, blue: 0.65)
+            let wool = Color(red: 0.965, green: 0.953, blue: 0.933)
+            var dome = Path()
+            dome.move(to: CGPoint(x: 15, y: 23))
+            dome.addCurve(to: CGPoint(x: 50, y: 1), control1: CGPoint(x: 15, y: 8), control2: CGPoint(x: 30, y: 1))
+            dome.addCurve(to: CGPoint(x: 85, y: 23), control1: CGPoint(x: 70, y: 1), control2: CGPoint(x: 85, y: 8))
+            dome.closeSubpath()
+            ctx.fill(dome, with: .color(theme))
+            for x: CGFloat in [32, 41, 50, 59, 68] {
+                var rib = Path()
+                rib.move(to: CGPoint(x: x, y: x == 50 ? 5 : 8))
+                rib.addLine(to: CGPoint(x: x, y: 19))
+                ctx.stroke(rib, with: .color(Color.black.opacity(0.18)), lineWidth: 1.2)
+            }
+            let band = Path(roundedRect: CGRect(x: 11, y: 17, width: 78, height: 10), cornerRadius: 5)
+            ctx.fill(band, with: .color(wool))
+            ctx.stroke(band, with: .color(edge), lineWidth: 1)
+            if let glow = glow {
+                ctx.fill(Path(ellipseIn: CGRect(x: 41, y: -7, width: 18, height: 18)), with: .color(glow.opacity(0.35 * glowOpacity)))
+            }
+            let pompom = Path(ellipseIn: CGRect(x: 44.5, y: -3.5, width: 11, height: 11))
+            ctx.fill(pompom, with: .color(glow.map { $0.opacity(Swift.max(0.5, glowOpacity)) } ?? wool))
+            ctx.stroke(pompom, with: .color(edge), lineWidth: 1)
+        }
+        .allowsHitTesting(false)
+    }
+}
+
+/// Kafanın çevresinde yağan kar (alan 130 × 140; kafa alanına göre -15, -25'ten başlar)
+struct SnowView: View {
+    let time: TimeInterval
+
+    var body: some View {
+        Canvas { ctx, _ in
+            for i in 0..<12 {
+                let speed = Double(9 + i % 4 * 3)
+                let y = (time * speed + Double(i * 37)).truncatingRemainder(dividingBy: 140) - 25
+                let x = Double(i * 53 % 130) - 15 + sin(time * 0.9 + Double(i)) * 5
+                let r = 0.9 + Double(i % 3) * 0.4
+                let o = 0.75 * Swift.min(1, (115 - y) / 30)
+                ctx.fill(Path(ellipseIn: CGRect(x: x + 15 - r, y: y + 25 - r, width: r * 2, height: r * 2)),
+                         with: .color(Color.white.opacity(o)))
+            }
+        }
+        .allowsHitTesting(false)
     }
 }

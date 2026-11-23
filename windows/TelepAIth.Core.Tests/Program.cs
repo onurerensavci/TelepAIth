@@ -347,6 +347,40 @@ public static class Tests
         A.True(after.Any(e => e.Kind == EventKind.ToolDone), "cevaptan sonra çalışmaya döner");
     }
 
+    public static void GesturesAndEyeGlyphs()
+    {
+        var m = new RobotModel("claude");
+        var t0 = DateTime.Now;
+        // Onay bekliyor → "!", soru soruyor → "?"
+        m.Apply(new AgentEvent("claude", "s", EventKind.Prompt, RobotState.Thinking, "x"), t0);
+        m.Apply(new AgentEvent("claude", "s", EventKind.Waiting, RobotState.Waiting, "onay"), t0.AddSeconds(1));
+        A.Eq('!', m.EyeGlyph(t0.AddSeconds(1.5)));
+        A.True(!m.IsAsking);
+        m.Apply(new AgentEvent("claude", "s", EventKind.Waiting, RobotState.Waiting, "Bir soru?") { Emoji = "❓" }, t0.AddSeconds(2));
+        A.True(m.IsAsking, "soru");
+        A.Eq('?', m.EyeGlyph(t0.AddSeconds(2.5)));
+        // Bitti → başparmak ve kısa süre "✓"
+        m.Apply(new AgentEvent("claude", "s", EventKind.ToolDone, RobotState.Thinking), t0.AddSeconds(3));
+        m.Apply(new AgentEvent("claude", "s", EventKind.Stop, RobotState.Done), t0.AddSeconds(4));
+        A.Eq(Gesture.ThumbsUp, m.Gesture);
+        A.Eq('✓', m.EyeGlyph(m.VisualChangedAt.AddSeconds(0.5)));
+        A.Eq('\0', m.EyeGlyph(m.VisualChangedAt.AddSeconds(2)));
+        // Hata → alnına vurur
+        m.Apply(new AgentEvent("claude", "s", EventKind.Prompt, RobotState.Thinking, "y"), t0.AddSeconds(10));
+        m.Apply(new AgentEvent("claude", "s", EventKind.Failure, RobotState.Error, "patladı"), t0.AddSeconds(11));
+        A.Eq(Gesture.Facepalm, m.Gesture);
+        // Uyurken uygulama açılınca el sallar
+        var w = new RobotModel("gpt");
+        w.Apply(new AgentEvent("gpt", "s", EventKind.Prompt, RobotState.Thinking, "x"), t0.AddHours(-2));
+        w.Refresh(t0);
+        w.Wake("Merhaba", always: true, at: t0);
+        A.Eq(Gesture.Wave, w.Gesture);
+        // Art arda tıklama tepkisi
+        w.React(Mood.Dizzy, 2.5, "Başım döndü!");
+        A.Eq(Mood.Dizzy, w.Mood);
+        A.Eq('\0', w.EyeGlyph(DateTime.Now));
+    }
+
     public static void ModelStopNotice()
     {
         var m = new RobotModel("claude");

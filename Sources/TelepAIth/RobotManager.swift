@@ -69,6 +69,10 @@ final class RobotManager {
             self?.onChange?()
         }
         window.onClick = { [weak self] in self?.robotClicked() }
+        // Art arda hızlı tıklanınca başı döner
+        window.onRapidClick = { [weak self] in
+            self?.avatar?.current.react(.dizzy, for: 2.5, say: withEmoji("😵‍💫", loc("Başım döndü!", "I'm dizzy!")))
+        }
         window.onDoubleClick = { [weak self] in self?.openCurrentApp() }
         window.onAlwaysOnTopChanged = { [weak self] _ in self?.onChange?() }
         window.onBubbleClick = { [weak self] in self?.bubbleClicked() }

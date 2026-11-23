@@ -3,6 +3,9 @@ import Combine
 
 /// Bir AI'ın (kaynağın) durumu: oturumları takip eder, robotun ne söyleyeceğini hesaplar.
 /// Ekrandaki tek robot, o an gösterilen kaynağın modelini çizer.
+/// Robotun el hareketleri
+enum Gesture { case none, thumbsUp, clap, wave, facepalm }
+
 final class RobotModel: ObservableObject {
     struct Session {
         var state: RobotState
@@ -45,6 +48,37 @@ final class RobotModel: ObservableObject {
     @Published private(set) var celebrateStart: Date?
     @Published private(set) var errorStart: Date?
     @Published private(set) var mood: Mood?
+    /// El hareketi (başparmak, alkış, el sallama, alnına vurma) ve başladığı an
+    private(set) var gesture: Gesture = .none
+    private(set) var gestureStart: Date?
+    /// Seni bekleyen şey bir soru mu (onay değil)? Gözlerde "?" çıkar.
+    private(set) var isAsking = false
+
+    /// Gözde çıkan simge: ? soru, ! onay bekliyor, ✓ yeni bitti (1,4 sn), % kota azaldı (10 sn'de bir yanıp söner)
+    func eyeGlyph(at now: Date) -> Character? {
+        guard mood == nil else { return nil }
+        let age = now.timeIntervalSince(visualChangedAt)
+        switch state {
+        case .waiting: return isAsking ? "?" : "!"
+        case .done where age < 1.4: return "✓"
+        case .idle where (quotaLeft ?? 100) <= 20
+            && now.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 10) < 1.6: return "%"
+        default: return nil
+        }
+    }
+
+    private func doGesture(_ g: Gesture, now: Date) {
+        gesture = g
+        gestureStart = now
+    }
+
+    /// Dışarıdan kısa bir ruh hâli (ör. art arda tıklanınca başı döner)
+    func react(_ mood: Mood, for seconds: Double, say: String? = nil) {
+        let now = Date()
+        setMood(mood, for: seconds, now: now)
+        if let say = say { showOverride(say, for: seconds, now: now) }
+        refresh(now: now)
+    }
     /// Balona tıklayınca gidilecek yer (gösterilen oturumun uygulaması)
     @Published private(set) var target: AppTarget?
     /// Gösterilen oturum ne zamandan beri seni bekliyor
@@ -141,7 +175,7 @@ final class RobotModel: ObservableObject {
         case .quota:
             let text = withEmoji(e.emoji, e.text ?? "")
             showOverride(text, for: 10, now: now)
-            if e.state == .error { errorStart = now }
+            if e.state == .error { errorStart = now; doGesture(.facepalm, now: now) }
             if let left = e.quotaLeft {
                 quotaLeft = max(0, min(100, left))
                 quotaAt = now
@@ -251,6 +285,8 @@ final class RobotModel: ObservableObject {
                 }
                 s.turnStart = nil
                 celebrateStart = now
+                // Gurur/parti anında alkış, yoksa başparmak
+                doGesture(mood == .proud || mood == .party ? .clap : .thumbsUp, now: now)
                 RobotModel.play("Glass")
                 remember(withEmoji(s.emoji, text), now: now)
                 // Anlatıcının "bitti"si bildirim atmaz (izleyici ya da hook zaten haber veriyor)
@@ -272,6 +308,7 @@ final class RobotModel: ObservableObject {
                 }
             case .failure:
                 errorStart = now
+                doGesture(.facepalm, now: now)
                 RobotModel.play("Basso")
                 notice = Notice(title: withEmoji(s.emoji, theme.displayName + loc(" hata verdi", " hit an error") + place),
                                 body: s.text ?? "", important: true, target: s.target)
@@ -303,7 +340,10 @@ final class RobotModel: ObservableObject {
         let now = Date()
         let wasSleeping = state == .sleeping
         lastEventAt = now
-        if wasSleeping || always, let greet = greet { showOverride(greet, for: 3, now: now) }
+        if wasSleeping || always, let greet = greet {
+            showOverride(greet, for: 3, now: now)
+            doGesture(.wave, now: now)   // el salla
+        }
         refresh(now: now)
     }
 
@@ -381,6 +421,7 @@ final class RobotModel: ObservableObject {
             }
         }
         bestSessionID = bestID
+        isAsking = bestState == .waiting && bestSession?.emoji == "❓"
         let newTarget = bestSession?.target
         if newTarget != target { target = newTarget }
         let newWaiting = bestState == .waiting ? bestSession?.waitingSince : nil
