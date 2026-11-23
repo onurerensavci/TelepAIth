@@ -7,6 +7,8 @@ import UserNotifications
 /// - Bildirime tıklayınca ilgili uygulama (Claude penceresi, terminal…) öne gelir.
 final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     static let shared = Notifier()
+    /// Son bildirim sesinin çaldığı an (ses en fazla 10 sn'de bir)
+    private var lastSoundAt = Date.distantPast
 
     enum Status: Equatable {
         case unknown, authorized, denied, notDetermined, unavailable
@@ -100,7 +102,12 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = body
-        content.sound = .default
+        // Ses en fazla 10 sn'de bir: art arda gelen bildirimler sessiz düşer ("din din din" olmasın)
+        let now = Date()
+        if now.timeIntervalSince(lastSoundAt) >= 10 {
+            content.sound = .default
+            lastSoundAt = now
+        }
         var info: [String: Any] = [:]
         if let pid = target?.pid { info["pid"] = Int(pid) }
         if let id = target?.bundleID { info["bundle"] = id }

@@ -38,12 +38,13 @@
 - Eyleme göre emojiyle konuşur: düşünürken 🔮, okurken 📖, test çalıştırırken 🧪, paket kurarken 📦, `git push`'ta 🚀, bitince 🎉, seni beklerken ✋.
 - İş bitince tur özeti verir: *Tamamdır! · 2 dk · 12 araç · 4 düzenleme*.
 - Ruh hâlleri var: teşekkür edince gözleri kalp olur, BÜYÜK HARFLE yazınca şaşırır, `rm -rf` görünce korkar, testler geçince parti yapar, üst üste 3 hatada başı döner.
-- El hareketleri ve gözleri: büyük bir iş bitince alkışlar, uygulama açılınca el sallar, onay beklerken balonu gösterir, hatada eliyle alnına vurur. Gözlerinde ? (soru soruyor), ! (onay bekliyor), ✓ (bitti) ve % (kota azaldı) yanar. Boştayken gözleriyle imleci izler, üstüne gelince gülümser; art arda tıklarsan başı döner.
+- Gözleri konuşur: ? (soru soruyor), ! (onay bekliyor), ✓ (bitti) ve % (kota azaldı) yanar. Boştayken gözleriyle imleci izler, üstüne gelince gülümser; art arda tıklarsan başı döner.
 - Aralık – 6 Ocak arası bere takar, etrafında kar yağar (Ayarlar → Genel → Kostüm).
 - Türkçe ya da İngilizce konuşur. İstersen sesli söyler, kısa sesler çalar.
 
 **🔔 Haber verir**
 - 20 saniyeden uzun süren iş bitince, AI senden onay ya da cevap beklerken ve hata olunca bildirim atar.
+- Sesler azdır: arkadaki sohbetler o uygulama öndeyken bildirim atmaz (robot balonda söyler); Mac'te bildirim sesi 10 saniyede en fazla bir kez çalar; işlemciden tahmin edilen "bitti" bildirim atmaz.
 - **Bildirime ya da balona tıkla:** o işin penceresine gidersin: Claude, ChatGPT ya da Claude Code'un çalıştığı terminal.
 - **Robota tıkla:** çalışan, seni bekleyen ve yeni biten sohbetlerin listesi açılır: adı, durumu ve süresi (*çalışıyor · 3 dk*, *bitti · 5 dk önce*). Birine tıklayınca o sohbete gidersin.
 - **Israr eder:** AI 30 saniyeden uzun süre onayını beklerse robot arada bir sallanır, başında "!" çıkar; 2 dakika sonra bir kez daha hatırlatır.

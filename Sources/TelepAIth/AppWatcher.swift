@@ -547,7 +547,7 @@ final class AppWatcher {
                 st.generating = false
                 st.approving = false
                 if now - st.startedAt >= 4 {
-                    emit(stop: pid, state: st)
+                    emit(stop: pid, state: st, noNotice: cpuMode)   // işlemciden tahmin: bildirim/ses yok
                 } else {
                     // Çok kısa sürdüyse (kaydırma vb. yanlış alarm) sessizce kapat
                     emitMain(AgentEvent(source: st.source, sessionID: st.session(pid), kind: .sessionEnd))
@@ -607,9 +607,10 @@ final class AppWatcher {
         return candidates.max(by: { $0.1.maxY < $1.1.maxY })?.0
     }
 
-    private func emit(stop pid: pid_t, state st: AppState) {
+    private func emit(stop pid: pid_t, state st: AppState, noNotice: Bool = false) {
         var e = AgentEvent(source: st.source, sessionID: st.session(pid), kind: .stop, state: .done)
         e.quietIfFrontmostPID = pid
+        e.noNotice = noNotice
         emitMain(e)
     }
 

@@ -361,9 +361,6 @@ struct HeadFigure: View {
         let gaze = pointer?.sample(time: time, active: (pointer?.avatar?.gazeAllowed ?? false)
                                    && [.idle, .done, .error].contains(state) && model.mood == nil) ?? Gaze()
         let winter = Preferences.winterActive
-        let right = look > 0   // balonun açıldığı taraf (ekranın içi)
-        let gt = model.gestureStart.map { time - $0.timeIntervalSinceReferenceDate } ?? -1
-        let stateAge = time - model.visualChangedAt.timeIntervalSinceReferenceDate
 
         return ZStack {
             Ellipse()
@@ -398,10 +395,6 @@ struct HeadFigure: View {
                                         color: Color(nsColor: base))
                     }
                 }
-                // Hata: eli alnına (yüzle birlikte hareket etsin)
-                if model.gesture == .facepalm && gt >= 0 && gt <= 1.6 {
-                    HandCanvas(kind: .facepalm, t: gt, right: right)
-                }
             }
             .frame(width: 100, height: 100)
             .rotationEffect(.degrees(tilt), anchor: UnitPoint(x: 0.5, y: 0.9))
@@ -418,19 +411,6 @@ struct HeadFigure: View {
             if state == .sleeping {
                 ZzzView(time: time)
             }
-            // El hareketleri: büyük iş bitti (alkış), merhaba (el sallama), onay bekliyor (balonu göster)
-            Group {
-                if model.gesture == .clap && gt >= 0 && gt <= 2.0 {
-                    HandCanvas(kind: .clap, t: gt, right: right)
-                }
-                if model.gesture == .wave && gt >= 0 && gt <= 1.8 {
-                    HandCanvas(kind: .wave, t: gt, right: right)
-                }
-                if let pt = pointElapsed(stateAge) {
-                    HandCanvas(kind: .point, t: pt, right: right, bubbleBelow: bubbleBelow)
-                }
-            }
-            .offset(y: -lift)
             if winter {
                 SnowView(time: time)
                     .frame(width: 130, height: 140)
@@ -504,14 +484,6 @@ struct HeadFigure: View {
     }
 
     private var isCelebrating: Bool { celebrateElapsed != nil }
-
-    /// Onay beklerken balonu gösteren el: ilk 3,2 sn, 30 sn'den sonra da 10 sn'de bir
-    private func pointElapsed(_ age: Double) -> Double? {
-        guard model.state == .waiting else { return nil }
-        if age < 3.2 { return age }
-        let phase = age.truncatingRemainder(dividingBy: 10)
-        return age > 30 && phase < 2.2 ? phase : nil
-    }
 
     private var hopHeight: CGFloat {
         guard let t = celebrateElapsed, t <= 1.3 else { return 0 }
@@ -1130,115 +1102,6 @@ struct ExtraLightsView: View {
         }
         .frame(width: 100, height: 100)
         .allowsHitTesting(false)
-    }
-}
-
-// MARK: - El hareketleri
-
-/// El hareketleri (Windows'taki çizimin aynısı, kafa alanı 100 × 100):
-/// el sallama (merhaba), balonu gösterme (onay bekliyor), alkış (gurur verici iş bitti), alnına vurma (hata).
-struct HandCanvas: View {
-    enum Kind { case wave, point, clap, facepalm }
-    let kind: Kind
-    let t: Double
-    let right: Bool
-    var bubbleBelow = false
-
-    private static let edge = Color(red: 0.54, green: 0.51, blue: 0.65)
-    private static let fill = Color(red: 0.96, green: 0.945, blue: 0.965)
-    private static let bolt = Color(red: 0.74, green: 0.71, blue: 0.84)
-
-    var body: some View {
-        Canvas { ctx, _ in
-            switch kind {
-            case .wave:
-                let (s, o) = HandCanvas.pop(t, 1.8)
-                var c = ctx
-                c.opacity = o
-                c.translateBy(x: right ? 95 : 5, y: 60)
-                HandCanvas.about(&c, sx: right ? s : -s, sy: s, degrees: sin(t * 14) * 22)
-                HandCanvas.palm(c)
-            case .point:
-                let (s, o) = HandCanvas.pop(t, 2.2 + (t < 3.2 ? 1 : 0))
-                var c = ctx
-                c.opacity = o
-                c.translateBy(x: right ? 90 : 10, y: 76)
-                HandCanvas.about(&c, sx: right ? s : -s, sy: s, degrees: 0)
-                c.translateBy(x: 0, y: 4)
-                c.rotate(by: .degrees(bubbleBelow ? 25 : -25))
-                c.translateBy(x: 0, y: -4)
-                c.translateBy(x: CGFloat(sin(t * 8) * 2.5), y: 0)
-                HandCanvas.pointing(c)
-            case .clap:
-                let (s, o) = HandCanvas.pop(t, 2.0)
-                let sep = 6 + abs(cos(t * 9)) * 9
-                for side in [-1.0, 1.0] {
-                    var c = ctx
-                    c.opacity = o
-                    c.translateBy(x: CGFloat(50 + side * sep), y: 84)
-                    HandCanvas.about(&c, sx: CGFloat(-side) * s * 0.85, sy: s * 0.85, degrees: side * -12)
-                    HandCanvas.palm(c)
-                }
-            case .facepalm:
-                let (_, o) = HandCanvas.pop(t, 1.6)
-                let rise = 1 - IdleMotion.smooth(t / 0.35)
-                var c = ctx
-                c.opacity = o
-                c.translateBy(x: right ? 64 : 36, y: CGFloat(58 + rise * 30))
-                HandCanvas.about(&c, sx: right ? -1 : 1, sy: 1, degrees: -10)
-                HandCanvas.palm(c)
-            }
-        }
-        .frame(width: 100, height: 100)
-        .allowsHitTesting(false)
-    }
-
-    /// Elin belirmesi: hafif taşan yay; sonda solarak kaybolur
-    static func pop(_ t: Double, _ duration: Double) -> (CGFloat, Double) {
-        let x = Swift.min(1, t / 0.3)
-        let c1 = 1.70158, c3 = c1 + 1
-        let scale = 1 + c3 * pow(x - 1, 3) + c1 * pow(x - 1, 2)
-        let opacity = t > duration - 0.3 ? Swift.max(0, (duration - t) / 0.3) : 1
-        return (CGFloat(scale), opacity)
-    }
-
-    /// Bileğin (0, 16) çevresinde ölçekle ve döndür
-    private static func about(_ c: inout GraphicsContext, sx: CGFloat, sy: CGFloat, degrees: Double) {
-        c.translateBy(x: 0, y: 16)
-        c.scaleBy(x: sx, y: sy)
-        c.rotate(by: .degrees(degrees))
-        c.translateBy(x: 0, y: -16)
-    }
-
-    private static func rr(_ x: CGFloat, _ y: CGFloat, _ w: CGFloat, _ h: CGFloat, _ r: CGFloat) -> Path {
-        Path(roundedRect: CGRect(x: x, y: y, width: w, height: h), cornerRadius: r)
-    }
-
-    private static func crease(_ c: GraphicsContext, _ a: CGPoint, _ b: CGPoint) {
-        var line = Path()
-        line.move(to: a)
-        line.addLine(to: b)
-        c.stroke(line, with: .color(edge), style: StrokeStyle(lineWidth: 1.2, lineCap: .round))
-    }
-
-    /// Açık el: başparmak solda (-x), parmak çizgileri üstte, bilek (0, 16)
-    private static func palm(_ c: GraphicsContext) {
-        c.fill(rr(-6, 13, 12, 5, 2), with: .color(bolt))
-        for p in [rr(-10, -14, 20, 28, 9), rr(-17, -2, 9, 12, 4.5)] {
-            c.fill(p, with: .color(fill))
-            c.stroke(p, with: .color(edge), lineWidth: 1.4)
-        }
-        for x: CGFloat in [-4.5, 0.5, 5.5] { crease(c, CGPoint(x: x, y: -14), CGPoint(x: x, y: -7)) }
-    }
-
-    /// İşaret eden el: işaret parmağı +x yönünde
-    private static func pointing(_ c: GraphicsContext) {
-        c.fill(rr(-8, 11, 16, 5, 2), with: .color(bolt))
-        for p in [rr(-12, -6, 24, 18, 7), rr(8, -6, 16, 7, 3.5)] {
-            c.fill(p, with: .color(fill))
-            c.stroke(p, with: .color(edge), lineWidth: 1.4)
-        }
-        for y: CGFloat in [3, 8] { crease(c, CGPoint(x: 2, y: y), CGPoint(x: 10, y: y)) }
     }
 }
 

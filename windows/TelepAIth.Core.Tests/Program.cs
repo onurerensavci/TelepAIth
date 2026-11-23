@@ -347,7 +347,7 @@ public static class Tests
         A.True(after.Any(e => e.Kind == EventKind.ToolDone), "cevaptan sonra çalışmaya döner");
     }
 
-    public static void GesturesAndEyeGlyphs()
+    public static void EyeGlyphsAndMoods()
     {
         var m = new RobotModel("claude");
         var t0 = DateTime.Now;
@@ -359,22 +359,17 @@ public static class Tests
         m.Apply(new AgentEvent("claude", "s", EventKind.Waiting, RobotState.Waiting, "Bir soru?") { Emoji = "❓" }, t0.AddSeconds(2));
         A.True(m.IsAsking, "soru");
         A.Eq('?', m.EyeGlyph(t0.AddSeconds(2.5)));
-        // Bitti → başparmak yok (kaldırıldı), kısa süre "✓"
+        // Bitti → kısa süre "✓"
         m.Apply(new AgentEvent("claude", "s", EventKind.ToolDone, RobotState.Thinking), t0.AddSeconds(3));
         m.Apply(new AgentEvent("claude", "s", EventKind.Stop, RobotState.Done), t0.AddSeconds(4));
-        A.Eq(Gesture.None, m.Gesture);   // normal bitişte el hareketi yok
         A.Eq('✓', m.EyeGlyph(m.VisualChangedAt.AddSeconds(0.5)));
         A.Eq('\0', m.EyeGlyph(m.VisualChangedAt.AddSeconds(2)));
-        // Hata → alnına vurur
-        m.Apply(new AgentEvent("claude", "s", EventKind.Prompt, RobotState.Thinking, "y"), t0.AddSeconds(10));
-        m.Apply(new AgentEvent("claude", "s", EventKind.Failure, RobotState.Error, "patladı"), t0.AddSeconds(11));
-        A.Eq(Gesture.Facepalm, m.Gesture);
-        // Uyurken uygulama açılınca el sallar
+        // Uygulama açılınca selam verir
         var w = new RobotModel("gpt");
         w.Apply(new AgentEvent("gpt", "s", EventKind.Prompt, RobotState.Thinking, "x"), t0.AddHours(-2));
         w.Refresh(t0);
         w.Wake("Merhaba", always: true, at: t0);
-        A.Eq(Gesture.Wave, w.Gesture);
+        A.Eq("Merhaba", w.BubbleText);
         // Art arda tıklama tepkisi
         w.React(Mood.Dizzy, 2.5, "Başım döndü!");
         A.Eq(Mood.Dizzy, w.Mood);
@@ -552,6 +547,7 @@ public static class Tests
         A.Eq(EventKind.Prompt, ev[0].Kind);
         A.Eq("Sohbet B", ev[0].Project);
         A.Eq(77, ev[0].AppPid);
+        A.Eq(77, ev[0].QuietIfForegroundPid);   // Claude öndeyken arkadaki sohbetin bildirimi/sesi gelmez
         A.True(ev[0].SessionId.StartsWith("bg-77-"));
         A.True(RobotModel.SessionGroup(ev[0].SessionId) != "desktop", "açık sohbetle birleşmesin");
         var id = ev[0].SessionId;
@@ -731,6 +727,11 @@ public static class Tests
         events.Clear();
         for (var s = 15.0; s <= 22; s += 1) { cpu += 0.01; events.AddRange(t.Update(blind, "ChatGPT", s, cpu)); }
         A.True(events.Any(e => e.Kind == EventKind.Stop) && !t.Generating, "işlemci düşünce bitti");
+        A.True(events.First(e => e.Kind == EventKind.Stop).NoNotice, "tahmini bitti bildirim atmaz");
+        var gm = new RobotModel("gpt");
+        gm.Apply(new AgentEvent("gpt", "g", EventKind.Prompt, RobotState.Thinking, "x"), DateTime.Now.AddMinutes(-2));
+        var silent = new AgentEvent("gpt", "g", EventKind.Stop, RobotState.Done) { ForceNotify = true, NoNotice = true };
+        A.True(gm.Apply(silent, DateTime.Now) == null, "NoNotice: bildirim yok");
         A.True(t.StatusText.Contains("%") || t.StatusText.Contains("CPU"), t.StatusText);
         // Ekranı okunabilen uygulamada yedek yol devreye girmez
         var c = new ChatAppTracker("claude", 32, "Claude");

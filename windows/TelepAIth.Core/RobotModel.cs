@@ -7,7 +7,6 @@ namespace TelepAIth.Core;
 /// Ekrandaki tek robot, o an gösterilen kaynağın modelini çizer. (Mac sürümündeki RobotModel'in aynısı.)
 /// </summary>
 /// <summary>Robotun el hareketleri</summary>
-public enum Gesture { None, Clap, Wave, Facepalm }
 
 public sealed class RobotModel
 {
@@ -46,9 +45,6 @@ public sealed class RobotModel
     public DateTime? CelebrateStart { get; private set; }
     public DateTime? ErrorStart { get; private set; }
     public Mood? Mood { get; private set; }
-    /// <summary>El hareketi (alkış, el sallama, alnına vurma) ve başladığı an</summary>
-    public Gesture Gesture { get; private set; }
-    public DateTime? GestureStart { get; private set; }
     /// <summary>Seni bekleyen şey bir soru mu (onay değil)? Gözlerde "?" çıkar.</summary>
     public bool IsAsking { get; private set; }
 
@@ -65,12 +61,6 @@ public sealed class RobotModel
             RobotState.Idle when QuotaLeft is <= 20 && now.TimeOfDay.TotalSeconds % 10 < 1.6 => '%',
             _ => '\0',
         };
-    }
-
-    private void DoGesture(Gesture g, DateTime now)
-    {
-        Gesture = g;
-        GestureStart = now;
     }
 
     /// <summary>Dışarıdan kısa bir ruh hâli (ör. art arda tıklanınca başı döner)</summary>
@@ -182,7 +172,7 @@ public sealed class RobotModel
             {
                 var text = WithEmoji(e.Emoji, e.Text ?? "");
                 ShowOverride(text, 10, now);
-                if (e.State == RobotState.Error) { ErrorStart = now; DoGesture(Gesture.Facepalm, now); }
+                if (e.State == RobotState.Error) ErrorStart = now;
                 if (e.QuotaLeft is { } left)
                 {
                     QuotaLeft = Math.Clamp(left, 0, 100);
@@ -322,7 +312,6 @@ public sealed class RobotModel
                         s.TurnStart = null;
                         CelebrateStart = now;
                         // Gurur/parti anında alkış (normal bitişte el hareketi yok: zıplama ve parıltı yeter)
-                        if (Mood is Core.Mood.Proud or Core.Mood.Party) DoGesture(Gesture.Clap, now);
                         Play("Glass");
                         Remember(WithEmoji(s.Emoji, text), now);
                         // Anlatıcının "bitti"si bildirim atmaz (izleyici ya da hook zaten haber veriyor)
@@ -349,7 +338,6 @@ public sealed class RobotModel
                     }
                     case EventKind.Failure:
                         ErrorStart = now;
-                        DoGesture(Gesture.Facepalm, now);
                         Play("Basso");
                         notice = new Notice(WithEmoji(s.Emoji, Theme.DisplayName + L(" hata verdi", " hit an error") + place),
                                             s.Text ?? "", true, s.Target);
@@ -365,7 +353,7 @@ public sealed class RobotModel
         }
 
         Refresh(now);
-        return notice;
+        return e.NoNotice ? null : notice;
     }
 
     /// <summary>Robotun balonda bir şey söylemesi (güncelleme haberi, uyarı…). Odak modunda da görünür.</summary>
@@ -389,7 +377,6 @@ public sealed class RobotModel
         if ((wasSleeping || always) && greet != null)
         {
             ShowOverride(greet, 3, now);
-            DoGesture(Gesture.Wave, now);   // el salla
         }
         Refresh(now);
     }

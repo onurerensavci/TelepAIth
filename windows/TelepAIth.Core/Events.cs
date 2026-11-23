@@ -104,6 +104,8 @@ public sealed class AgentEvent
     public double MoodSeconds = 3;
     /// <summary>Bu süreç öndeyken bildirim gösterme (kullanıcı zaten bakıyor)</summary>
     public int? QuietIfForegroundPid;
+    /// <summary>Bildirim atma (ör. işlemciden tahmin edilen "bitti": emin değiliz, sadece robot gösterir)</summary>
+    public bool NoNotice;
     /// <summary>Balona ya da bildirime tıklayınca öne getirilecek uygulama</summary>
     public int? AppPid;
     public string? AppProcess;

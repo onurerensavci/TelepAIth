@@ -373,6 +373,7 @@ public sealed class ChatAppTracker
                 {
                     var stop = Ev(EventKind.Stop, Core.RobotState.Done);
                     stop.QuietIfForegroundPid = Pid;
+                    stop.NoNotice = cpuMode;   // işlemciden tahmin: bildirim/ses yok, sadece robot gösterir
                     events.Add(stop);
                 }
                 else
@@ -678,6 +679,7 @@ public sealed class SidebarChats
         return events;
     }
 
+    // Uygulama öndeyken arkadaki sohbetin bildirimi/sesi gelmez (robot balonda söyler)
     private AgentEvent Ev(string id, string title, EventKind kind, RobotState? state = null, string? text = null, string? emoji = null) =>
-        new(Source, id, kind, state, text, project: Clip(title, 40), emoji: emoji) { AppPid = Pid };
+        new(Source, id, kind, state, text, project: Clip(title, 40), emoji: emoji) { AppPid = Pid, QuietIfForegroundPid = Pid };
 }

@@ -38,12 +38,13 @@
 - Speaks with an emoji for each action: 🔮 thinking, 📖 reading, 🧪 running tests, 📦 installing packages, 🚀 on `git push`, 🎉 when done, ✋ when waiting for you.
 - Wraps up each turn: *Done! · 2 min · 12 tools · 4 edits*.
 - Has moods: heart eyes when you say thanks, shocked by ALL CAPS, scared of `rm -rf`, throws a party when tests pass, gets dizzy after 3 errors in a row.
-- Gestures and eyes: applause when a big task finishes, a wave when the app opens, points at the bubble while waiting for you, a facepalm on errors. Its eyes show ? (asking), ! (needs approval), ✓ (done) and % (quota low). When idle its eyes follow your cursor and it smiles when you hover; click it rapidly and it gets dizzy.
+- Its eyes talk: they show ? (asking), ! (needs approval), ✓ (done) and % (quota low). When idle its eyes follow your cursor and it smiles when you hover; click it rapidly and it gets dizzy.
 - Wears a beanie with falling snow from Dec 1 to Jan 6 (Settings → General → Costume).
 - Speaks Turkish or English. Can read things out loud and play short sounds if you like.
 
 **🔔 Lets you know**
 - Notifies you when a task longer than 20 seconds finishes, when the AI needs your approval or an answer, and on errors.
+- Kept quiet: background chats don't notify while that app is in front (the robot says it in its bubble); on Mac the notification sound plays at most once every 10 seconds; a "done" guessed from CPU usage doesn't notify.
 - **Click a notification or the bubble** to jump to that task's window: Claude, ChatGPT, or the terminal Claude Code runs in.
 - **Click the robot** for a list of running, waiting and recently finished chats with their name, state and time (*working · 3 min*, *done · 5 min ago*). Click one to jump to that chat.
 - **Nags when it should:** if the AI waits more than 30 seconds for your OK, the robot wiggles now and then with a "!" on its head, and reminds you once more after 2 minutes.

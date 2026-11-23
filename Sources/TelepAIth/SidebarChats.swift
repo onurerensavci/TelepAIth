@@ -256,6 +256,7 @@ final class SidebarChats {
         e.project = clip(title, 40)
         e.emoji = emoji
         e.appPID = pid
+        e.quietIfFrontmostPID = pid   // uygulama öndeyken arkadaki sohbetin bildirimi/sesi gelmez (robot balonda söyler)
         return e
     }
 }

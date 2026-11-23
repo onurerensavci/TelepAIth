@@ -95,6 +95,8 @@ struct AgentEvent {
     var moodSeconds: Double = 3
     /// Bu süreç öndeyken bildirim gösterme (kullanıcı zaten bakıyor)
     var quietIfFrontmostPID: Int32? = nil
+    /// Bildirim atma (ör. işlemciden tahmin edilen "bitti": emin değiliz, sadece robot gösterir)
+    var noNotice = false
     /// Balona ya da bildirime tıklayınca öne getirilecek uygulama (Claude penceresi, terminal…)
     var appPID: Int32? = nil
     var appBundleID: String? = nil

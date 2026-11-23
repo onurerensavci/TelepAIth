@@ -116,7 +116,7 @@ final class TelepAIthTests: XCTestCase {
         XCTAssertTrue(HookInstaller.command(source: "claude").contains("app=${__CFBundleIdentifier:-}"))
     }
 
-    func testGesturesAndEyeGlyphs() {
+    func testEyeGlyphsAndMoods() {
         let m = RobotModel(source: "claude")
         let t0 = Date()
         _ = m.apply(AgentEvent(source: "claude", sessionID: "s", kind: .prompt, state: .thinking, text: "x"), now: t0)
@@ -129,15 +129,11 @@ final class TelepAIthTests: XCTestCase {
         XCTAssertEqual(m.eyeGlyph(at: t0.addingTimeInterval(2.5)), "?")
         _ = m.apply(AgentEvent(source: "claude", sessionID: "s", kind: .toolDone, state: .thinking), now: t0.addingTimeInterval(3))
         _ = m.apply(AgentEvent(source: "claude", sessionID: "s", kind: .stop, state: .done), now: t0.addingTimeInterval(4))
-        XCTAssertEqual(m.gesture, Gesture.none)   // başparmak kaldırıldı; normal bitişte el hareketi yok
         XCTAssertEqual(m.eyeGlyph(at: m.visualChangedAt.addingTimeInterval(0.5)), "✓")
         XCTAssertNil(m.eyeGlyph(at: m.visualChangedAt.addingTimeInterval(2)))
-        _ = m.apply(AgentEvent(source: "claude", sessionID: "s", kind: .prompt, state: .thinking, text: "y"), now: t0.addingTimeInterval(10))
-        _ = m.apply(AgentEvent(source: "claude", sessionID: "s", kind: .failure, state: .error, text: "patladı"), now: t0.addingTimeInterval(11))
-        XCTAssertEqual(m.gesture, .facepalm)
         let w = RobotModel(source: "gpt")
         w.wake(greet: "Merhaba", always: true)
-        XCTAssertEqual(w.gesture, .wave)
+        XCTAssertEqual(w.bubbleText, "Merhaba")
         w.react(.dizzy, for: 2.5, say: "Başım döndü!")
         XCTAssertEqual(w.mood, .dizzy)
         XCTAssertNil(w.eyeGlyph(at: Date()))

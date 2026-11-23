@@ -602,7 +602,6 @@ internal sealed class RobotManager
                 ["buttons"] = _window?.ApprovalButtonsJson(),
             } : null,
             ["gazeAllowed"] = _avatar?.GazeAllowed ?? false,
-            ["gesture"] = _avatar?.Current is { GestureStart: { } gs } gm && (DateTime.Now - gs).TotalSeconds <= 2.5 ? gm.Gesture.ToString() : "None",
             ["glyph"] = _avatar?.Current.EyeGlyph(DateTime.Now) is { } g && g != '\0' ? g.ToString() : "",
             ["mood"] = _avatar?.Current.Mood?.ToString(),
             ["celebrating"] = _avatar?.Current.CelebrateStart is { } cs && (DateTime.Now - cs).TotalSeconds is >= 0 and <= 2.4,

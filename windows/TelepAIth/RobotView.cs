@@ -428,7 +428,6 @@ internal sealed class RobotView : FrameworkElement
         var tilt = Mix(HeadTilt(model.PreviousState, model.PreviousMood, time), HeadTilt(state, mood, time), blend) + idle.Tilt;
 
         // Gözde simge: ? soru, ! onay bekliyor, ✓ yeni bitti, % kota azaldı
-        var stateAge = time - Seconds(model.VisualChangedAt == DateTime.MinValue ? Epoch : model.VisualChangedAt);
         var glyph = model.EyeGlyph(DateTime.Now);
         var prevGlyph = model.PreviousState == RobotState.Waiting ? '!' : '\0';
 
@@ -452,8 +451,6 @@ internal sealed class RobotView : FrameworkElement
         _hover += (hoverTarget - _hover) * Math.Min(1, dt * 8);
         var winter = WinterActive;
         var face = new FaceCtx(state, mood, model.PreviousState, model.PreviousMood, blend, idle, glyph, prevGlyph, lookU, lookV, _hover, winter);
-        var gt = model.GestureStart is { } gs ? Seconds(DateTime.Now) - Seconds(gs) : -1;
-        var right = look > 0;   // balonun açıldığı taraf (ekranın içi)
 
         // Gölge
         dc.DrawEllipse(B(Colors.Black, 0.14), null, new Point(50, 96), Math.Max(24, 58 - lift * 1.5) / 2, 3);
@@ -468,10 +465,9 @@ internal sealed class RobotView : FrameworkElement
             dc.DrawImage(skin, FitRect(skin, new Rect(2, 3, 96, 90)));
         else
             DrawFace(dc, time, eyeColor, face, C(baseColor));
-        // Diğer sohbetler: ekranın altında küçük ışıklar (mavi çalışıyor, turuncu seni bekliyor)
+        // Bu AI'ın diğer sohbetleri: ekranın altında AI renginde küçük ışıklar (bekleyen hızlı yanıp söner)
         if (skin == null) DrawExtraLights(dc, _avatar.Extras, time, (DateTime.Now - _avatar.ExtrasPoppedAt).TotalSeconds, C(baseColor));
-        // Hata: eli alnına (yüzle birlikte hareket etsin)
-        if (model.Gesture == Gesture.Facepalm && gt is >= 0 and <= 1.6) DrawFacepalm(dc, gt, right);
+
         dc.Pop();
 
         if (state is RobotState.Thinking or RobotState.Delegating or RobotState.Reading or RobotState.Searching)
@@ -487,16 +483,6 @@ internal sealed class RobotView : FrameworkElement
         }
         if (state == RobotState.Sleeping) DrawZzz(dc, time);
 
-        // El hareketleri: büyük iş bitti (alkış), merhaba (el sallama), onay bekliyor (balonu göster)
-        dc.PushTransform(new TranslateTransform(0, -lift));
-        switch (model.Gesture)
-        {
-            case Gesture.Clap when gt is >= 0 and <= 2.0: DrawClap(dc, gt); break;
-            case Gesture.Wave when gt is >= 0 and <= 1.8: DrawWave(dc, gt, right); break;
-        }
-        if (state == RobotState.Waiting && (stateAge < 3.2 || (stateAge > 30 && stateAge % 10 < 2.2)))
-            DrawPoint(dc, stateAge < 3.2 ? stateAge : stateAge % 10, right, _avatar.BubbleBelow);
-        dc.Pop();
         if (winter) DrawSnow(dc, time);
 
         if (IsNudging(model, time))
@@ -859,97 +845,9 @@ internal sealed class RobotView : FrameworkElement
         dc.Pop();
     }
 
-    // MARK: El hareketleri
-
+    // Kenar ve açık dolgu tonları (bere vb.)
     private static readonly Color HandEdge = C(0.54, 0.51, 0.65);
     private static readonly Color HandFill = C(0.96, 0.945, 0.965);
-
-    /// <summary>Elin belirmesi: hafif taşan yay; sonda solarak kaybolur</summary>
-    private static (double Scale, double Opacity) Pop(double t, double duration)
-    {
-        var x = Math.Min(1, t / 0.3);
-        const double c1 = 1.70158, c3 = c1 + 1;
-        var scale = 1 + c3 * Math.Pow(x - 1, 3) + c1 * Math.Pow(x - 1, 2);
-        var opacity = t > duration - 0.3 ? Math.Max(0, (duration - t) / 0.3) : 1;
-        return (scale, opacity);
-    }
-
-    /// <summary>Açık el (avuç): başparmak solda (-x), parmak çizgileri üstte. Bilek (0, 16).</summary>
-    private static void DrawPalm(DrawingContext dc)
-    {
-        var edge = new Pen(B(HandEdge), 1.4);
-        dc.DrawRoundedRectangle(B(Bolt), null, new Rect(-6, 13, 12, 5), 2, 2);
-        dc.DrawRoundedRectangle(B(HandFill), edge, new Rect(-10, -14, 20, 28), 9, 9);
-        dc.DrawRoundedRectangle(B(HandFill), edge, new Rect(-17, -2, 9, 12), 4.5, 4.5);
-        var crease = new Pen(B(HandEdge), 1.2) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round };
-        foreach (var x in new[] { -4.5, 0.5, 5.5 }) dc.DrawLine(crease, new Point(x, -14), new Point(x, -7));
-    }
-
-    /// <summary>İşaret eden el: işaret parmağı +x yönünde</summary>
-    private static void DrawPointingHand(DrawingContext dc)
-    {
-        var edge = new Pen(B(HandEdge), 1.4);
-        dc.DrawRoundedRectangle(B(Bolt), null, new Rect(-8, 11, 16, 5), 2, 2);
-        dc.DrawRoundedRectangle(B(HandFill), edge, new Rect(-12, -6, 24, 18), 7, 7);
-        dc.DrawRoundedRectangle(B(HandFill), edge, new Rect(8, -6, 16, 7), 3.5, 3.5);
-        var crease = new Pen(B(HandEdge), 1.2) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round };
-        foreach (var y in new[] { 3.0, 8 }) dc.DrawLine(crease, new Point(2, y), new Point(10, y));
-    }
-
-    /// <summary>Merhaba: başın yanında el sallar</summary>
-    private static void DrawWave(DrawingContext dc, double t, bool right)
-    {
-        var (scale, opacity) = Pop(t, 1.8);
-        dc.PushOpacity(opacity);
-        dc.PushTransform(new TranslateTransform(right ? 95 : 5, 60));
-        dc.PushTransform(new ScaleTransform(right ? scale : -scale, scale, 0, 16));
-        dc.PushTransform(new RotateTransform(Math.Sin(t * 14) * 22, 0, 16));
-        DrawPalm(dc);
-        dc.Pop(); dc.Pop(); dc.Pop(); dc.Pop();
-    }
-
-    /// <summary>Onay bekliyor: balonu işaret eder (balon üstteyse yukarı, alttaysa aşağı doğru), dürter gibi</summary>
-    private static void DrawPoint(DrawingContext dc, double t, bool right, bool bubbleBelow)
-    {
-        var (scale, opacity) = Pop(t, 2.2 + (t < 3.2 ? 1 : 0));
-        dc.PushOpacity(opacity);
-        dc.PushTransform(new TranslateTransform(right ? 90 : 10, 76));
-        dc.PushTransform(new ScaleTransform(right ? scale : -scale, scale, 0, 16));
-        dc.PushTransform(new RotateTransform(bubbleBelow ? 25 : -25, 0, 4));
-        dc.PushTransform(new TranslateTransform(Math.Sin(t * 8) * 2.5, 0));
-        DrawPointingHand(dc);
-        dc.Pop(); dc.Pop(); dc.Pop(); dc.Pop(); dc.Pop();
-    }
-
-    /// <summary>Uzun ya da gurur verici iş bitti: önde iki el alkışlar</summary>
-    private static void DrawClap(DrawingContext dc, double t)
-    {
-        var (scale, opacity) = Pop(t, 2.0);
-        var sep = 6 + Math.Abs(Math.Cos(t * 9)) * 9;
-        dc.PushOpacity(opacity);
-        foreach (var side in new[] { -1.0, 1.0 })
-        {
-            dc.PushTransform(new TranslateTransform(50 + side * sep, 84));
-            dc.PushTransform(new ScaleTransform(-side * scale * 0.85, scale * 0.85, 0, 16));
-            dc.PushTransform(new RotateTransform(side * -12, 0, 16));
-            DrawPalm(dc);
-            dc.Pop(); dc.Pop(); dc.Pop();
-        }
-        dc.Pop();
-    }
-
-    /// <summary>Hata: aşağıdan gelip bir gözünü kapatır (alnına vurur)</summary>
-    private static void DrawFacepalm(DrawingContext dc, double t, bool right)
-    {
-        var (_, opacity) = Pop(t, 1.6);
-        var rise = 1 - IdleMotion.Smooth(t / 0.35);
-        dc.PushOpacity(opacity);
-        dc.PushTransform(new TranslateTransform(right ? 64 : 36, 58 + rise * 30));
-        dc.PushTransform(new ScaleTransform(right ? -1 : 1, 1, 0, 16));
-        dc.PushTransform(new RotateTransform(-10, 0, 16));
-        DrawPalm(dc);
-        dc.Pop(); dc.Pop(); dc.Pop(); dc.Pop();
-    }
 
     // MARK: Efektler
 

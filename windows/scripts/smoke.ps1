@@ -133,7 +133,6 @@ Start-Sleep -Milliseconds 500
 Shot "4b-thumbs-up"
 $st = State
 Check ($st.celebrating -eq $true -and $st.source -eq "claude") "iş bitince kutlama (Claude ekranda kalır)"
-Check ($st.gesture -ne "ThumbsUp") "başparmak yok ($($st.gesture))"
 Start-Sleep 3
 $st = State
 Check ($st.source -eq "gpt") "kutlamadan sonra hâlâ çalışan GPT'ye geçti"
@@ -285,7 +284,6 @@ for ($round = 1; $round -le 2; $round++) {
     $st = State
     $seen = ($st.bubble -like "*açıldı*" -or $st.bubble -like "*is open*")
   }
-  if ($round -eq 1) { Check ($st.gesture -eq "Wave") "uygulama açılınca el salladı ($($st.gesture))" }
   Shot ("10-fake-claude-" + $round)
   Check $seen "Claude açılınca robot fark etti (tur $round)"
   Check ($st.state -ne "Sleeping") "robot uyanık (tur $round)"

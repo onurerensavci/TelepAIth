@@ -4,7 +4,6 @@ import Combine
 /// Bir AI'ın (kaynağın) durumu: oturumları takip eder, robotun ne söyleyeceğini hesaplar.
 /// Ekrandaki tek robot, o an gösterilen kaynağın modelini çizer.
 /// Robotun el hareketleri
-enum Gesture { case none, clap, wave, facepalm }
 
 final class RobotModel: ObservableObject {
     struct Session {
@@ -62,9 +61,6 @@ final class RobotModel: ObservableObject {
     @Published private(set) var celebrateStart: Date?
     @Published private(set) var errorStart: Date?
     @Published private(set) var mood: Mood?
-    /// El hareketi (alkış, el sallama, alnına vurma) ve başladığı an
-    private(set) var gesture: Gesture = .none
-    private(set) var gestureStart: Date?
     /// Seni bekleyen şey bir soru mu (onay değil)? Gözlerde "?" çıkar.
     private(set) var isAsking = false
 
@@ -80,11 +76,6 @@ final class RobotModel: ObservableObject {
             && now.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 10) < 1.6: return "%"
         default: return nil
         }
-    }
-
-    private func doGesture(_ g: Gesture, now: Date) {
-        gesture = g
-        gestureStart = now
     }
 
     /// Dışarıdan kısa bir ruh hâli (ör. art arda tıklanınca başı döner)
@@ -196,7 +187,7 @@ final class RobotModel: ObservableObject {
         case .quota:
             let text = withEmoji(e.emoji, e.text ?? "")
             showOverride(text, for: 10, now: now)
-            if e.state == .error { errorStart = now; doGesture(.facepalm, now: now) }
+            if e.state == .error { errorStart = now }
             if let left = e.quotaLeft {
                 quotaLeft = max(0, min(100, left))
                 quotaAt = now
@@ -309,7 +300,6 @@ final class RobotModel: ObservableObject {
                 s.turnStart = nil
                 celebrateStart = now
                 // Gurur/parti anında alkış (normal bitişte el hareketi yok: zıplama ve parıltı yeter)
-                if mood == .proud || mood == .party { doGesture(.clap, now: now) }
                 RobotModel.play("Glass")
                 remember(withEmoji(s.emoji, text), now: now)
                 // Anlatıcının "bitti"si bildirim atmaz (izleyici ya da hook zaten haber veriyor)
@@ -331,7 +321,6 @@ final class RobotModel: ObservableObject {
                 }
             case .failure:
                 errorStart = now
-                doGesture(.facepalm, now: now)
                 RobotModel.play("Basso")
                 notice = Notice(title: withEmoji(s.emoji, theme.displayName + loc(" hata verdi", " hit an error") + place),
                                 body: s.text ?? "", important: true, target: s.target)
@@ -346,7 +335,7 @@ final class RobotModel: ObservableObject {
         }
 
         refresh(now: now)
-        return notice
+        return e.noNotice ? nil : notice
     }
 
     /// Robotun balonda bir şey söylemesi (güncelleme haberi, uyarı…)
@@ -365,7 +354,6 @@ final class RobotModel: ObservableObject {
         lastEventAt = now
         if wasSleeping || always, let greet = greet {
             showOverride(greet, for: 3, now: now)
-            doGesture(.wave, now: now)   // el salla
         }
         refresh(now: now)
     }
