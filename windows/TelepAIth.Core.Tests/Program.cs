@@ -636,15 +636,14 @@ public static class Tests
         minis = DisplayPicker.Minis(new[] { claude, gpt }, gpt, t0.AddSeconds(1));
         A.Eq(1, minis.Count);
         A.Eq("claude", minis[0].Id);
-        // Kafadaki ışıklar: Claude büyükken gösterilen dışındaki 2 Claude sohbeti + minik kafaya sığmayan 1 GPT sohbeti
+        // Kafadaki ışıklar: sadece büyük kafadaki AI'ın sohbetleri (Claude büyükken gösterilen dışındaki 2 Claude sohbeti)
         claude.Refresh(t0.AddSeconds(1));
-        var extras = DisplayPicker.Extras(new[] { claude, gpt }, claude, t0.AddSeconds(1));
-        A.Eq(3, extras.Count);
-        A.True(extras.All(s => s.IsWorking()), "bekleyen GPT sohbeti minik kafada, ışıklar çalışanlar");
-        // Minik kafalar kapalıysa GPT'nin iki sohbeti de ışık olur, bekleyen önce
-        extras = DisplayPicker.Extras(new[] { claude, gpt }, claude, t0.AddSeconds(1), minisShown: false);
-        A.Eq(4, extras.Count);
-        A.Eq(RobotState.Waiting, extras[0]);
+        gpt.Refresh(t0.AddSeconds(1));
+        var extras = DisplayPicker.Extras(claude, t0.AddSeconds(1));
+        A.Eq(2, extras.Count);
+        // GPT büyükken: GPT'nin kendi diğer sohbeti (Claude'unkiler karışmaz)
+        extras = DisplayPicker.Extras(gpt, t0.AddSeconds(1));
+        A.Eq(1, extras.Count);
     }
 
     public static void ChatListRows()

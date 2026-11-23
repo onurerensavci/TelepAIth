@@ -29,7 +29,7 @@
 - **Claude ve ChatGPT uygulamaları:** ekrandaki Durdur / İzin ver düğmelerinden AI'ın çalıştığını, onay beklediğini ve bitirdiğini anlar. Ne aşamada olduğunu kısaca söyler: *bakıyor, çözüyor, anlıyor, bitiriyor*.
 - **Sohbet değiştirince** tıkladığın sohbete geçer, eskisini "bitti" sanmaz.
 - **Arkadaki sohbetler:** Claude'da başka bir sohbete geçsen de, arkada çalışmaya devam eden sohbetleri yan menüdeki durum noktasından görür: robot çalışıyor görünür, bitince ya da cevabını bekleyince haber verir (yan menü açıkken).
-- **İki AI birden:** büyük kafada biri görünürken öteki (ör. Claude büyükse ChatGPT) yanında tek bir minik kafa olur; seni bekliyorsa üstünde turuncu bir nokta yanar. Başka sohbetler de çalışıyorsa robotun yüzünde, ekranın altında küçük ışıklar yanar: mavi çalışıyor, turuncu seni bekliyor (en fazla 4).
+- **İki AI birden:** büyük kafada biri görünürken öteki (ör. Claude büyükse ChatGPT) yanında tek bir minik kafa olur; seni bekliyorsa üstünde turuncu bir nokta yanar. Büyük kafadaki AI'ın başka sohbetleri de çalışıyorsa robotun yüzünde, ekranın altında o AI'ın renginde küçük ışıklar yanar (Claude turuncu, GPT mavi); seni bekleyen hızlı yanıp söner (en fazla 4).
 - **Anlatıcı:** istersen Claude, ne yaptığını robota kendi ağzından söyler (küçük bir MCP aracı).
 - **Kota:** ClaudeBar kuruluysa kotan azalınca uyarır, robotun etrafındaki ince halka kalan kotayı gösterir.
 

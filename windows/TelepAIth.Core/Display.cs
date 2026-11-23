@@ -53,22 +53,11 @@ public static class DisplayPicker
             .ToList();
 
     /// <summary>
-    /// Kafadaki küçük ışıklar: büyük kafada ve minik kafalarda görünmeyen, çalışan ya da seni bekleyen diğer sohbetler
-    /// (seni bekleyenler önce). minisShown: minik kafalar açık mı (kapalıysa öteki AI'ların sohbetleri de ışık olur).
+    /// Kafadaki küçük ışıklar: büyük kafadaki AI'ın, gösterilen dışında çalışan ya da seni bekleyen diğer sohbetleri
+    /// (bekleyenler önce). Başka AI'ların sohbetleri karışmaz: onlar minik kafada.
     /// </summary>
-    public static List<RobotState> Extras(IEnumerable<RobotModel> models, RobotModel current, DateTime now, bool minisShown = true)
-    {
-        var extras = new List<RobotState>();
-        foreach (var m in models)
-        {
-            var all = m.MiniSessions(ReferenceEquals(m, current) ? m.BestSessionId : null, now);
-            var states = all.Select(x => x.State).OrderByDescending(s => s.Priority()).ToList();
-            // Öteki AI'ın en acil sohbeti zaten minik kafada
-            if (!ReferenceEquals(m, current) && minisShown && states.Count > 0) states.RemoveAt(0);
-            extras.AddRange(states);
-        }
-        return extras.OrderByDescending(s => s.Priority()).ToList();
-    }
+    public static List<RobotState> Extras(RobotModel current, DateTime now) =>
+        current.MiniSessions(current.BestSessionId, now).Select(x => x.State).OrderByDescending(s => s.Priority()).ToList();
 
     /// <summary>
     /// Minik kafalar: büyük kafada gösterilmeyen her AI için en fazla bir tane (Claude büyükse GPT, GPT büyükse Claude).

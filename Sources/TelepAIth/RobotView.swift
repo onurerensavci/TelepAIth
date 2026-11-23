@@ -394,7 +394,8 @@ struct HeadFigure: View {
                     // Diğer sohbetler: ekranın altında küçük ışıklar (mavi çalışıyor, turuncu seni bekliyor)
                     if !extras.isEmpty {
                         ExtraLightsView(extras: extras, time: time,
-                                        popAge: time - extrasPoppedAt.timeIntervalSinceReferenceDate)
+                                        popAge: time - extrasPoppedAt.timeIntervalSinceReferenceDate,
+                                        color: Color(nsColor: base))
                     }
                 }
                 // Hata: eli alnına (yüzle birlikte hareket etsin)
@@ -407,7 +408,7 @@ struct HeadFigure: View {
             .offset(x: shake, y: -lift)
 
             if state == .thinking || state == .delegating || state == .reading || state == .searching {
-                WavesView(time: time, color: accent)
+                WavesView(time: time, color: Color(nsColor: base.mix(.white, 0.08)))   // yayılan çizgiler AI'ın renginde
                     .offset(x: shake, y: -lift)
             }
             if isCelebrating || state == .editing || model.mood == .party || model.mood == .proud {
@@ -1101,11 +1102,10 @@ struct ExtraLightsView: View {
     let extras: [RobotState]
     let time: TimeInterval
     var popAge: Double = 99
+    /// AI'ın rengi (Claude turuncu, GPT mavi)
+    var color: Color = .orange
 
     // Açık renkli yüzde çerçevesiz de seçilsin diye koyu tonlar
-    private static let working = Color(red: 0.13, green: 0.47, blue: 0.95)
-    private static let waiting = Color(red: 0.95, green: 0.45, blue: 0.05)
-
     var body: some View {
         Canvas { ctx, _ in
             let n = Swift.min(4, extras.count)
@@ -1117,9 +1117,9 @@ struct ExtraLightsView: View {
             c.scaleBy(x: 1 + 0.3 * bump, y: 1 + 0.3 * bump)
             c.translateBy(x: -50, y: -cy)
             for i in 0..<n {
+                // AI'ın kendi renginde; seni bekleyen hızlı yanıp söner
                 let isWaiting = extras[i] == .waiting
-                let color = isWaiting ? ExtraLightsView.waiting : ExtraLightsView.working
-                let pulse = isWaiting ? 0.8 + 0.2 * sin(time * 7)
+                let pulse = isWaiting ? 0.3 + 0.7 * (0.5 + 0.5 * sin(time * 9))
                     : 0.65 + 0.35 * (0.5 + 0.5 * sin(time * 3.2 + Double(i) * 1.3))
                 let cx = 50 + (Double(i) - Double(n - 1) / 2) * gap
                 c.fill(Path(ellipseIn: CGRect(x: cx - 3.0, y: cy - 3.0, width: 6.0, height: 6.0)),

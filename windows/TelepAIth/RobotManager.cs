@@ -573,7 +573,7 @@ internal sealed class RobotManager
         if (_avatar == null || ReferenceEquals(model, _avatar.Current)) return;
         _avatar.Show(model);
         _avatar.Minis = DisplayPicker.Minis(AllModels, model, DateTime.Now);
-        _avatar.Extras = DisplayPicker.Extras(AllModels, model, DateTime.Now, Prefs.MiniHeads);
+        _avatar.Extras = DisplayPicker.Extras(model, DateTime.Now);
     }
 
     /// <summary>Robotun o anki durumu (JSON) — teşhis ve otomatik testler için</summary>
@@ -664,7 +664,7 @@ internal sealed class RobotManager
                 var rows = DisplayPicker.ChatRows(AllModels, date);
                 _avatar.ChatList = date > _avatar.ChatListUntil || rows.Count == 0 ? null : rows;
             }
-            _avatar.Extras = DisplayPicker.Extras(AllModels, _avatar.Current, date, Prefs.MiniHeads);
+            _avatar.Extras = DisplayPicker.Extras(_avatar.Current, date);
         }
         // Toplantı, odak süresi, günlük özet (5 sn'de bir)
         if (now - _lastSlowCheck > 5)

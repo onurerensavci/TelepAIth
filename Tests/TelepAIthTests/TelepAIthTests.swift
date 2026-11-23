@@ -263,14 +263,11 @@ final class TelepAIthTests: XCTestCase {
         XCTAssertTrue(minis.first?.label.contains("+1") == true)
         minis = RobotModel.minis([claude, gpt], current: gpt, now: t0.addingTimeInterval(1))
         XCTAssertEqual(minis.map { $0.id }, ["claude"])
-        // Kafadaki ışıklar: gösterilen dışındaki 2 Claude sohbeti + minik kafaya sığmayan 1 GPT sohbeti
+        // Kafadaki ışıklar: sadece büyük kafadaki AI'ın sohbetleri (Claude'unkiler GPT'nin kafasına karışmaz)
         claude.refresh(now: t0.addingTimeInterval(1))
-        var extras = RobotModel.extras([claude, gpt], current: claude, now: t0.addingTimeInterval(1))
-        XCTAssertEqual(extras.count, 3)
-        XCTAssertTrue(extras.allSatisfy { $0.isWorking })
-        extras = RobotModel.extras([claude, gpt], current: claude, now: t0.addingTimeInterval(1), minisShown: false)
-        XCTAssertEqual(extras.count, 4)
-        XCTAssertEqual(extras.first, .waiting)
+        gpt.refresh(now: t0.addingTimeInterval(1))
+        XCTAssertEqual(RobotModel.extras(current: claude, now: t0.addingTimeInterval(1)).count, 2)
+        XCTAssertEqual(RobotModel.extras(current: gpt, now: t0.addingTimeInterval(1)).count, 1)
     }
 
     func testChatListRows() {

@@ -550,19 +550,12 @@ final class RobotModel: ObservableObject {
         models.allSatisfy { now.timeIntervalSince($0.lastBusyAt) >= gazeDelay }
     }
 
-    /// Kafadaki küçük ışıklar: büyük kafada ve minik kafalarda görünmeyen, çalışan ya da seni bekleyen diğer sohbetler
-    /// (seni bekleyenler önce). minisShown: minik kafalar açık mı (kapalıysa öteki AI'ların sohbetleri de ışık olur).
-    static func extras(_ models: [RobotModel], current: RobotModel, now: Date = Date(), minisShown: Bool = true) -> [RobotState] {
-        var extras: [RobotState] = []
-        for m in models {
-            var states = m.miniSessions(excluding: m === current ? m.bestSessionID : nil, now: now)
-                .map { $0.state }
-                .sorted { $0.priority > $1.priority }
-            // Öteki AI'ın en acil sohbeti zaten minik kafada
-            if m !== current && minisShown && !states.isEmpty { states.removeFirst() }
-            extras += states
-        }
-        return extras.sorted { $0.priority > $1.priority }
+    /// Kafadaki küçük ışıklar: büyük kafadaki AI'ın, gösterilen dışında çalışan ya da seni bekleyen diğer sohbetleri
+    /// (bekleyenler önce). Başka AI'ların sohbetleri karışmaz: onlar minik kafada. (Windows'taki DisplayPicker.Extras)
+    static func extras(current: RobotModel, now: Date = Date()) -> [RobotState] {
+        current.miniSessions(excluding: current.bestSessionID, now: now)
+            .map { $0.state }
+            .sorted { $0.priority > $1.priority }
     }
 
     /// Minik kafalar: büyük kafada gösterilmeyen her AI için en fazla bir tane (Claude büyükse GPT, GPT büyükse Claude).

@@ -552,7 +552,7 @@ final class RobotManager {
         guard let avatar = avatar, model !== avatar.current else { return }
         avatar.show(model)
         avatar.setMinis(RobotModel.minis(allModels, current: model))
-        avatar.setExtras(RobotModel.extras(allModels, current: model, minisShown: Preferences.miniHeads))
+        avatar.setExtras(RobotModel.extras(current: model))
     }
 
     // MARK: - Döngü
@@ -610,7 +610,7 @@ final class RobotManager {
                 let rows = RobotModel.chatRows(allModels, now: date)
                 avatar.setChatList(date > avatar.chatListUntil || rows.isEmpty ? nil : rows)
             }
-            avatar.setExtras(RobotModel.extras(allModels, current: avatar.current, now: date, minisShown: Preferences.miniHeads))
+            avatar.setExtras(RobotModel.extras(current: avatar.current, now: date))
         }
         // Toplantı, odak süresi, günlük özet (5 sn'de bir)
         if now - lastSlowCheck > 5 {

@@ -469,13 +469,13 @@ internal sealed class RobotView : FrameworkElement
         else
             DrawFace(dc, time, eyeColor, face, C(baseColor));
         // Diğer sohbetler: ekranın altında küçük ışıklar (mavi çalışıyor, turuncu seni bekliyor)
-        if (skin == null) DrawExtraLights(dc, _avatar.Extras, time, (DateTime.Now - _avatar.ExtrasPoppedAt).TotalSeconds);
+        if (skin == null) DrawExtraLights(dc, _avatar.Extras, time, (DateTime.Now - _avatar.ExtrasPoppedAt).TotalSeconds, C(baseColor));
         // Hata: eli alnına (yüzle birlikte hareket etsin)
         if (model.Gesture == Gesture.Facepalm && gt is >= 0 and <= 1.6) DrawFacepalm(dc, gt, right);
         dc.Pop();
 
         if (state is RobotState.Thinking or RobotState.Delegating or RobotState.Reading or RobotState.Searching)
-            DrawWaves(dc, time, accent);
+            DrawWaves(dc, time, C(baseColor.Mix(Rgb.White, 0.08)));   // yayılan çizgiler AI'ın renginde (Claude turuncu, GPT mavi)
         dc.Pop();
 
         var celebrating = model.CelebrateStart is { } cs && Seconds(DateTime.Now) - Seconds(cs) is >= 0 and <= 1.6;
@@ -836,10 +836,10 @@ internal sealed class RobotView : FrameworkElement
     private static readonly Color ExtraWaiting = C(0.95, 0.45, 0.05);
 
     /// <summary>
-    /// Kafalarda görünmeyen her sohbet için ekranın altında bir nokta (en fazla 4). Açık renkli yüzde kaybolmasın diye
-    /// koyu tonlarda; yeni sohbet gelince kısa bir zıplamayla belirir.
+    /// Büyük kafadaki AI'ın diğer her sohbeti için ekranın altında bir nokta (en fazla 4), AI'ın renginde;
+    /// seni bekleyen hızlı yanıp söner, yeni sohbet gelince kısa bir zıplamayla belirir.
     /// </summary>
-    private static void DrawExtraLights(DrawingContext dc, List<RobotState> extras, double time, double popAge)
+    private static void DrawExtraLights(DrawingContext dc, List<RobotState> extras, double time, double popAge, Color aiColor)
     {
         var n = Math.Min(4, extras.Count);
         if (n == 0) return;
@@ -849,8 +849,9 @@ internal sealed class RobotView : FrameworkElement
         for (var i = 0; i < n; i++)
         {
             var waiting = extras[i] == RobotState.Waiting;
-            var color = waiting ? ExtraWaiting : ExtraWorking;
-            var pulse = waiting ? 0.8 + 0.2 * Math.Sin(time * 7) : 0.65 + 0.35 * (0.5 + 0.5 * Math.Sin(time * 3.2 + i * 1.3));
+            // AI'ın kendi renginde (Claude turuncu, GPT mavi); seni bekleyen hızlı yanıp söner
+            var color = aiColor;
+            var pulse = waiting ? 0.3 + 0.7 * (0.5 + 0.5 * Math.Sin(time * 9)) : 0.65 + 0.35 * (0.5 + 0.5 * Math.Sin(time * 3.2 + i * 1.3));
             var center = new Point(50 + (i - (n - 1) / 2.0) * gap, cy);
             dc.DrawEllipse(B(color, pulse), null, center, 3.0, 3.0);
             dc.DrawEllipse(B(Colors.White, 0.55 * pulse), null, new Point(center.X - 0.8, center.Y - 0.8), 0.9, 0.9);
