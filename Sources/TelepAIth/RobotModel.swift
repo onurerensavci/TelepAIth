@@ -56,10 +56,11 @@ final class RobotModel: ObservableObject {
 
     /// Gözde çıkan simge: ? soru, ! onay bekliyor, ✓ yeni bitti (1,4 sn), % kota azaldı (10 sn'de bir yanıp söner)
     func eyeGlyph(at now: Date) -> Character? {
+        // Seni bekliyorsa (başka bir oturumun ruh hâli olsa bile) önce o görünsün
+        if state == .waiting { return isAsking ? "?" : "!" }
         guard mood == nil else { return nil }
         let age = now.timeIntervalSince(visualChangedAt)
         switch state {
-        case .waiting: return isAsking ? "?" : "!"
         case .done where age < 1.4: return "✓"
         case .idle where (quotaLeft ?? 100) <= 20
             && now.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 10) < 1.6: return "%"

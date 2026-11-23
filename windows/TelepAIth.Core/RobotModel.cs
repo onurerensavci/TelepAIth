@@ -51,11 +51,12 @@ public sealed class RobotModel
     /// <summary>Gözde çıkan simge: ? soru, ! onay bekliyor, ✓ yeni bitti (1,4 sn), % kota azaldı (10 sn'de bir yanıp söner); yoksa '\0'</summary>
     public char EyeGlyph(DateTime now)
     {
+        // Seni bekliyorsa (başka bir oturumun ruh hâli olsa bile) önce o görünsün
+        if (State == RobotState.Waiting) return IsAsking ? '?' : '!';
         if (Mood != null) return '\0';
         var age = (now - VisualChangedAt).TotalSeconds;
         return State switch
         {
-            RobotState.Waiting => IsAsking ? '?' : '!',
             RobotState.Done when age < 1.4 => '✓',
             RobotState.Idle when QuotaLeft is <= 20 && now.TimeOfDay.TotalSeconds % 10 < 1.6 => '%',
             _ => '\0',
