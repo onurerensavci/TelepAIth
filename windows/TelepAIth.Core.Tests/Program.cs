@@ -421,6 +421,80 @@ public static class Tests
         A.True(t.SessionId.EndsWith("-1"));
     }
 
+    public static void TrackerNewChatGetsAddress()
+    {
+        // Yeni sohbette ilk mesaj gidince adres /new → /chat/<id> olur: "başka sohbete geçtim" deme, iş kesilmesin
+        var t = new ChatAppTracker("claude", 12, "Claude");
+        var composer = new RectD(0, 800, 600, 60);
+        var draft = new FoundUi { Send = new RectD(650, 810, 30, 30), Composer = composer };
+        draft.Urls.Add("https://claude.ai/new");
+        t.Update(draft, "Claude", 0);
+        var sending = new FoundUi { Stop = new RectD(650, 810, 30, 30), Composer = composer };
+        sending.Urls.Add("https://claude.ai/new");
+        var ev = t.Update(sending, "Claude", 1);
+        A.True(ev.Any(e => e.Kind == EventKind.Prompt));
+        var id = t.SessionId;
+        var named = new FoundUi { Stop = new RectD(650, 810, 30, 30), Composer = composer };
+        named.Urls.Add("https://claude.ai/chat/3f2a9c1e-1111-2222-3333-444455556666");
+        ev = t.Update(named, "Claude", 2);
+        A.True(!ev.Any(e => e.Kind is EventKind.SessionEnd or EventKind.Say), "yeni sohbet adını aldı, geçiş değil");
+        A.Eq(id, t.SessionId);
+        A.True(t.Generating);
+        // ChatGPT: kök adres → /c/<id> (ilk taramada düğme zaten "Durdur")
+        var g = new ChatAppTracker("gpt", 13, "ChatGPT");
+        var root = new FoundUi { Send = new RectD(650, 810, 30, 30), Composer = composer };
+        root.Urls.Add("https://chatgpt.com/");
+        g.Update(root, "ChatGPT", 0);
+        var c = new FoundUi { Stop = new RectD(650, 810, 30, 30), Composer = composer };
+        c.Urls.Add("https://chatgpt.com/c/6741a2b3-aaaa");
+        ev = g.Update(c, "ChatGPT", 1);
+        A.True(!ev.Any(e => e.Kind is EventKind.SessionEnd or EventKind.Say));
+        A.True(g.SessionId.EndsWith("-0"));
+        // Gerçek geçiş hâlâ algılanır
+        var other = new FoundUi { Stop = new RectD(650, 810, 30, 30), Composer = composer };
+        other.Urls.Add("https://chatgpt.com/c/9999");
+        ev = g.Update(other, "ChatGPT", 2);
+        A.True(ev.Any(e => e.Kind == EventKind.SessionEnd));
+        A.True(g.SessionId.EndsWith("-1"));
+        A.True(ChatAppTracker.IsDraftChat("https://claude.ai/new") && ChatAppTracker.IsDraftChat("https://chatgpt.com/?model=gpt-5"));
+        A.True(!ChatAppTracker.IsDraftChat("https://claude.ai/chat/abc") && !ChatAppTracker.IsDraftChat("ChatGPT"));
+    }
+
+    public static void DisplayStaysPutWhileBothWork()
+    {
+        var claude = new RobotModel("claude");
+        var gpt = new RobotModel("gpt");
+        var all = new[] { claude, gpt };
+        var t0 = DateTime.Now;
+        claude.Apply(new AgentEvent("claude", "app-1-0", EventKind.Prompt, RobotState.Thinking, "a"), t0);
+        var shown = DisplayPicker.Pick(all, claude, t0) ?? claude;
+        A.Eq(claude, shown);
+        // ChatGPT'ye de yazdın: en son başlayan öne çıkar
+        gpt.Apply(new AgentEvent("gpt", "app-2-0", EventKind.Prompt, RobotState.Thinking, "b"), t0.AddSeconds(5));
+        shown = DisplayPicker.Pick(all, shown, t0.AddSeconds(5)) ?? shown;
+        A.Eq(gpt, shown);
+        // İkisi de çalışırken Claude'un aşama mesajları kafayı geri çekmez (eskiden her mesajda gidip geliyordu)
+        for (var i = 0; i < 10; i++)
+        {
+            var at = t0.AddSeconds(6 + i * 2);
+            claude.Apply(new AgentEvent("claude", "app-1-0", EventKind.Status, i % 2 == 0 ? RobotState.Reading : RobotState.Editing, "aşama " + i), at);
+            gpt.Refresh(at);
+            A.True(DisplayPicker.Pick(all, shown, at) == null, "aşama mesajında kafa değişmemeli " + i);
+        }
+        // Minik kafa: gösterilmeyen Claude; gösterilen ChatGPT minik olarak tekrar çıkmaz
+        var minis = DisplayPicker.Minis(all, shown, t0.AddSeconds(30));
+        A.Eq(1, minis.Count);
+        A.Eq("claude", minis[0].Source);
+        // Claude onay isteyince öne geçer
+        claude.Apply(new AgentEvent("claude", "app-1-0", EventKind.Waiting, RobotState.Waiting, "onay"), t0.AddSeconds(31));
+        gpt.Refresh(t0.AddSeconds(31));
+        shown = DisplayPicker.Pick(all, shown, t0.AddSeconds(31)) ?? shown;
+        A.Eq(claude, shown);
+        minis = DisplayPicker.Minis(all, shown, t0.AddSeconds(31));
+        A.Eq(1, minis.Count);
+        A.Eq("gpt", minis[0].Source);
+    }
+
     public static void DailySummaryText()
     {
         var stats = new DailyStats(null);

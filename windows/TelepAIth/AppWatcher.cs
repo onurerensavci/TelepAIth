@@ -154,6 +154,14 @@ internal sealed class AppWatcher
             lock (_nextScan) due = _nextScan.TryGetValue(app.Pid, out var d) ? d : 0;
             if (now < due) continue;
 
+            // Pencere simge durumundaysa düğmeler "ekran dışı" görünür: bu, işin bittiği anlamına gelmez.
+            // Taramayı atla, son bilinen durum kalsın (açılınca kaldığı yerden devam eder).
+            if (Native.IsIconic(app.Window))
+            {
+                lock (_nextScan) _nextScan[app.Pid] = Now + 1.0;
+                lock (_diag) _diag[app.Pid] = $"{app.Name} (pid {app.Pid}) · {tracker.StatusText} · {Text.L("simge durumunda, bekleniyor", "minimized, waiting")}";
+                continue;
+            }
             var started = Now;
             var found = Scan(app);
             var title = Native.WindowTitle(app.Window);

@@ -364,7 +364,7 @@ final class RobotManager {
 
     func showHistory(source: String) {
         guard let m = models[source] else { return }
-        avatar?.show(m)
+        show(m)
         m.showHistory()
     }
 
@@ -501,28 +501,17 @@ final class RobotManager {
     private func chooseDisplay() {
         guard let avatar = avatar else { return }
         if let pinned = pinnedSource, let m = models[pinned] {
-            avatar.show(m)
+            show(m)
             return
         }
-        let current = avatar.current
-        var best: RobotModel?
-        for m in allModels {
-            guard let last = m.lastRealEvent else { continue }
-            if let b = best, let bLast = b.lastRealEvent {
-                if (m.state.priority, last) > (b.state.priority, bLast) { best = m }
-            } else {
-                best = m
-            }
-        }
-        guard let candidate = best, candidate !== current else { return }
-        // İşini yeni bitiren başparmağını göstersin; bu arada sadece seni bekleyen bir şey öne geçebilir
-        if let start = current.celebrateStart, Date().timeIntervalSince(start) < ThumbsUpView.duration,
-           candidate.state != .waiting { return }
-        let higher = candidate.state.priority > current.state.priority
-        let sameButNewer = candidate.state.priority == current.state.priority
-            && candidate.state.priority >= RobotState.thinking.priority
-            && (candidate.lastRealEvent ?? .distantPast) > (current.lastRealEvent ?? .distantPast)
-        if higher || sameButNewer { avatar.show(candidate) }
+        if let next = RobotModel.pickDisplay(allModels, current: avatar.current) { show(next) }
+    }
+
+    /// Büyük kafayı değiştir ve minik kafaları hemen yenile (aynı AI hem büyük hem minik görünmesin)
+    private func show(_ model: RobotModel) {
+        guard let avatar = avatar, model !== avatar.current else { return }
+        avatar.show(model)
+        avatar.setMinis(RobotModel.minis(allModels, current: model))
     }
 
     // MARK: - Döngü
@@ -572,12 +561,8 @@ final class RobotManager {
         if now - lastMiniCheck > 0.5, let avatar = avatar {
             lastMiniCheck = now
             chooseDisplay()   // başparmak bitince sıradaki çalışana geç
-            var minis: [RobotModel.MiniSession] = []
-            for m in allModels {
-                minis += m.miniSessions(excluding: m === avatar.current ? m.bestSessionID : nil, now: date)
-            }
             // Gösterilen AI'ın kendisi zaten büyük kafada; başka AI'ların tek oturumu da minik kafa olur
-            avatar.setMinis(minis)
+            avatar.setMinis(RobotModel.minis(allModels, current: avatar.current, now: date))
         }
         // Toplantı, odak süresi, günlük özet (5 sn'de bir)
         if now - lastSlowCheck > 5 {

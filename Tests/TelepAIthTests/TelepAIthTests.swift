@@ -143,6 +143,45 @@ final class TelepAIthTests: XCTestCase {
         XCTAssertNil(w.eyeGlyph(at: Date()))
     }
 
+    func testDisplayStaysPutWhileBothWork() {
+        let claude = RobotModel(source: "claude"), gpt = RobotModel(source: "gpt")
+        let all = [claude, gpt]
+        let t0 = Date()
+        _ = claude.apply(AgentEvent(source: "claude", sessionID: "app-1-0", kind: .prompt, state: .thinking, text: "a"), now: t0)
+        var shown = RobotModel.pickDisplay(all, current: claude, now: t0) ?? claude
+        XCTAssertTrue(shown === claude)
+        // ChatGPT'ye de yazdın: en son başlayan öne çıkar
+        _ = gpt.apply(AgentEvent(source: "gpt", sessionID: "app-2-0", kind: .prompt, state: .thinking, text: "b"), now: t0.addingTimeInterval(5))
+        shown = RobotModel.pickDisplay(all, current: shown, now: t0.addingTimeInterval(5)) ?? shown
+        XCTAssertTrue(shown === gpt)
+        // İkisi de çalışırken Claude'un aşama mesajları kafayı geri çekmez
+        for i in 0..<10 {
+            let at = t0.addingTimeInterval(6 + Double(i) * 2)
+            _ = claude.apply(AgentEvent(source: "claude", sessionID: "app-1-0", kind: .status,
+                                        state: i % 2 == 0 ? .reading : .editing, text: "aşama \(i)"), now: at)
+            gpt.refresh(now: at)
+            XCTAssertNil(RobotModel.pickDisplay(all, current: shown, now: at), "aşama \(i)")
+        }
+        let minis = RobotModel.minis(all, current: shown, now: t0.addingTimeInterval(30))
+        XCTAssertEqual(minis.map { $0.source }, ["claude"])
+        // Claude onay isteyince öne geçer
+        _ = claude.apply(AgentEvent(source: "claude", sessionID: "app-1-0", kind: .waiting, state: .waiting, text: "onay"),
+                         now: t0.addingTimeInterval(31))
+        gpt.refresh(now: t0.addingTimeInterval(31))
+        shown = RobotModel.pickDisplay(all, current: shown, now: t0.addingTimeInterval(31)) ?? shown
+        XCTAssertTrue(shown === claude)
+        XCTAssertEqual(RobotModel.minis(all, current: shown, now: t0.addingTimeInterval(31)).map { $0.source }, ["gpt"])
+    }
+
+    func testDraftChatAddress() {
+        XCTAssertTrue(AppWatcher.isDraftChat("https://claude.ai/new"))
+        XCTAssertTrue(AppWatcher.isDraftChat("https://chatgpt.com/"))
+        XCTAssertTrue(AppWatcher.isDraftChat("https://chatgpt.com/?model=gpt-5"))
+        XCTAssertFalse(AppWatcher.isDraftChat("https://claude.ai/chat/3f2a9c1e"))
+        XCTAssertFalse(AppWatcher.isDraftChat("https://chatgpt.com/c/6741"))
+        XCTAssertFalse(AppWatcher.isDraftChat("ChatGPT"))
+    }
+
     func testSessionTargetAndMinis() {
         let m = RobotModel(source: "claude")
         var a = AgentEvent(source: "claude", sessionID: "a", kind: .prompt, state: .thinking, text: "x")

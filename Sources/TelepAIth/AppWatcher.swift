@@ -303,6 +303,13 @@ final class AppWatcher {
             var found = Found()
             var windowTitle: String?
             let windows = AppWatcher.windows(of: app)
+            // Pencere Dock'a küçültülmüşse (ya da kapalıysa) düğmeler görünmez: bu, işin bittiği anlamına gelmez.
+            // Taramayı atla, son bilinen durum kalsın (açılınca kaldığı yerden devam eder).
+            if windows.isEmpty && (st.generating || st.approving) {
+                status[target.name] = loc("küçültülmüş, bekleniyor", "minimized, waiting")
+                states[target.pid] = st
+                continue
+            }
             found.windowsInfo = windows.compactMap { w -> String? in
                 guard let f = AppWatcher.frame(w) else { return nil }
                 return "\(AppWatcher.string(w, kAXTitleAttribute) ?? "?") \(Int(f.width))x\(Int(f.height))"
@@ -342,7 +349,10 @@ final class AppWatcher {
             // Başka sohbete geçildi mi? Geçildiyse eski sohbet için "bitti" deme, tıklanan sohbete geç.
             let chatKey = found.urls.first(where: { $0.contains("/chat") }) ?? found.urls.last ?? windowTitle
             if let key = chatKey, !key.isEmpty {
-                if let old = st.chatKey, old != key {
+                // Yeni sohbette ilk mesaj gidince adres /new → /chat/<id> olur: aynı sohbet, sadece adını aldı
+                let sameChat = st.chatKey.map { AppWatcher.isDraftChat($0) } == true
+                    && (st.generating || st.approving || found.stop != nil)
+                if let old = st.chatKey, old != key, !sameChat {
                     if st.generating || st.approving {
                         emitMain(AgentEvent(source: st.source, sessionID: st.session(target.pid), kind: .sessionEnd))
                     }
@@ -404,6 +414,16 @@ final class AppWatcher {
             states[target.pid] = st
         }
         return (status, diagnostics)
+    }
+
+    /// Henüz kaydedilmemiş yeni sohbet mi? (claude.ai/new, chatgpt.com/) İlk mesaj gidince adres /chat/…, /c/… olur;
+    /// bu değişim başka sohbete geçmek sayılmamalı. (Windows'ta ChatAppTracker.IsDraftChat)
+    static func isDraftChat(_ key: String) -> Bool {
+        guard let url = URL(string: key), let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https",
+              url.host != nil else { return false }
+        var path = url.path
+        while path.hasSuffix("/") { path.removeLast() }
+        return path.isEmpty || path.lowercased().hasSuffix("/new")
     }
 
     /// Claude sana soru soruyorsa (seçenekli soru ekranı: "Claude is asking: …") sorunun kendisi.

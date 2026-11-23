@@ -340,7 +340,7 @@ internal sealed class RobotManager
     public void ShowHistory(string source)
     {
         if (!_models.TryGetValue(source, out var m) || _avatar == null) return;
-        _avatar.Show(m);
+        Show(m);
         m.ShowHistory();
     }
 
@@ -515,28 +515,18 @@ internal sealed class RobotManager
         if (_avatar == null) return;
         if (_pinnedSource != null && _models.TryGetValue(_pinnedSource, out var pinned))
         {
-            _avatar.Show(pinned);
+            Show(pinned);
             return;
         }
-        var current = _avatar.Current;
-        RobotModel? best = null;
-        foreach (var m in AllModels)
-        {
-            if (m.LastRealEvent is not { } last) continue;
-            if (best?.LastRealEvent is { } bLast)
-            {
-                if (m.State.Priority() > best.State.Priority() || (m.State.Priority() == best.State.Priority() && last > bLast)) best = m;
-            }
-            else best = m;
-        }
-        if (best == null || ReferenceEquals(best, current)) return;
-        // İşini yeni bitiren başparmağını göstersin; bu arada sadece seni bekleyen bir şey öne geçebilir
-        if (current.CelebrateStart is { } cs && (DateTime.Now - cs).TotalSeconds < 2.4 && best.State != RobotState.Waiting) return;
-        var higher = best.State.Priority() > current.State.Priority();
-        var sameButNewer = best.State.Priority() == current.State.Priority()
-                           && best.State.Priority() >= RobotState.Thinking.Priority()
-                           && (best.LastRealEvent ?? DateTime.MinValue) > (current.LastRealEvent ?? DateTime.MinValue);
-        if (higher || sameButNewer) _avatar.Show(best);
+        if (DisplayPicker.Pick(AllModels, _avatar.Current, DateTime.Now) is { } next) Show(next);
+    }
+
+    /// <summary>Büyük kafayı değiştir ve minik kafaları hemen yenile (aynı AI hem büyük hem minik görünmesin)</summary>
+    private void Show(RobotModel model)
+    {
+        if (_avatar == null || ReferenceEquals(model, _avatar.Current)) return;
+        _avatar.Show(model);
+        _avatar.Minis = DisplayPicker.Minis(AllModels, model, DateTime.Now);
     }
 
     /// <summary>Robotun o anki durumu (JSON) — teşhis ve otomatik testler için</summary>
@@ -614,10 +604,7 @@ internal sealed class RobotManager
         {
             _lastMiniCheck = now;
             ChooseDisplay();   // başparmak bitince sıradaki çalışana geç
-            var minis = new List<RobotModel.MiniSession>();
-            foreach (var m in AllModels)
-                minis.AddRange(m.MiniSessions(ReferenceEquals(m, _avatar.Current) ? m.BestSessionId : null, date));
-            _avatar.Minis = minis;
+            _avatar.Minis = DisplayPicker.Minis(AllModels, _avatar.Current, date);
         }
         // Toplantı, odak süresi, günlük özet (5 sn'de bir)
         if (now - _lastSlowCheck > 5)

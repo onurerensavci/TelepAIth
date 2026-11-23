@@ -83,6 +83,12 @@ public sealed class RobotModel
     public bool BubbleIsExplicit { get; private set; }
     public string? BestSessionId { get; private set; }
     public DateTime? LastRealEvent { get; private set; }
+    /// <summary>
+    /// Şu anki hâline (çalışıyor / seni bekliyor / ikisi de değil) ne zaman girdi. Sadece bu geçişlerde değişir;
+    /// her aşama mesajında değişmediği için iki AI aynı anda çalışırken hangisinin gösterileceği bununla seçilir.
+    /// </summary>
+    public DateTime ActiveSince { get; private set; } = DateTime.MinValue;
+    private int _activeKind;
     public List<Notice> PendingNotices { get; } = new();
     public IReadOnlyList<string> History => _history;
 
@@ -493,6 +499,12 @@ public sealed class RobotModel
             }
         }
 
+        var kind = newState == RobotState.Waiting ? 2 : newState.IsWorking() || newState == RobotState.Error ? 1 : 0;
+        if (kind != _activeKind)
+        {
+            _activeKind = kind;
+            ActiveSince = now;
+        }
         if (newState != State)
         {
             State = newState;

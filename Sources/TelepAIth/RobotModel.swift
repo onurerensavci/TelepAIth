@@ -99,6 +99,10 @@ final class RobotModel: ObservableObject {
 
     /// Bu kaynaktan gelen son gerçek olay (kimi göstereceğimize karar verirken kullanılır).
     private(set) var lastRealEvent: Date?
+    /// Şu anki hâline (çalışıyor / seni bekliyor / ikisi de değil) ne zaman girdi. Sadece bu geçişlerde değişir;
+    /// her aşama mesajında değişmediği için iki AI aynı anda çalışırken hangisinin gösterileceği bununla seçilir.
+    private(set) var activeSince: Date = .distantPast
+    private var activeKind = 0
     private(set) var history: [String] = []
     private var sessions: [String: Session] = [:]
     private var lastEventAt = Date()
@@ -454,6 +458,11 @@ final class RobotModel: ObservableObject {
             }
         }
 
+        let kind = newState == .waiting ? 2 : (newState.isWorking || newState == .error) ? 1 : 0
+        if kind != activeKind {
+            activeKind = kind
+            activeSince = now
+        }
         if newState != state {
             state = newState
             onStateChange?()
@@ -483,6 +492,40 @@ final class RobotModel: ObservableObject {
     /// Masaüstü uygulamasından izlenen sohbet ("app-…") ile Anlatıcı'nın ("mcp") anlattığı aynı sohbettir:
     /// ikisi ayrı minik kafa olmasın.
     static func sessionGroup(_ id: String) -> String { id == "mcp" || id.hasPrefix("app-") ? "desktop" : id }
+
+    // MARK: Hangi AI gösterilsin? (Windows'taki DisplayPicker'ın aynısı)
+
+    /// Eşitlik bozucu: çalışıyor/bekliyorsa bu hâle giriş anı, değilse son gerçek olay
+    var displayKey: Date {
+        state.isWorking || state == .waiting || state == .error ? activeSince : (lastRealEvent ?? .distantPast)
+    }
+
+    /// Büyük kafada gösterilmesi gereken model; değişiklik gerekmiyorsa nil.
+    /// Seni bekleyen > hata > çalışan > bitti > boşta; eşitlikte bu hâle en son giren.
+    /// Aşama mesajları ("bakıyor", "yazıyor"…) sırayı değiştirmez, yoksa iki AI aynı anda çalışırken kafa gidip gelir.
+    static func pickDisplay(_ models: [RobotModel], current: RobotModel, now: Date = Date()) -> RobotModel? {
+        var best: RobotModel?
+        for m in models where m.lastRealEvent != nil {
+            if let b = best {
+                if (m.state.priority, m.displayKey) > (b.state.priority, b.displayKey) { best = m }
+            } else {
+                best = m
+            }
+        }
+        guard let candidate = best, candidate !== current else { return nil }
+        // İşini yeni bitiren başparmağını göstersin; bu arada sadece seni bekleyen bir şey öne geçebilir
+        if let start = current.celebrateStart, now.timeIntervalSince(start) < 2.4, candidate.state != .waiting { return nil }
+        let higher = candidate.state.priority > current.state.priority
+        let sameButNewer = candidate.state.priority == current.state.priority
+            && candidate.state.priority >= RobotState.thinking.priority
+            && candidate.displayKey > current.displayKey
+        return higher || sameButNewer ? candidate : nil
+    }
+
+    /// Minik kafalar: gösterilen kafanın dışında çalışan/bekleyen tüm oturumlar (gösterilen oturum hariç)
+    static func minis(_ models: [RobotModel], current: RobotModel, now: Date = Date()) -> [MiniSession] {
+        models.flatMap { $0.miniSessions(excluding: $0 === current ? $0.bestSessionID : nil, now: now) }
+    }
 
     func miniSessions(excluding excluded: String?, now: Date = Date()) -> [MiniSession] {
         let excludedGroup = excluded.map(RobotModel.sessionGroup)

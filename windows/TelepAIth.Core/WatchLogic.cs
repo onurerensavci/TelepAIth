@@ -172,6 +172,17 @@ public sealed class ChatAppTracker
 
     public string SessionId => $"app-{Pid}-{_chatCounter}";
 
+    /// <summary>
+    /// Henüz kaydedilmemiş yeni sohbet mi? (claude.ai/new, chatgpt.com/) İlk mesaj gidince adres /chat/…, /c/… olur;
+    /// bu değişim başka sohbete geçmek sayılmamalı.
+    /// </summary>
+    public static bool IsDraftChat(string key)
+    {
+        if (!Uri.TryCreate(key, UriKind.Absolute, out var u) || u.Scheme is not ("http" or "https")) return false;
+        var path = u.AbsolutePath.TrimEnd('/');
+        return path.Length == 0 || path.EndsWith("/new", StringComparison.OrdinalIgnoreCase);
+    }
+
     public string StatusText => !SawComposer ? L("yazı kutusu bulunamadı", "can't find the input box")
         : Approving ? L("onay bekliyor", "waiting for approval")
         : Generating ? L("çalışıyor", "working")
@@ -218,7 +229,9 @@ public sealed class ChatAppTracker
         var key = found.Urls.FirstOrDefault(u => u.Contains("/chat")) ?? found.Urls.LastOrDefault() ?? windowTitle;
         if (!string.IsNullOrEmpty(key))
         {
-            if (ChatKey != null && ChatKey != key)
+            // Yeni sohbette ilk mesaj gönderilince adres değişir: aynı sohbet, sadece adını aldı
+            var sameChat = ChatKey != null && IsDraftChat(ChatKey) && (Generating || Approving || found.Stop != null);
+            if (ChatKey != null && ChatKey != key && !sameChat)
             {
                 if (Generating || Approving) events.Add(Ev(EventKind.SessionEnd));
                 Generating = false;
