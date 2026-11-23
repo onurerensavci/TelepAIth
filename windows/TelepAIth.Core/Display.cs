@@ -52,12 +52,23 @@ public static class DisplayPicker
         pinned.State.Priority() >= RobotState.Thinking.Priority()
         || !models.Any(m => !ReferenceEquals(m, pinned) && m.State.Priority() >= RobotState.Thinking.Priority());
 
-    /// <summary>Minik kafalar: gösterilen kafanın dışında çalışan/bekleyen tüm oturumlar (gösterilen oturum hariç)</summary>
+    /// <summary>
+    /// Minik kafalar: büyük kafada gösterilmeyen her AI için en fazla bir tane (Claude büyükse GPT, GPT büyükse Claude).
+    /// O AI'ın birden çok sohbeti çalışıyorsa en acil olanı gösterilir. Gösterilen AI'ın diğer sohbetleri
+    /// ayrı kafa olmaz: büyük kafanın "çalışıyor" hâlinde ve bildirimlerde görünür.
+    /// </summary>
     public static List<RobotModel.MiniSession> Minis(IEnumerable<RobotModel> models, RobotModel current, DateTime now)
     {
         var minis = new List<RobotModel.MiniSession>();
         foreach (var m in models)
-            minis.AddRange(m.MiniSessions(ReferenceEquals(m, current) ? m.BestSessionId : null, now));
+        {
+            if (ReferenceEquals(m, current)) continue;
+            var all = m.MiniSessions(null, now);
+            if (all.Count == 0) continue;
+            var best = all.OrderByDescending(x => x.State.Priority()).First();
+            var label = all.Count > 1 ? best.Label + Text.L($" · +{all.Count - 1} sohbet", $" · +{all.Count - 1} more") : best.Label;
+            minis.Add(best with { Id = m.Source, Label = label });   // AI başına sabit kimlik: kafa yerinde kalsın
+        }
         return minis;
     }
 }

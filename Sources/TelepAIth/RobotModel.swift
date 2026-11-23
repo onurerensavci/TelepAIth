@@ -541,9 +541,18 @@ final class RobotModel: ObservableObject {
             || !models.contains { $0 !== pinned && $0.state.priority >= RobotState.thinking.priority }
     }
 
-    /// Minik kafalar: gösterilen kafanın dışında çalışan/bekleyen tüm oturumlar (gösterilen oturum hariç)
+    /// Minik kafalar: büyük kafada gösterilmeyen her AI için en fazla bir tane (Claude büyükse GPT, GPT büyükse Claude).
+    /// O AI'ın birden çok sohbeti çalışıyorsa en acil olanı gösterilir. Gösterilen AI'ın diğer sohbetleri
+    /// ayrı kafa olmaz: büyük kafanın "çalışıyor" hâlinde ve bildirimlerde görünür.
     static func minis(_ models: [RobotModel], current: RobotModel, now: Date = Date()) -> [MiniSession] {
-        models.flatMap { $0.miniSessions(excluding: $0 === current ? $0.bestSessionID : nil, now: now) }
+        models.compactMap { m -> MiniSession? in
+            guard m !== current else { return nil }
+            let all = m.miniSessions(excluding: nil, now: now)
+            guard let best = all.max(by: { $0.state.priority < $1.state.priority }) else { return nil }
+            let label = all.count > 1 ? best.label + loc(" · +\(all.count - 1) sohbet", " · +\(all.count - 1) more") : best.label
+            // AI başına sabit kimlik: kafa yerinde kalsın
+            return MiniSession(id: m.source, source: best.source, state: best.state, label: label)
+        }
     }
 
     func miniSessions(excluding excluded: String?, now: Date = Date()) -> [MiniSession] {

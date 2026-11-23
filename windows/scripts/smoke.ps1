@@ -119,8 +119,8 @@ Check ($st.state -eq "Waiting") "onay bekliyor"
 Check ($st.bubble -like "*npm install*") "balonda komut yazıyor"
 Check ($st.glyph -eq "!") "onay beklerken gözde ! var ($($st.glyph))"
 Check ($st.gazeAllowed -eq $false) "sohbetler çalışırken gözler imleci izlemiyor"
-for ($t = 0; $t -lt 6 -and $st.minis -lt 2; $t++) { Start-Sleep -Milliseconds 500; $st = State }
-Check ($st.minis -ge 2) "diğer oturumlar minik kafa"
+for ($t = 0; $t -lt 6 -and $st.minis -lt 1; $t++) { Start-Sleep -Milliseconds 500; $st = State }
+Check ($st.minis -eq 1) "minik kafa sadece öteki AI için, tek ($($st.minis))"
 Post '{"agent":"claude","session":"s1","project":"web","state":"done","text":"Bitti"}'
 Start-Sleep -Milliseconds 1200
 Shot "4-done"
@@ -172,13 +172,15 @@ Start-Sleep 3
 Shot "7-menu"
 [System.Windows.Forms.SendKeys]::SendWait("{ESC}")
 # Hook dayanıklılığı: 10 oturum arka arkaya, hepsi ulaşmalı
-$before = (State).minis
+$before = @((State).sessions | Where-Object { $_ -like "claude/x*" }).Count
 for ($i = 1; $i -le 10; $i++) {
   HookEvent "claude" ('{"hook_event_name":"PreToolUse","session_id":"x' + $i + '","cwd":"C:\\proj\\p' + $i + '","tool_name":"Read","tool_input":{"file_path":"C:\\proj\\a.cs"}}')
 }
 Start-Sleep 2
 $st = State
-Check ($st.minis -ge $before + 10) "10 hook olayının hepsi ulaştı ($before → $($st.minis))"
+$after = @($st.sessions | Where-Object { $_ -like "claude/x*" }).Count
+Check ($after -ge $before + 10) "10 hook olayının hepsi ulaştı ($before → $after)"
+Check ($st.minis -le 1) "çok oturum olsa da minik kafa AI başına bir ($($st.minis))"
 # Yeniden üretme denemesi: POST'un hemen ardından yeni bir AI'dan ilk hook olayı (bazen kayboluyordu)
 $lost = @()
 for ($i = 1; $i -le 15; $i++) {

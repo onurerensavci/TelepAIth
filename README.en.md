@@ -28,8 +28,8 @@
 - **Claude Code and Codex:** sees every step as it happens: reading files, searching, editing, running commands, handing work to a subagent…
 - **Claude and ChatGPT apps:** tells from the on-screen Stop / Allow buttons when the AI is working, waiting for approval or done, and sums up the phase in a word or two: *looking, solving, understanding, finishing*.
 - **Switching chats** follows the chat you clicked instead of calling the old one "done".
-- **Background chats:** when you move to another chat in Claude, chats still running in the background are picked up from the status dot in the sidebar: they show as mini heads, and you're told when they finish or need your answer (while the sidebar is open).
-- **Several sessions at once:** other running sessions line up next to the robot as mini heads; the one waiting for you gets an orange dot.
+- **Background chats:** when you move to another chat in Claude, chats still running in the background are picked up from the status dot in the sidebar: the robot shows as working, and you're told when they finish or need your answer (while the sidebar is open).
+- **Two AIs at once:** while one is in the big head, the other (e.g. ChatGPT when Claude is shown) appears as a single mini head next to it, with an orange dot if it's waiting for you.
 - **Narrator:** optionally, Claude tells the robot what it's doing in its own words (a small MCP tool).
 - **Quota:** if ClaudeBar is installed, warns you when your quota runs low, and a thin ring around the robot shows what's left.
 

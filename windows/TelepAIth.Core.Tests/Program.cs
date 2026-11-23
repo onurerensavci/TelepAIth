@@ -622,6 +622,25 @@ public static class Tests
         A.True(notice != null && notice.Body.Contains("Sohbet B"), "arkadaki sohbet bitince bildirim");
     }
 
+    public static void OneMiniPerOtherAi()
+    {
+        var claude = new RobotModel("claude");
+        var gpt = new RobotModel("gpt");
+        var t0 = DateTime.Now;
+        foreach (var id in new[] { "a", "b", "bg-1-x" })
+            claude.Apply(new AgentEvent("claude", id, EventKind.Prompt, RobotState.Thinking, "iş"), t0);
+        gpt.Apply(new AgentEvent("gpt", "g1", EventKind.Prompt, RobotState.Thinking, "iş"), t0);
+        gpt.Apply(new AgentEvent("gpt", "g2", EventKind.Waiting, RobotState.Waiting, "onay"), t0);
+        var minis = DisplayPicker.Minis(new[] { claude, gpt }, claude, t0.AddSeconds(1));
+        A.Eq(1, minis.Count);
+        A.Eq("gpt", minis[0].Id);
+        A.Eq(RobotState.Waiting, minis[0].State);   // en acil olanı
+        A.True(minis[0].Label.Contains("+1"), minis[0].Label);
+        minis = DisplayPicker.Minis(new[] { claude, gpt }, gpt, t0.AddSeconds(1));
+        A.Eq(1, minis.Count);
+        A.Eq("claude", minis[0].Id);
+    }
+
     public static void DailySummaryText()
     {
         var stats = new DailyStats(null);

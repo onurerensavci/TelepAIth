@@ -251,6 +251,22 @@ final class TelepAIthTests: XCTestCase {
         XCTAssertEqual(bg.update([], currentChat: "https://claude.ai/chat/aaa", now: 180).map { $0.kind }, [.sessionEnd])
     }
 
+    func testOneMiniPerOtherAI() {
+        let claude = RobotModel(source: "claude"), gpt = RobotModel(source: "gpt")
+        let t0 = Date()
+        for id in ["a", "b", "bg-1-x"] {
+            _ = claude.apply(AgentEvent(source: "claude", sessionID: id, kind: .prompt, state: .thinking, text: "iş"), now: t0)
+        }
+        _ = gpt.apply(AgentEvent(source: "gpt", sessionID: "g1", kind: .prompt, state: .thinking, text: "iş"), now: t0)
+        _ = gpt.apply(AgentEvent(source: "gpt", sessionID: "g2", kind: .waiting, state: .waiting, text: "onay"), now: t0)
+        var minis = RobotModel.minis([claude, gpt], current: claude, now: t0.addingTimeInterval(1))
+        XCTAssertEqual(minis.map { $0.id }, ["gpt"])
+        XCTAssertEqual(minis.first?.state, .waiting)
+        XCTAssertTrue(minis.first?.label.contains("+1") == true)
+        minis = RobotModel.minis([claude, gpt], current: gpt, now: t0.addingTimeInterval(1))
+        XCTAssertEqual(minis.map { $0.id }, ["claude"])
+    }
+
     func testDraftChatAddress() {
         XCTAssertTrue(AppWatcher.isDraftChat("https://claude.ai/new"))
         XCTAssertTrue(AppWatcher.isDraftChat("https://chatgpt.com/"))
