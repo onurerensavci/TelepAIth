@@ -45,12 +45,65 @@ internal static class Notifier
         _lastAction = onClick;
         try
         {
+            if (Prefs.Muted)
+            {
+                // Sessize alındı: bildirimi Windows'un sessiz seçeneğiyle göster; olmazsa hiç gösterme (robot balonda söyler)
+                SilentBalloon(Clip(title, 60), Clip(string.IsNullOrWhiteSpace(body) ? " " : body, 250));
+                return;
+            }
             Icon.BalloonTipTitle = Clip(title, 60);
             Icon.BalloonTipText = Clip(string.IsNullOrWhiteSpace(body) ? " " : body, 250);
             Icon.BalloonTipIcon = WinForms.ToolTipIcon.None;
             Icon.ShowBalloonTip(6000);
         }
         catch { }
+    }
+
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential, CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+    private struct NotifyIconData
+    {
+        public int Size;
+        public IntPtr Window;
+        public int Id;
+        public int Flags;
+        public int CallbackMessage;
+        public IntPtr IconHandle;
+        [System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.ByValTStr, SizeConst = 128)] public string Tip;
+        public int State;
+        public int StateMask;
+        [System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.ByValTStr, SizeConst = 256)] public string Info;
+        public int TimeoutOrVersion;
+        [System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.ByValTStr, SizeConst = 64)] public string InfoTitle;
+        public int InfoFlags;
+        public Guid Item;
+        public IntPtr BalloonIcon;
+    }
+
+    [System.Runtime.InteropServices.DllImport("shell32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+    private static extern bool Shell_NotifyIcon(int message, ref NotifyIconData data);
+
+    /// <summary>Sessiz bildirim balonu (NIIF_NOSOUND). Tepsi simgesinin penceresi ve kimliği bulunamazsa balon gösterilmez.</summary>
+    private static void SilentBalloon(string title, string body)
+    {
+        if (Icon == null) return;
+        var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+        var type = typeof(WinForms.NotifyIcon);
+        var window = (type.GetField("_window", flags) ?? type.GetField("window", flags))?.GetValue(Icon) as WinForms.NativeWindow;
+        var idValue = (type.GetField("_id", flags) ?? type.GetField("id", flags))?.GetValue(Icon);
+        if (window == null || window.Handle == IntPtr.Zero || idValue == null) return;
+        var data = new NotifyIconData
+        {
+            Size = System.Runtime.InteropServices.Marshal.SizeOf<NotifyIconData>(),
+            Window = window.Handle,
+            Id = Convert.ToInt32(idValue),
+            Flags = 0x10,                // NIF_INFO
+            Tip = "",
+            Info = body,
+            InfoTitle = title,
+            TimeoutOrVersion = 6000,
+            InfoFlags = 0x10,            // NIIF_NOSOUND (simgesiz)
+        };
+        Shell_NotifyIcon(1, ref data);   // NIM_MODIFY
     }
 
     /// <summary>Windows'ta uygulama bildirimleri kapalı mı? (Ayarlar → Sistem → Bildirimler)</summary>
@@ -78,7 +131,7 @@ internal static class Speech
 
     public static void Say(string text)
     {
-        if (!Prefs.Speak || FocusMode.IsActive) return;
+        if (!Prefs.Speak || Prefs.Muted || FocusMode.IsActive) return;
         var clean = new string(text.Where(c => !char.IsSurrogate(c) && c != '️').ToArray()).Trim();
         if (clean.Length == 0) return;
         Task.Run(() =>

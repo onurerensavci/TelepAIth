@@ -220,6 +220,8 @@ public static class Prefs
     public static bool ApproveFromRobot { get => GetBool("approveFromRobot", true); set => Set("approveFromRobot", value); }
     public static bool Speak { get => GetBool("speak", false); set => Set("speak", value); }
     public static bool Sounds { get => GetBool("sounds", false); set => Set("sounds", value); }
+    /// <summary>Sessize al (robota sağ tık): bildirim sesi, kısa sesler ve sesli söyleme susar; bildirimler sessiz gelir</summary>
+    public static bool Muted { get => GetBool("muted", false); set => Set("muted", value); }
     public static bool WatchApps { get => GetBool("watchApps", true); set => Set("watchApps", value); }
     public static bool AlwaysOnTop { get => GetBool("alwaysOnTop", true); set => Set("alwaysOnTop", value); }
     public static bool RobotLocked { get => GetBool("robotLocked", false); set => Set("robotLocked", value); }

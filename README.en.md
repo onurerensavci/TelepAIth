@@ -49,6 +49,7 @@
 **🔔 Lets you know**
 - Notifies you when a task longer than 20 seconds finishes, when the AI needs your approval or an answer, and on errors.
 - Kept quiet: background chats don't notify while that app is in front (the robot says it in its bubble); on Mac the notification sound plays at most once every 10 seconds; a "done" guessed from CPU usage doesn't notify.
+- **Mute:** right-click the robot → 🔇 *Mute*. Notifications arrive silently, the robot makes no sounds and doesn't speak; unmute from the same place.
 - **Click a notification or the bubble** to jump to that task's window: Claude, ChatGPT, or the terminal Claude Code runs in.
 - **Click the robot** for a list of running, waiting and recently finished chats with their name, state and time (*working · 3 min*, *done · 5 min ago*). Click one to jump to that chat.
 - **Nags when it should:** if the AI waits more than 30 seconds for your OK, the robot wiggles now and then with a "!" on its head, and reminds you once more after 2 minutes.

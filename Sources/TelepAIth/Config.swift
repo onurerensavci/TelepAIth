@@ -104,6 +104,12 @@ enum Preferences {
         set { defaults.set(newValue, forKey: "speak") }
     }
 
+    /// Sessize al (robota sağ tık): bildirim sesi, kısa sesler ve sesli söyleme susar; bildirimler sessiz gelir.
+    static var muted: Bool {
+        get { defaults.bool(forKey: "muted") }
+        set { defaults.set(newValue, forKey: "muted") }
+    }
+
     /// Bitti, bekliyor, hata gibi anlarda kısa sesler.
     static var sounds: Bool {
         get { defaults.object(forKey: "sounds") as? Bool ?? false }

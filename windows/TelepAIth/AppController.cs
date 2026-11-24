@@ -234,6 +234,14 @@ internal sealed class AppController : ISettingsHost
                 Manager.FocusChanged();
                 Changed();
             }, Icon: "\uE708"),
+            new(Prefs.Muted ? L("Sesi aç", "Unmute") : L("Sessize al", "Mute"), () =>
+            {
+                Prefs.Muted = !Prefs.Muted;
+                Manager.Current?.Say(Prefs.Muted
+                    ? WithEmoji("🔇", L("Sessizim: bildirimler sessiz gelir, ses çıkarmam.", "Muted: notifications come silently, no sounds."))
+                    : WithEmoji("🔊", L("Sesim geri geldi.", "Sound is back.")), 4);
+                Changed();
+            }, Prefs.Muted, Icon: Prefs.Muted ? "\uE767" : "\uE74F"),
             new(L("Bugünün özeti", "Today's summary"), Manager.ShowSummary, Icon: "\uE787"),
             null,
             new(L("Ayarlar", "Settings"), () => SettingsWindow.Show(this), Icon: "\uE713"),

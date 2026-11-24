@@ -104,7 +104,7 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         content.body = body
         // Ses en fazla 10 sn'de bir: art arda gelen bildirimler sessiz düşer ("din din din" olmasın)
         let now = Date()
-        if now.timeIntervalSince(lastSoundAt) >= 10 {
+        if !Preferences.muted && now.timeIntervalSince(lastSoundAt) >= 10 {
             content.sound = .default
             lastSoundAt = now
         }

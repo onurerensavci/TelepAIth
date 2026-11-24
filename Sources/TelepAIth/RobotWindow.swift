@@ -603,6 +603,11 @@ final class AvatarWindowController: NSObject {
                                action: #selector(focusAction), keyEquivalent: "")
         focus.target = self
         menu.addItem(focus)
+        let mute = NSMenuItem(title: Preferences.muted ? loc("🔊 Sesi aç", "🔊 Unmute") : loc("🔇 Sessize al", "🔇 Mute"),
+                              action: #selector(muteAction), keyEquivalent: "")
+        mute.target = self
+        mute.state = Preferences.muted ? .on : .off
+        menu.addItem(mute)
         menu.addItem(.separator())
         let summary = NSMenuItem(title: loc("📊 Bugünün özeti", "📊 Today's summary"), action: #selector(summaryAction), keyEquivalent: "")
         summary.target = self
@@ -645,6 +650,14 @@ final class AvatarWindowController: NSObject {
             : withEmoji("🔓", loc("Kilidim açıldı, yine Claude ve GPT'nin peşinden gelirim.", "Unlocked. I'll follow Claude and GPT again.")),
             for: 4)
         onLockChanged?(value)
+    }
+
+    @objc private func muteAction() {
+        Preferences.muted.toggle()
+        avatar.current.say(Preferences.muted
+            ? withEmoji("🔇", loc("Sessizim: bildirimler sessiz gelir, ses çıkarmam.", "Muted: notifications come silently, no sounds."))
+            : withEmoji("🔊", loc("Sesim geri geldi.", "Sound is back.")),
+            for: 4)
     }
 
     @objc private func focusAction() {

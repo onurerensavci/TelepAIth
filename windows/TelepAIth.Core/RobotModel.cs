@@ -136,7 +136,7 @@ public sealed class RobotModel
 
     private static void Play(string name)
     {
-        if (!Prefs.Sounds || FocusMode.IsActive) return;
+        if (!Prefs.Sounds || Prefs.Muted || FocusMode.IsActive) return;
         PlaySound?.Invoke(name);
     }
 

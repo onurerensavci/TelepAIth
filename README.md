@@ -49,6 +49,7 @@
 **🔔 Haber verir**
 - 20 saniyeden uzun süren iş bitince, AI senden onay ya da cevap beklerken ve hata olunca bildirim atar.
 - Sesler azdır: arkadaki sohbetler o uygulama öndeyken bildirim atmaz (robot balonda söyler); Mac'te bildirim sesi 10 saniyede en fazla bir kez çalar; işlemciden tahmin edilen "bitti" bildirim atmaz.
+- **Sessize al:** robota sağ tık → 🔇 *Sessize al*. Bildirimler sessiz gelir, robot ses çıkarmaz ve sesli söylemez; aynı yerden sesi geri açarsın.
 - **Bildirime ya da balona tıkla:** o işin penceresine gidersin: Claude, ChatGPT ya da Claude Code'un çalıştığı terminal.
 - **Robota tıkla:** çalışan, seni bekleyen ve yeni biten sohbetlerin listesi açılır: adı, durumu ve süresi (*çalışıyor · 3 dk*, *bitti · 5 dk önce*). Birine tıklayınca o sohbete gidersin.
 - **Israr eder:** AI 30 saniyeden uzun süre onayını beklerse robot arada bir sallanır, başında "!" çıkar; 2 dakika sonra bir kez daha hatırlatır.

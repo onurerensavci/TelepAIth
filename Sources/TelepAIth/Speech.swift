@@ -5,7 +5,7 @@ enum Speech {
     private static let synthesizer = AVSpeechSynthesizer()
 
     static func say(_ text: String) {
-        guard Preferences.speak else { return }
+        guard Preferences.speak, !Preferences.muted else { return }
         // Emojileri ve fazla boşlukları at
         let clean = text.unicodeScalars
             .filter { !($0.properties.isEmojiPresentation || $0.properties.generalCategory == .otherSymbol) }

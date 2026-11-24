@@ -156,7 +156,7 @@ final class RobotModel: ObservableObject {
     }
 
     private static func play(_ name: String) {
-        guard Preferences.sounds, !FocusMode.isActive else { return }
+        guard Preferences.sounds, !Preferences.muted, !FocusMode.isActive else { return }
         NSSound(named: NSSound.Name(name))?.play()
     }
 
