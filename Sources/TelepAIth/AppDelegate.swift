@@ -94,7 +94,7 @@ final class AppController: NSObject {
 
     private var serverLine: String {
         let version = Updater.shared.currentVersion
-        if server.port > 0 { return "\(AppInfo.name) \(version) · 127.0.0.1:\(server.port)" }
+        if server.port > 0 { return "\(AppInfo.name) \(version)" }   // port: Teşhis'te
         if let error = serverError { return loc("Sunucu açılamadı: ", "Server failed: ") + clip(error, 40) }
         return "\(AppInfo.name) · " + loc("başlatılıyor…", "starting…")
     }
@@ -150,12 +150,7 @@ final class AppController: NSObject {
         let menu = NSMenu()
         menu.autoenablesItems = false
 
-        let header = NSMenuItem(title: serverLine, action: nil, keyEquivalent: "")
-        header.isEnabled = false
-        menu.addItem(header)
-
-        let healthItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
-        healthItem.isEnabled = false
+        // Başlık: "● TelepAIth 0.17.2 · Her şey yolunda" tek satır; sorun ya da güncelleme varsa ayrı satırda kalır
         let dotColor: NSColor
         let healthText: String
         switch health {
@@ -169,11 +164,20 @@ final class AppController: NSObject {
             dotColor = .systemRed
             healthText = reason
         }
-        let healthTitle = NSMutableAttributedString(string: "● ", attributes: [.foregroundColor: dotColor])
-        healthTitle.append(NSAttributedString(string: clip(healthText, 70), attributes: [.font: NSFont.menuFont(ofSize: 0),
-                                                                                          .foregroundColor: NSColor.secondaryLabelColor]))
-        healthItem.attributedTitle = healthTitle
-        menu.addItem(healthItem)
+        let header = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+        header.isEnabled = false
+        let isOK: Bool
+        if case .ok = health { isOK = true } else { isOK = false }
+        let headerTitle = NSMutableAttributedString(string: "● ", attributes: [.foregroundColor: dotColor])
+        headerTitle.append(NSAttributedString(string: isOK ? serverLine + " · " + healthText : serverLine,
+                                              attributes: [.font: NSFont.menuFont(ofSize: 0), .foregroundColor: NSColor.secondaryLabelColor]))
+        header.attributedTitle = headerTitle
+        menu.addItem(header)
+        if !isOK {
+            let healthItem = NSMenuItem(title: clip(healthText, 70), action: nil, keyEquivalent: "")
+            healthItem.isEnabled = false
+            menu.addItem(healthItem)
+        }
 
         if let release = Updater.shared.available {
             let title = "⬆︎ " + loc("Güncelle: \(release.version) hazır", "Update: \(release.version) is ready")
@@ -211,9 +215,6 @@ final class AppController: NSObject {
 
         menu.addItem(.separator())
         menu.addItem(toggleItem(loc("Robotu göster", "Show robot"), on: manager.visible, action: #selector(toggleRobots)))
-        menu.addItem(toggleItem(loc("Mac açılınca başlasın", "Open at login"),
-                                on: LaunchAtLogin.isEnabled || LaunchAtLogin.needsApproval, action: #selector(toggleLaunchAtLogin)))
-        menu.addItem(actionItem(loc("Robotu bu masaüstüne getir", "Bring robot to this desktop"), #selector(bringRobotHere)))
 
         let focus = NSMenuItem(title: loc("Odak modu", "Focus mode"), action: nil, keyEquivalent: "")
         focus.state = FocusMode.isActive ? .on : .off
@@ -236,8 +237,8 @@ final class AppController: NSObject {
 
         menu.addItem(.separator())
         menu.addItem(actionItem(loc("Ayarlar…", "Settings…"), #selector(openSettings), key: ","))
-        menu.addItem(actionItem(loc("Kurulum sihirbazı…", "Setup assistant…"), #selector(openOnboarding)))
 
+        // Az kullanılanlar Yardım'ın altında: güncelleme, robotu buraya getir, kurulum, deneme, teşhis
         let demo = NSMenuItem(title: loc("Dene", "Try it"), action: nil, keyEquivalent: "")
         let demoMenu = NSMenu()
         demoMenu.addItem(actionItem(loc("Claude: kısa bir görev", "Claude: a short task"), #selector(demoClaude)))
@@ -248,10 +249,21 @@ final class AppController: NSObject {
         demoMenu.addItem(.separator())
         demoMenu.addItem(actionItem(loc("Test bildirimi gönder", "Send a test notification"), #selector(testNotification)))
         demo.submenu = demoMenu
-        menu.addItem(demo)
+
+        let checkTitle = Updater.shared.isBusy
+            ? loc("Güncelleme indiriliyor…", "Downloading update…")
+            : loc("Güncellemeleri denetle…", "Check for updates…")
+        let check = actionItem(checkTitle, #selector(checkForUpdates))
+        check.isEnabled = !Updater.shared.isBusy
 
         let help = NSMenuItem(title: loc("Yardım", "Help"), action: nil, keyEquivalent: "")
         let helpMenu = NSMenu()
+        helpMenu.autoenablesItems = false
+        helpMenu.addItem(check)
+        helpMenu.addItem(actionItem(loc("Robotu bu masaüstüne getir", "Bring robot to this desktop"), #selector(bringRobotHere)))
+        helpMenu.addItem(actionItem(loc("Kurulum sihirbazı…", "Setup assistant…"), #selector(openOnboarding)))
+        helpMenu.addItem(demo)
+        helpMenu.addItem(.separator())
         helpMenu.addItem(actionItem(loc("Hata bildir…", "Report a problem…"), #selector(reportBug)))
         helpMenu.addItem(actionItem(loc("Teşhis…", "Diagnostics…"), #selector(openDiagnostics)))
         if FileManager.default.fileExists(atPath: AppWatcher.debugFile.path) {
@@ -262,13 +274,6 @@ final class AppController: NSObject {
         helpMenu.addItem(actionItem(loc("Renkleri ve kostümleri yeniden yükle", "Reload colors and skins"), #selector(reloadAppearance)))
         help.submenu = helpMenu
         menu.addItem(help)
-
-        let checkTitle = Updater.shared.isBusy
-            ? loc("Güncelleme indiriliyor…", "Downloading update…")
-            : loc("Güncellemeleri denetle…", "Check for updates…")
-        let check = actionItem(checkTitle, #selector(checkForUpdates))
-        check.isEnabled = !Updater.shared.isBusy
-        menu.addItem(check)
 
         menu.addItem(.separator())
         menu.addItem(actionItem(loc("Çıkış", "Quit"), #selector(quit), key: "q"))

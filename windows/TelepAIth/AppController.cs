@@ -124,13 +124,12 @@ internal sealed class AppController : ISettingsHost
         var list = new List<MenuEntry?>();
         var (health, htext) = CurrentHealth();
         var title = _server.Port > 0 ? $"TelepAIth {AppInfo.Version}" : "TelepAIth · " + (_serverError ?? L("başlatılıyor…", "starting…"));
-        list.Add(new MenuEntry(title, Header: true, Dot: health switch { Health.Broken => Red, Health.Update => Orange, _ => Green }));
-        list.Add(new MenuEntry(health switch
-        {
-            Health.Broken => Clip(htext, 70),
-            Health.Update => L($"Güncelleme var: {htext}", $"Update available: {htext}"),
-            _ => FocusMode.IsActive ? L("Odak modu ", "Focus mode ") + FocusMode.StatusText : L("Her şey yolunda", "All good"),
-        }, Enabled: false));
+        // Başlık tek satır: "TelepAIth 0.17.2 · Her şey yolunda"; sorun ya da güncelleme varsa ayrı satırda kalır
+        var okText = FocusMode.IsActive ? L("Odak modu ", "Focus mode ") + FocusMode.StatusText : L("Her şey yolunda", "All good");
+        list.Add(new MenuEntry(health == Health.Ok && _server.Port > 0 ? title + " · " + okText : title, Header: true,
+            Dot: health switch { Health.Broken => Red, Health.Update => Orange, _ => Green }));
+        if (health != Health.Ok)
+            list.Add(new MenuEntry(health == Health.Broken ? Clip(htext, 70) : L($"Güncelleme var: {htext}", $"Update available: {htext}"), Enabled: false));
         if (Updater.Shared.Available is { } rel)
             list.Add(new MenuEntry(L($"Güncelle: {rel.Version} hazır", $"Update: {rel.Version} is ready"), Updater.Shared.PromptInstall,
                 Enabled: !Updater.Shared.IsBusy, Icon: "\uE896"));
@@ -142,20 +141,14 @@ internal sealed class AppController : ISettingsHost
             var source = m.Source;
             list.Add(new MenuEntry($"{m.Theme.DisplayName} — {m.StatusLine}", () => Manager.ShowHistory(source), Dot: m.Theme.Color));
         }
-        if (Prefs.WatchApps)
-            foreach (var (name, status) in Manager.WatcherStatus)
-                list.Add(new MenuEntry($"{name}: {status}", Enabled: false, Icon: "\uE7B3"));
         list.Add(null);
         list.Add(new MenuEntry(L("Robotu göster", "Show robot"), () => Manager.Visible = !Manager.Visible, Manager.Visible, Icon: "\uE890"));
-        list.Add(new MenuEntry(L("Robotu bu masaüstüne getir", "Bring robot to this desktop"), Manager.BringHere, Icon: "\uE7C4"));
-        list.Add(new MenuEntry(L("Windows açılınca başlasın", "Start with Windows"), () => Installer.SetAutostart(!Installer.AutostartEnabled),
-            Installer.AutostartEnabled, Icon: "\uE7E8"));
         list.Add(new MenuEntry(L("Odak modu", "Focus mode"), Children: FocusEntries(), Icon: "\uE708"));
         list.Add(new MenuEntry(L("Bugünün özeti", "Today's summary"), Manager.ShowSummary, Icon: "\uE787"));
         list.Add(null);
         list.Add(new MenuEntry(L("Ayarlar", "Settings"), () => SettingsWindow.Show(this), Icon: "\uE713"));
-        list.Add(new MenuEntry(L("Kurulum sihirbazı", "Setup assistant"), () => OnboardingWindow.Show(this), Icon: "\uE82F"));
-        list.Add(new MenuEntry(L("Dene", "Try it"), Icon: "\uE768", Children: new List<MenuEntry?>
+        // Az kullanılanlar Yardım'ın altında: güncelleme, robotu buraya getir, kurulum, deneme, teşhis
+        var demo = new MenuEntry(L("Dene", "Try it"), Icon: "\uE768", Children: new List<MenuEntry?>
         {
             new(L("Claude: kısa bir görev", "Claude: a short task"), Demos.Claude(this), Dot: Themes.Shared.Theme("claude").Color),
             new(L("GPT: onay beklesin", "GPT: wait for approval"), Demos.GptWaiting(this), Dot: Themes.Shared.Theme("gpt").Color),
@@ -164,9 +157,15 @@ internal sealed class AppController : ISettingsHost
             new(L("İki oturum aynı anda", "Two sessions at once"), Demos.Parallel(this), Icon: "\uE716"),
             null,
             new(L("Test bildirimi gönder", "Send a test notification"), SettingsWindow.SendTest, Icon: "\uEA8F"),
-        }));
+        });
         list.Add(new MenuEntry(L("Yardım", "Help"), Icon: "\uE897", Children: new List<MenuEntry?>
         {
+            new(Updater.Shared.IsBusy ? L("Güncelleme indiriliyor…", "Downloading update…") : L("Güncellemeleri denetle", "Check for updates"),
+                CheckUpdates, Enabled: !Updater.Shared.IsBusy, Icon: "\uE895"),
+            new(L("Robotu bu masaüstüne getir", "Bring robot to this desktop"), Manager.BringHere, Icon: "\uE7C4"),
+            new(L("Kurulum sihirbazı", "Setup assistant"), () => OnboardingWindow.Show(this), Icon: "\uE82F"),
+            demo,
+            null,
             new(L("Hata bildir", "Report a problem"), ReportBug, Icon: "\uEBE8"),
             new(L("Teşhis", "Diagnostics"), OpenDiagnostics, Icon: "\uE9D9"),
             new(L("Algılama günlüğünü aç", "Open detection log"), () => Shell.Open(AppInfo.DebugFile), Enabled: System.IO.File.Exists(AppInfo.DebugFile), Icon: "\uE8A5"),
@@ -175,8 +174,6 @@ internal sealed class AppController : ISettingsHost
             null,
             new(L("TelepAIth'i kaldır", "Uninstall TelepAIth"), Uninstall, Icon: "\uE74D"),
         }));
-        list.Add(new MenuEntry(Updater.Shared.IsBusy ? L("Güncelleme indiriliyor…", "Downloading update…") : L("Güncellemeleri denetle", "Check for updates"),
-            CheckUpdates, Enabled: !Updater.Shared.IsBusy, Icon: "\uE895"));
         list.Add(null);
         list.Add(new MenuEntry(L("Çıkış", "Quit"), () => Application.Current.Shutdown(), Icon: "\uE711"));
         return list;
