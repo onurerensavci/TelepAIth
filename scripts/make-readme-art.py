@@ -247,7 +247,7 @@ def mini_head(x, y, s, who="gpt", waiting=False):
 def chat_list(x, y, s, title, rows, tail_x=None, tail_down=True):
     """Kafaya tıklayınca açılan sohbet listesi (ChatListBubble ile aynı): satırlar AI renginde zeminli.
     rows: (who, sohbet adı, durum yazısı, durum: working | waiting | done). Döner: (svg, genişlik, yükseklik)"""
-    w, row_h, pad = 248, 20, 7
+    w, row_h, pad = 330, 20, 7
     h = pad + 16 + len(rows) * row_h + pad - 2
     tail_x = tail_x if tail_x is not None else w - 50
     f = uid("cl")
@@ -271,6 +271,9 @@ def chat_list(x, y, s, title, rows, tail_x=None, tail_down=True):
         p.append('<rect x="6" y="%.1f" width="%d" height="%d" rx="6" fill="%s" fill-opacity="0.16"/>'
                  % (ry + 1, w - 12, row_h - 2, color))
         p.append('<circle cx="15" cy="%.1f" r="3" fill="%s"/>' % (ry + row_h / 2, color))
+        room = w - 12 - text_width(status, 9.5) - 12 - 24
+        while text_width(name, 10.5) > room and len(name) > 4:   # uygulamadaki gibi sığmayan ad "…" ile kısalır
+            name = name[:-2].rstrip() + "…"
         p.append('<text x="24" y="%.1f" font-family="%s" font-size="10.5" font-weight="600" fill="#FFFFFF">%s</text>'
                  % (ry + 14, FONT, esc(name)))
         p.append('<text x="%d" y="%.1f" text-anchor="end" font-family="%s" font-size="9.5" fill="%s">%s</text>'
@@ -392,10 +395,10 @@ T = {
                        (GPT, "Minik kafa: arkada çalışan öteki AI"),
                        ("#9C86FF", "Robota tıkla: sohbetler, durum ve süre"),
                        ("#9C86FF", "Satıra tıkla: o sohbete gider")],
-        "chats": ("Sohbetler · +1", [("claude", "Sidebar tasarımı", "çalışıyor · 3 dk", "working"),
-                                     ("claude", "Kod incelemesi", "seni bekliyor · 1 dk", "waiting"),
-                                     ("gpt", "Sunum taslağı", "çalışıyor · 40 sn", "working"),
-                                     ("claude", "Haftalık rapor", "bitti · 2 dk önce", "done")]),
+        "chats": ("Sohbetler · +1", [("claude", "Giriş ekranındaki hatayı düzelt", "çalışıyor · 3 dk", "working"),
+                                     ("claude", "Ödeme API'sine test yaz", "seni bekliyor · 1 dk", "waiting"),
+                                     ("gpt", "Yatırımcı sunumu taslağı", "çalışıyor · 40 sn", "working"),
+                                     ("claude", "Haftalık satış raporunu özetle", "bitti · 2 dk önce", "done")]),
         "health": [("ok", "Her şey yolunda"), ("update", "Güncelleme var"), ("broken", "Bir şey çalışmıyor")],
         "switch": [("claude", "Claude'a geçince"), ("gpt", "ChatGPT / Codex'e geçince")],
     },
@@ -416,10 +419,10 @@ T = {
                        (GPT, "Mini head: the other AI, still working"),
                        ("#9C86FF", "Click the robot: chats, state and time"),
                        ("#9C86FF", "Click a row: jump to that chat")],
-        "chats": ("Chats · +1", [("claude", "Sidebar design", "working · 3 min", "working"),
-                                 ("claude", "Code review", "waiting for you · 1 min", "waiting"),
-                                 ("gpt", "Pitch deck draft", "working · 40 s", "working"),
-                                 ("claude", "Weekly report", "done · 2 min ago", "done")]),
+        "chats": ("Chats · +1", [("claude", "Fix the login screen bug", "working · 3 min", "working"),
+                                 ("claude", "Write tests for the payment API", "waiting for you · 1 min", "waiting"),
+                                 ("gpt", "Draft the investor pitch deck", "working · 40 s", "working"),
+                                 ("claude", "Summarize the weekly sales report", "done · 2 min ago", "done")]),
         "health": [("ok", "All good"), ("update", "Update available"), ("broken", "Something's broken")],
         "switch": [("claude", "In Claude"), ("gpt", "In ChatGPT / Codex")],
     },
@@ -541,8 +544,8 @@ def chats(lang):
     b.append(head(hx, hy, hs, state="thinking", who="claude", lights=3))
     b.append(mini_head(hx - 44, hy + 100 * hs - 32, 1.45, who="gpt"))
     title, rows = T[lang]["chats"]
-    cs = 1.45
-    svg_list, lw, lh = chat_list(0, 0, cs, title, rows, tail_x=248 - 45, tail_down=False)
+    cs = 1.3
+    svg_list, lw, lh = chat_list(0, 0, cs, title, rows, tail_x=330 - 52, tail_down=False)
     lx, ly = W - 40 - lw, hy + 100 * hs + 18
     b.append('<g transform="translate(%.1f %.1f)">%s</g>' % (lx, ly + 8 * cs, svg_list))
     # sol: kısa açıklama
