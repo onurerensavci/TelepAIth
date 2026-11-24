@@ -19,7 +19,7 @@
 **TelepAIth**, ekranının köşesinde süzülen, LED nokta gözlü küçük bir robot kafası. Claude ve GPT o an ne yapıyorsa okur, başının üstündeki balonda söyler. İş bitince ya da AI seni beklerken bildirim atar. Claude'dayken gözleri turuncu, GPT'deyken mavi yanar. Claude Code, Codex, Claude ve ChatGPT masaüstü uygulamalarıyla çalışır, istediğin başka bir AI'ı da bağlayabilirsin.
 
 <p align="center">
-  <img src="assets/readme/states-tr.svg" alt="Robotun durumları: boşta, düşünüyor, okuyor, düzenliyor, komut çalıştırıyor, seni bekliyor, bitti, hata, uyuyor ve ruh hâlleri" width="100%">
+  <img src="assets/readme/states-tr.svg" alt="Robotun durumları: boşta, düşünüyor, okuyor, düzenliyor, komut çalıştırıyor, onay bekliyor (!), soru soruyor (?), bitti (✓), hata, uyuyor, ruh hâlleri ve kış beresi" width="100%">
 </p>
 
 ## Neler yapar?
@@ -33,6 +33,10 @@
 - **İki AI birden:** büyük kafada biri görünürken öteki (ör. Claude büyükse ChatGPT) yanında tek bir minik kafa olur; seni bekliyorsa üstünde turuncu bir nokta yanar. Büyük kafadaki AI'ın başka sohbetleri de çalışıyorsa robotun yüzünde, ekranın altında o AI'ın renginde küçük ışıklar yanar (Claude turuncu, GPT mavi); seni bekleyen hızlı yanıp söner (en fazla 4).
 - **Anlatıcı:** istersen Claude, ne yaptığını robota kendi ağzından söyler (küçük bir MCP aracı).
 - **Kota:** ClaudeBar kuruluysa kotan azalınca uyarır, robotun etrafındaki ince halka kalan kotayı gösterir.
+
+<p align="center">
+  <img src="assets/readme/chats-tr.svg" alt="Birden fazla sohbet: büyük kafada Claude ve altında turuncu ışıklar, yanda ChatGPT'nin minik kafası, robota tıklayınca açılan sohbet listesi" width="100%">
+</p>
 
 **💬 Konuşur**
 - Eyleme göre emojiyle konuşur: düşünürken 🔮, okurken 📖, test çalıştırırken 🧪, paket kurarken 📦, `git push`'ta 🚀, bitince 🎉, seni beklerken ✋.

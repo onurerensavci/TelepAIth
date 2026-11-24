@@ -19,7 +19,7 @@
 **TelepAIth** is a tiny robot head with LED dot-matrix eyes that floats in the corner of your screen. It reads what Claude and GPT are doing right now and says it in a speech bubble above its head, and it notifies you when a task finishes or the AI is waiting for you. Its eyes glow orange in Claude and blue in GPT. It works with Claude Code, Codex and the Claude and ChatGPT desktop apps, and you can hook up any other AI too.
 
 <p align="center">
-  <img src="assets/readme/states-en.svg" alt="Robot states: idle, thinking, reading, editing, running a command, waiting for you, done, error, asleep, plus moods" width="100%">
+  <img src="assets/readme/states-en.svg" alt="Robot states: idle, thinking, reading, editing, running a command, needs approval (!), asking you (?), done (✓), error, asleep, moods and a winter beanie" width="100%">
 </p>
 
 ## What it does
@@ -33,6 +33,10 @@
 - **Two AIs at once:** while one is in the big head, the other (e.g. ChatGPT when Claude is shown) appears as a single mini head next to it, with an orange dot if it's waiting for you. If the AI in the big head has more chats running, small lights in its color glow under the robot's screen (Claude orange, GPT blue); one waiting for you blinks fast (up to 4).
 - **Narrator:** optionally, Claude tells the robot what it's doing in its own words (a small MCP tool).
 - **Quota:** if ClaudeBar is installed, warns you when your quota runs low, and a thin ring around the robot shows what's left.
+
+<p align="center">
+  <img src="assets/readme/chats-en.svg" alt="Several chats: Claude in the big head with orange lights below, ChatGPT as a mini head, and the chat list that opens when you click the robot" width="100%">
+</p>
 
 **💬 Talks**
 - Speaks with an emoji for each action: 🔮 thinking, 📖 reading, 🧪 running tests, 📦 installing packages, 🚀 on `git push`, 🎉 when done, ✋ when waiting for you.
