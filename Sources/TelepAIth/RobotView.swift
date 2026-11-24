@@ -100,7 +100,8 @@ struct AvatarStage: View {
     @ViewBuilder
     private var bubble: some View {
         if let rows = chatList, !rows.isEmpty {
-            ChatListBubble(rows: rows, color: Color(nsColor: model.theme.color), tailOnTop: bubbleBelow, tailLeading: alignLeft)
+            ChatListBubble(rows: rows, color: Color(nsColor: model.theme.color), tailOnTop: bubbleBelow, tailLeading: alignLeft,
+                           hoverIndex: { [weak avatar = pointer?.avatar] in avatar?.chatRowIndex(at: NSEvent.mouseLocation) })
                 .background(GeometryReader { g in
                     Color.clear.preference(key: BubbleFrameKey.self, value: g.frame(in: .named("avatar")))
                 })
@@ -262,6 +263,8 @@ struct ChatListBubble: View {
     let color: Color
     let tailOnTop: Bool
     let tailLeading: Bool
+    /// Farenin üstünde olduğu satır (koyulaşsın)
+    var hoverIndex: () -> Int? = { nil }
 
     static let maxRows = 4
     private var fill: Color { Color(nsColor: .windowBackgroundColor).opacity(0.97) }
@@ -283,16 +286,26 @@ struct ChatListBubble: View {
     }
 
     private var card: some View {
+        // Fare üstündeki satırı izlemek için kendi saati (balon kafanın saatinin dışında)
+        TimelineView(.animation(minimumInterval: 1.0 / 20.0, paused: false)) { _ in
+            cardContent(hover: hoverIndex())
+        }
+    }
+
+    private func cardContent(hover: Int?) -> some View {
         let shown = Array(rows.prefix(ChatListBubble.maxRows))
         return VStack(alignment: .leading, spacing: 0) {
             Text(loc("Sohbetler", "Chats") + (rows.count > shown.count ? " · +\(rows.count - shown.count)" : ""))
                 .font(.system(size: 10, weight: .semibold))
                 .foregroundColor(.secondary)
                 .padding(.bottom, 3)
+                .padding(.leading, 6)
             ForEach(Array(shown.enumerated()), id: \.element.sessionID) { index, row in
+                let aiColor = Color(nsColor: Themes.shared.theme(for: row.source).color)
+                let hovered = hover == index
                 HStack(spacing: 6) {
                     Circle()
-                        .fill(Color(nsColor: Themes.shared.theme(for: row.source).color))
+                        .fill(aiColor)
                         .frame(width: 6, height: 6)
                     Text(row.title)
                         .font(.system(size: 10.5, weight: .semibold))
@@ -306,14 +319,18 @@ struct ChatListBubble: View {
                         .lineLimit(1)
                         .fixedSize()
                 }
+                .opacity(hovered ? 0.82 : 1)
+                .padding(.horizontal, 6)
                 .frame(height: 20)
+                // AI renginde hafif zemin (Claude turuncu, GPT mavi); fare üstündeyken biraz koyulaşır
+                .background(RoundedRectangle(cornerRadius: 6).fill(aiColor.opacity(hovered ? 0.28 : 0.13)).padding(.vertical, 1))
                 .contentShape(Rectangle())
                 .background(GeometryReader { g in
                     Color.clear.preference(key: ChatRowFramesKey.self, value: [index: g.frame(in: .named("avatar"))])
                 })
             }
         }
-        .padding(.horizontal, 10)
+        .padding(.horizontal, 6)
         .padding(.vertical, 7)
         .frame(width: 248, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 12).fill(fill))

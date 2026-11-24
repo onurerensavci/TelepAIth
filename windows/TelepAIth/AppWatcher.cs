@@ -188,7 +188,8 @@ internal sealed class AppWatcher
                                  $"  buttons: {string.Join(" | ", found.ButtonLabels.Take(14))}\n" +
                                  $"  composer: {(found.Composer != null ? "✓" : "✗")}  stop: {(found.Stop != null ? "✓" : "✗")}  send: {(found.Send != null ? "✓" : "✗")}  approve: {(found.Approve ? "✓" : "✗")}\n" +
                                  $"  {found.WindowsInfo}\n" +
-                                 $"  {SidebarDiag(found, tracker)}";
+                                 $"  {SidebarDiag(found, tracker)}\n" +
+                                 $"  {Text.L("son sohbet açma", "last open-chat")}: {_openChatInfo}";
         }
 
         _firstTick = false;
@@ -351,16 +352,43 @@ internal sealed class AppWatcher
         catch { return false; }
         if (hwnd == IntPtr.Zero) return false;
         Native.Activate(hwnd);
-        if (isOpen || chat is not { } c) return true;   // zaten açık sohbet ya da adı bilinmiyor: uygulama öne gelsin yeter
+        if (isOpen) { NoteOpenChat(Text.L("zaten açık sohbet, uygulama öne getirildi", "already the open chat, app brought forward")); return true; }
+        if (chat is not { } c)
+        {
+            NoteOpenChat(Text.L($"bu sohbetin adı bilinmiyor ({sessionId}), sadece uygulama öne geldi", $"chat name unknown ({sessionId}), only brought the app forward"));
+            return true;
+        }
         System.Threading.Tasks.Task.Run(() =>
         {
-            try { ClickSidebarLink(hwnd, c.Title, c.Url); }
-            catch (Exception ex) { Log("open chat: " + ex.Message); }
+            try { NoteOpenChat(ClickSidebarLink(hwnd, c.Title, c.Url)); }
+            catch (Exception ex) { NoteOpenChat("hata: " + ex.Message); }
         });
         return true;
     }
 
-    private static void ClickSidebarLink(IntPtr hwnd, string title, string? url)
+    /// <summary>Listeden son sohbet açma denemesinin sonucu (teşhis için)</summary>
+    private string _openChatInfo = "—";
+
+    private void NoteOpenChat(string text)
+    {
+        _openChatInfo = $"{DateTime.Now:HH:mm:ss} {text}";
+        Log("open chat: " + text);
+    }
+
+    /// <summary>Aynı sohbet adı mı? (büyük/küçük harf fark etmez; yan menü uzun adı kısaltıyorsa baştan eşleşme de sayılır)</summary>
+    private static bool SameChatTitle(string a, string b)
+    {
+        var x = a.Trim().ToLowerInvariant();
+        var y = b.Trim().ToLowerInvariant();
+        if (x.Length == 0 || y.Length == 0) return false;
+        if (x == y) return true;
+        x = x.Trim('…', '.');
+        y = y.Trim('…', '.');
+        return Math.Min(x.Length, y.Length) >= 8 && (x.StartsWith(y, StringComparison.Ordinal) || y.StartsWith(x, StringComparison.Ordinal));
+    }
+
+    /// <summary>Yan menüde sohbete bas; sonucu döner (teşhis için)</summary>
+    private static string ClickSidebarLink(IntPtr hwnd, string title, string? url)
     {
         var root = AutomationElement.FromHandle(hwnd);
         var key = SidebarChats.NormalizeUrl(url);
@@ -370,18 +398,30 @@ internal sealed class AppWatcher
         {
             var href = link.TryGetCurrentPattern(ValuePattern.Pattern, out var vp) ? ((ValuePattern)vp).Current.Value : null;
             if (key != null && SidebarChats.NormalizeUrl(href) == key) { best = link; break; }
-            if (best == null && SidebarChats.StripStatus(link.Current.Name).Equals(title, StringComparison.OrdinalIgnoreCase)) best = link;
+            if (best == null && SameChatTitle(SidebarChats.StripStatus(link.Current.Name), title)) best = link;
         }
         if (best == null)
         {
             // Bağlantı yoksa (ör. düz liste) aynı adlı öğeye tıkla
             var named = root.FindFirst(TreeScope.Descendants, new PropertyCondition(AutomationElement.NameProperty, title));
-            if (named?.TryGetClickablePoint(out var pt) == true) Native.Click((int)pt.X, (int)pt.Y);
-            Log($"open chat: bağlantı bulunamadı ({title})");
-            return;
+            if (named?.TryGetClickablePoint(out var pt) == true)
+            {
+                Native.Click((int)pt.X, (int)pt.Y);
+                return Text.L($"aynı adlı öğeye tıklandı: {title}", $"clicked the item with that name: {title}");
+            }
+            return Text.L($"yan menüde bulunamadı: {title}", $"not found in the sidebar: {title}");
         }
-        if (best.TryGetCurrentPattern(InvokePattern.Pattern, out var ip)) ((InvokePattern)ip).Invoke();
-        else if (best.TryGetClickablePoint(out var p2)) Native.Click((int)p2.X, (int)p2.Y);
+        if (best.TryGetCurrentPattern(InvokePattern.Pattern, out var ip))
+        {
+            ((InvokePattern)ip).Invoke();
+            return Text.L($"açıldı (bağlantıya basıldı): {title}", $"opened (pressed link): {title}");
+        }
+        if (best.TryGetClickablePoint(out var p2))
+        {
+            Native.Click((int)p2.X, (int)p2.Y);
+            return Text.L($"bağlantıya tıklandı: {title}", $"clicked link: {title}");
+        }
+        return Text.L($"bağlantıya basılamadı: {title}", $"couldn't press link: {title}");
     }
 
     /// <summary>Teşhis: yan menüde durum gibi görünen öğeler ve ipucu/açıklaması olanlar (algılamayı ayarlamak için)</summary>

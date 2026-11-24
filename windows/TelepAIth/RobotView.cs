@@ -361,8 +361,12 @@ internal sealed class RobotView : FrameworkElement
             var rr = new Rect(cardX + 4, y, cardW - 8, ChatRowH);
             var screen = new Rect(rr.X * scale, rr.Y * scale, rr.Width * scale, rr.Height * scale);
             ChatRowRects.Add((i, screen));
-            if (screen.Contains(hover)) dc.DrawRoundedRectangle(B(accent, 0.12), null, rr, 6, 6);
-            dc.DrawEllipse(B(C(Themes.Shared.Theme(row.Source).Color)), null, new Point(tx + 3, y + ChatRowH / 2), 3, 3);
+            // AI renginde hafif zemin (Claude turuncu, GPT mavi); fare üstündeyken biraz koyulaşır
+            var aiColor = C(Themes.Shared.Theme(row.Source).Color);
+            var hovered = screen.Contains(hover);
+            dc.DrawRoundedRectangle(B(aiColor, hovered ? 0.28 : 0.13), null, new Rect(rr.X, rr.Y + 1, rr.Width, rr.Height - 2), 6, 6);
+            dc.PushOpacity(hovered ? 0.82 : 1);
+            dc.DrawEllipse(B(aiColor), null, new Point(tx + 3, y + ChatRowH / 2), 3, 3);
             var statusColor = row.State == RobotState.Waiting ? ExtraWaiting : row.State.IsWorking() ? ExtraWorking : secondary;
             var status = new FormattedText(row.Status, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, Ui, 9.5, B(statusColor), dpi);
             var name = new FormattedText(row.Title, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, UiSemi, 10.5, B(primary), dpi)
@@ -373,6 +377,7 @@ internal sealed class RobotView : FrameworkElement
             };
             dc.DrawText(name, new Point(tx + 10, y + (ChatRowH - name.Height) / 2));
             dc.DrawText(status, new Point(cardX + cardW - padX - status.Width, y + (ChatRowH - status.Height) / 2));
+            dc.Pop();
             y += ChatRowH;
         }
         return full;

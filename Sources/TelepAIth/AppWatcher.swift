@@ -61,6 +61,8 @@ final class AppWatcher {
         var sidebarInfo = "—"
         /// Bu uygulamada açılmış sohbetler (oturum → ad, adres): listeden tıklayınca geri açabilmek için
         var knownChats: [String: (title: String, url: String?)] = [:]
+        /// Listeden son sohbet açma denemesinin sonucu (teşhis için)
+        var openChatInfo = "—"
     }
 
     private enum ButtonKind {
@@ -468,7 +470,7 @@ final class AppWatcher {
                 buttons: Array(found.buttonLabels.prefix(25)),
                 roles: found.roles.sorted { $0.value > $1.value }.prefix(10).map { "\($0.key)=\($0.value)" }.joined(separator: ", "),
                 texts: Array(found.sampleTexts.prefix(6)),
-                sidebar: st.sidebarInfo))
+                sidebar: st.sidebarInfo + " · " + loc("son sohbet açma: ", "last open-chat: ") + st.openChatInfo))
             states[target.pid] = st
         }
         return (status, diagnostics)
@@ -693,22 +695,42 @@ final class AppWatcher {
               let app = NSRunningApplication(processIdentifier: pid), !app.isTerminated else { return false }
         app.activate(options: [.activateAllWindows])
         queue.async {
-            guard let st = self.states[pid], st.session(pid) != sessionID,   // açık sohbetse öne gelmesi yeter
-                  let chat = st.knownChats[sessionID] ?? st.background?.find(sessionID) else { return }
+            // Sonucu teşhise yaz (tutmazsa nerede takıldığı görünsün)
+            func note(_ text: String) {
+                self.states[pid]?.openChatInfo = "\(AppWatcher.clock.string(from: Date())) \(text)"
+                AppWatcher.log("sohbet açma: " + text)
+            }
+            guard let st = self.states[pid] else { return }
+            if st.session(pid) == sessionID { note(loc("zaten açık sohbet, uygulama öne getirildi", "already the open chat, app brought forward")); return }
+            guard let chat = st.knownChats[sessionID] ?? st.background?.find(sessionID) else {
+                note(loc("bu sohbetin adı bilinmiyor (\(sessionID)), sadece uygulama öne geldi",
+                         "chat name unknown (\(sessionID)), only brought the app forward"))
+                return
+            }
             // Uygulama öne gelsin, sonra bas
             Thread.sleep(forTimeInterval: 0.25)
             let axApp = AXUIElementCreateApplication(pid)
             AXUIElementSetMessagingTimeout(axApp, 1.0)
-            guard let window = AppWatcher.windows(of: axApp).first, let wf = AppWatcher.frame(window) else { return }
+            guard let window = AppWatcher.windows(of: axApp).first, let wf = AppWatcher.frame(window) else {
+                note(loc("pencere bulunamadı", "window not found"))
+                return
+            }
             let zone = CGRect(x: wf.minX, y: wf.minY, width: wf.width * 0.4, height: wf.height)
             guard let hit = AppWatcher.findSidebarLink(window, zone: zone, title: chat.title, url: chat.url) else {
-                AppWatcher.log("sohbet bulunamadı: \(chat.title)")
+                note(loc("yan menüde bulunamadı: \(chat.title)", "not found in the sidebar: \(chat.title)"))
                 return
             }
             let (element, isLink) = hit
-            if isLink, AXUIElementPerformAction(element, kAXPressAction as CFString) == .success { return }
+            if isLink {
+                let result = AXUIElementPerformAction(element, kAXPressAction as CFString)
+                if result == .success { note(loc("açıldı (bağlantıya basıldı): \(chat.title)", "opened (pressed link): \(chat.title)")); return }
+                note(loc("bağlantıya basılamadı (\(result.rawValue)), tıklanıyor: \(chat.title)", "couldn't press link (\(result.rawValue)), clicking: \(chat.title)"))
+            }
             // Basılamadıysa (bağlantı değil ya da reddetti): ortasına tıkla, fare yerine dönsün
-            if let f = AppWatcher.frame(element) { AppWatcher.click(at: CGPoint(x: f.midX, y: f.midY)) }
+            if let f = AppWatcher.frame(element) {
+                AppWatcher.click(at: CGPoint(x: f.midX, y: f.midY))
+                if !isLink { note(loc("aynı adlı öğeye tıklandı: \(chat.title)", "clicked the item with that name: \(chat.title)")) }
+            }
         }
         return true
     }
@@ -749,7 +771,7 @@ final class AppWatcher {
             let name = [string(element, kAXTitleAttribute), string(element, kAXDescriptionAttribute),
                         value(element, kAXValueAttribute) as? String]
                 .compactMap { $0 }.first { !$0.isEmpty } ?? ""
-            let sameTitle = SidebarChats.stripStatus(name).caseInsensitiveCompare(title) == .orderedSame
+            let sameTitle = AppWatcher.sameChatTitle(SidebarChats.stripStatus(name), title)
             if role == "AXLink" {
                 if let key = key, let link = (value(element, "AXURL") as? URL)?.absoluteString,
                    SidebarChats.normalizeURL(link) == key { return (element, true) }
@@ -764,6 +786,23 @@ final class AppWatcher {
         if let link = byTitle { return (link, true) }
         if let named = anyNamed { return (named, false) }
         return nil
+    }
+
+    private static let clock: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "HH:mm:ss"
+        return f
+    }()
+
+    /// Aynı sohbet adı mı? (büyük/küçük harf fark etmez; yan menü uzun adı kısaltıyorsa baştan eşleşme de sayılır)
+    private static func sameChatTitle(_ a: String, _ b: String) -> Bool {
+        let x = a.trimmingCharacters(in: .whitespaces).lowercased()
+        let y = b.trimmingCharacters(in: .whitespaces).lowercased()
+        guard !x.isEmpty, !y.isEmpty else { return false }
+        if x == y { return true }
+        let ax = x.trimmingCharacters(in: CharacterSet(charactersIn: "…."))
+        let by = y.trimmingCharacters(in: CharacterSet(charactersIn: "…."))
+        return Swift.min(ax.count, by.count) >= 8 && (ax.hasPrefix(by) || by.hasPrefix(ax))
     }
 
     /// Yan menüdeki öğeleri toplar (sohbet bağlantıları, durum noktaları): ad, ipucu, adres, seçili mi

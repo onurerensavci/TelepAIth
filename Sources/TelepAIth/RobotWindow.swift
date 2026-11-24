@@ -54,13 +54,19 @@ final class RobotAvatar: ObservableObject {
 
     /// Ekrandaki bu noktada sohbet listesinin bir satırı var mı?
     func chatRow(at point: NSPoint) -> RobotModel.ChatRow? {
+        guard let list = chatList, let index = chatRowIndex(at: point), index < list.count else { return nil }
+        return list[index]
+    }
+
+    /// Bu noktadaki satırın sırası (fare üstündeyken koyulaşması için)
+    func chatRowIndex(at point: NSPoint) -> Int? {
         guard let list = chatList else { return nil }
         let origin = windowOrigin
         let s = Layout.scale
         for (index, f) in chatRowFrames where index < list.count {
             let r = NSRect(x: origin.x + f.minX * s, y: origin.y + Layout.windowSize.height - f.maxY * s,
                            width: f.width * s, height: f.height * s)
-            if r.contains(point) { return list[index] }
+            if r.contains(point) { return index }
         }
         return nil
     }
