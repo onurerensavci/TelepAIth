@@ -55,7 +55,12 @@
 - **Israr eder:** AI 30 saniyeden uzun süre onayını beklerse robot arada bir sallanır, başında "!" çıkar; 2 dakika sonra bir kez daha hatırlatır.
 - **Odak modu:** toplantıdayken (Zoom/Teams öndeyken ya da mikrofon kullanımdayken) ya da elle açınca robot soluklaşır ve susar, sadece seni bekleyen şeyleri söyler.
 - **Günün özeti:** akşam "Claude: 14 iş, 2 sa 10 dk, 31 düzenleme" gibi kısa bir özet verir.
-- **Kalkan:** Claude Code `rm -rf`, `git push --force`, `git reset --hard`, `DROP TABLE` gibi riskli bir komut çalıştırmadan önce sana sorar (engellemez, sadece onay sordurur).
+- **Kalkan:** Claude Code `rm -rf`, `git push --force`, `git reset --hard`, `DROP TABLE`, `curl … | sh`, `terraform destroy` gibi riskli bir komut çalıştırmadan önce sana sorar (engellemez, sadece onay sordurur).
+- **Balondan onay, güvenli:** *İzin ver* sadece tamamı balonda okunabilen kısa, tek satırlık bir komutta çıkar. Dosya düzenlemesi ya da uzun komut balondan sadece reddedilebilir; onaylamak için terminale gidersin.
+- **Kullanım sınırları:** Claude Code'un oturum (5 saat) ve haftalık limiti robotun ayaklarının dibinde iki küçük halka olur; sohbet listesinin başında *Oturum %42 · 16:40'ta dolar* yazar. %80'de, %95'te ve limit yenilenince haber verir. Ayarlar → Kodlama ajanları → *Kullanım sınırları* (Claude Code'un durum satırını kullanır, seninki görünmeye devam eder).
+- **Akıllı uyarılar:** bir sohbet aynı adımda üst üste 3 kez başarısız olunca *takıldı gibi* der; iki sohbet aynı dosyayı düzenlerse uyarır; Claude `git push` yapınca o commit'in CI'sini izleyip *CI geçti* / *CI kırmızı* der (`gh` gerekir); tur bittiğinde 1,5 saattir commit'lenmemiş iş varsa bir kez hatırlatır.
+- **Pil dostu:** boştayken robot yavaşça durur ve yeniden çizilmez (sadece göz kırparken birkaç kare); bir şey olunca hemen canlanır. Sistemde *hareketi azalt* açıksa süzülmez.
+- **Saklan:** robotu ekranın altına sürükle, sadece kafasının üstü görünsün. Tıklayınca ya da haber gelince geri çıkar.
 
 **🪄 Yerini bilir**
 - Claude'a ya da ChatGPT'ye tıklayınca o pencerenin sağ-alt köşesine uçar, pencereyi taşırsan peşinden gelir. Başka uygulamalara geçince yerinde kalır.

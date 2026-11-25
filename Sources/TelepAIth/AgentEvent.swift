@@ -78,7 +78,7 @@ enum Mood: String {
 }
 
 enum EventKind {
-    case sessionStart, prompt, tool, status, toolDone, waiting, stop, failure, interrupt, sessionEnd, quota, generic, heartbeat, say
+    case sessionStart, prompt, tool, status, toolDone, waiting, stop, failure, interrupt, sessionEnd, quota, generic, heartbeat, say, insight
 }
 
 struct AgentEvent {
@@ -102,6 +102,10 @@ struct AgentEvent {
     var appBundleID: String? = nil
     /// ClaudeBar'dan gelen kalan kota yüzdesi
     var quotaLeft: Int? = nil
+    /// Uyarı (insight) odak modunda da bildirilsin mi
+    var important = false
+    /// Durum satırından öğrenilen kalan kullanım (%), gözdeki "%" için
+    var usageLeft: Int? = nil
 }
 
 /// Tıklayınca gidilecek yer: bir süreç ya da bir uygulama.
@@ -232,7 +236,9 @@ enum EventParser {
             e.kind = .waiting
             e.state = .waiting
             e.emoji = "✋"
-            let detail = (input["description"] as? String).map { " — " + clip($0, 60) }
+            // Balondan "İzin ver" denebilecek komut tam görünsün (ne onaylandığı okunabilsin)
+            let detail = Approval.canAllow(tool: tool, input: input) ? " — " + (ToolDescriber.commandString(input) ?? "")
+                : (input["description"] as? String).map { " — " + clip($0, 60) }
                 ?? ToolDescriber.commandString(input).map { " — " + clip($0, 60) }
                 ?? ""
             e.text = loc("Onayını bekliyor: ", "Needs your approval: ") + ToolDescriber.shortName(tool) + detail
@@ -525,7 +531,11 @@ enum Reactions {
         let c = command.lowercased()
         let patterns = [#"\brm\s+-[a-z]*r[a-z]*f"#, #"\brm\s+-[a-z]*f[a-z]*r"#, #"git\s+push\b.*(--force|\s-f\b)"#,
                         #"git\s+reset\s+--hard"#, #"git\s+clean\s+-[a-z]*f"#, #"\bdrop\s+(table|database)\b"#,
-                        #"\bmkfs\b"#, #"\bdd\s+if="#, #"chmod\s+-r\s+777"#, #"sudo\s+rm\b"#]
+                        #"\bmkfs\b"#, #"\bdd\s+if="#, #"chmod\s+-r\s+777"#, #"sudo\s+rm\b"#,
+                        // İnternetten indirilen betiği doğrudan çalıştırma, geri alınamayan silme/yıkım komutları
+                        #"\b(curl|wget)\b[^|]*\|\s*(sudo\s+)?(ba|z)?sh\b"#, #"\btruncate\s+table\b"#, #"\bterraform\s+destroy\b"#,
+                        #"\bkubectl\s+delete\b"#, #"\bdocker\s+system\s+prune\b"#, #"\bfind\b.*\s-delete\b"#,
+                        #"git\s+push\b.*\s--delete\b"#]
         return patterns.contains { c.range(of: $0, options: .regularExpression) != nil }
     }
 

@@ -214,6 +214,8 @@ public static class Prefs
     public static double LongTurnSeconds { get => GetDouble("longTurnSeconds", 20); set => Set("longTurnSeconds", value); }
     public static bool IdleChatter { get => GetBool("idleChatter", true); set => Set("idleChatter", value); }
     public static bool Shield { get => GetBool("shield", true); set => Set("shield", value); }
+    /// <summary>Akıllı uyarılar: takıldı, iki sohbet aynı dosyada, push sonrası CI, commit'lenmemiş iş, kullanım sınırları</summary>
+    public static bool Insights { get => GetBool("insights", true); set => Set("insights", value); }
     /// <summary>Mevsimlik kostüm: "auto" (Aralık – 6 Ocak kış), "winter" (hep), "off"</summary>
     public static string Costume { get => GetString("costume") ?? "auto"; set => Set("costume", value); }
     /// <summary>Claude Code izin isteyince robotun balonunda İzin ver / Reddet düğmeleri</summary>

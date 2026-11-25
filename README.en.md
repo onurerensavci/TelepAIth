@@ -55,7 +55,12 @@
 - **Nags when it should:** if the AI waits more than 30 seconds for your OK, the robot wiggles now and then with a "!" on its head, and reminds you once more after 2 minutes.
 - **Focus mode:** in meetings (Zoom/Teams in front, or the microphone in use) or when you turn it on, the robot dims and goes quiet, telling you only what needs you.
 - **Daily summary:** in the evening, a short recap like "Claude: 14 tasks, 2 h 10 min, 31 edits".
-- **Shield:** before Claude Code runs something risky like `rm -rf`, `git push --force`, `git reset --hard` or `DROP TABLE`, it asks you first (it doesn't block, it just asks).
+- **Shield:** before Claude Code runs something risky like `rm -rf`, `git push --force`, `git reset --hard`, `DROP TABLE`, `curl … | sh` or `terraform destroy`, it asks you first (it doesn't block, it just asks).
+- **Safe approvals from the bubble:** *Allow* only shows for a short, one-line command you can read whole in the bubble. A file edit or a long command can only be denied from the bubble; to approve it, go to the terminal.
+- **Usage limits:** Claude Code's session (5-hour) and weekly limits become two small rings at the robot's feet, and the chat list starts with *Session 42% · full at 16:40*. It tells you at 80%, at 95% and when a limit resets. Settings → Coding agents → *Usage limits* (uses Claude Code's status line; yours keeps showing).
+- **Smart alerts:** says *looks stuck* when a chat fails the same step 3 times in a row; warns when two chats edit the same file; after Claude runs `git push` it watches that commit's CI and says *CI passed* / *CI failed* (needs `gh`); when a turn ends with work left uncommitted for 1.5 hours, it reminds you once.
+- **Easy on the battery:** when idle the robot settles and stops redrawing (only a few frames to blink); it springs back the moment something happens. With *reduce motion* on, it doesn't bob.
+- **Hide:** drag the robot off the bottom of the screen and only the top of its head peeks out. Click it, or let news come, and it's back.
 
 **🪄 Knows its place**
 - Click Claude or ChatGPT and it flies to the bottom-right corner of that window, and follows if you move the window. Switch to other apps and it stays put.

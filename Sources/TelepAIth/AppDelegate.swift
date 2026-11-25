@@ -46,9 +46,12 @@ final class AppController: NSObject {
         }
         server.onRequest = { [weak self] path, query, body in
             DispatchQueue.main.async {
-                guard let self = self,
-                      let event = EventParser.parse(path: path, query: query, body: body) else { return }
-                self.manager.handle(event)
+                guard let self = self else { return }
+                // Claude Code'un durum satırı (kullanım sınırları): olay değil, sadece uyarılara gider
+                if !path.hasPrefix("/statusline"), let event = EventParser.parse(path: path, query: query, body: body) {
+                    self.manager.handle(event)
+                }
+                self.manager.handleRaw(path: path, query: query, body: body)
             }
         }
         server.onPermission = { [weak self] query, body, respond, onClosed in
@@ -74,6 +77,7 @@ final class AppController: NSObject {
         for target in HookTarget.allCases where HookInstaller.isInstalled(target) {
             try? HookInstaller.install(target)
         }
+        if UsageLine.isConnected { try? UsageLine.connect() }
         rebuildMenu()
 
         // İlk açılışta kurulum sihirbazı
@@ -729,6 +733,18 @@ extension AppController: SettingsHost {
 
     func followSettingChanged() {
         manager.followSettingChanged()
+        rebuildMenu()
+    }
+
+    func setUsageLine(on: Bool) {
+        do {
+            if on { try UsageLine.connect() } else { try UsageLine.disconnect() }
+        } catch {
+            let alert = NSAlert()
+            alert.messageText = loc("Bağlanamadı", "Couldn't connect")
+            alert.informativeText = error.localizedDescription
+            alert.runModal()
+        }
         rebuildMenu()
     }
 

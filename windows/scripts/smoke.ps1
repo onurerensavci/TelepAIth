@@ -247,6 +247,43 @@ foreach ($case in @(@{ Session = "perm1"; Button = "allow"; Expect = '"behavior"
   Check ($hookOut -like ("*" + $case.Expect + "*")) "düğmeye tıklayınca karar Claude Code'a gitti ($($case.Button))"
   Start-Sleep -Milliseconds 800
 }
+# Dosya düzenleme izni: balonda sadece Reddet (değişiklik balonda görünmediği için İzin ver yok)
+$editReq = '{"hook_event_name":"PermissionRequest","session_id":"perm4","cwd":"C:\\proj\\api","tool_name":"Edit","tool_input":{"file_path":"C:\\proj\\api\\a.cs","old_string":"a","new_string":"b"}}'
+$job = Start-Job -ScriptBlock { param($h, $home3, $body) $env:TELEPAITH_HOME = $home3; $OutputEncoding = New-Object System.Text.UTF8Encoding $false; $body | & $h permission claude } -ArgumentList $hookAbs, $home2, $editReq
+for ($t = 0; $t -lt 20; $t++) { Start-Sleep -Milliseconds 400; $st = State; if ($st.approval -and $st.approval.buttons.deny) { break } }
+Shot "11-approval-edit"
+Check ($st.approval -ne $null -and $st.approval.canAllow -eq $false) "düzenleme izninde İzin ver gösterilmiyor"
+Check ($st.approval.buttons.deny -and -not $st.approval.buttons.allow) "düzenleme izninde balonda sadece Reddet var"
+if ($st.approval.buttons.deny) {
+  $xy = $st.approval.buttons.deny
+  [Mouse]::SetCursorPos([int]$xy[0], [int]$xy[1]); Start-Sleep -Milliseconds 400
+  [Mouse]::Down(); Start-Sleep -Milliseconds 60; [Mouse]::Up()
+}
+$null = Wait-Job $job -Timeout 10
+$hookOut = (Receive-Job $job | Out-String).Trim()
+Remove-Job $job -Force
+Check ($hookOut -like '*"behavior":"deny"*') "düzenleme izni balondan reddedildi"
+Start-Sleep -Milliseconds 800
+
+# Kullanım sınırları: durum satırı yardımcısı Claude Code'un JSON'unu TelepAIth'e iletir
+$reset = [DateTimeOffset]::UtcNow.AddHours(2).ToUnixTimeSeconds()
+$week = [DateTimeOffset]::UtcNow.AddDays(3).ToUnixTimeSeconds()
+$line = '{"rate_limits":{"five_hour":{"used_percentage":42,"resets_at":' + $reset + '},"seven_day":{"used_percentage":12,"resets_at":' + $week + '}}}'
+$ErrorActionPreference = "Continue"
+$lineOut = ($line | & $hookAbs statusline 2>&1 | Out-String).Trim()
+$ErrorActionPreference = "Stop"
+Start-Sleep -Milliseconds 1200
+$st = State
+Shot "12-usage"
+Check (@($st.usage).Count -eq 2) "kullanım sınırları halkaları ($($st.usage -join ', '))"
+Check ([string]::IsNullOrWhiteSpace($lineOut)) "önceki durum satırı yokken yardımcı bir şey basmıyor"
+
+# Takıldı: aynı komut üst üste 3 kez başarısız olunca söyler
+foreach ($i in 1..3) { HookEvent "claude" '{"hook_event_name":"PostToolUseFailure","session_id":"stuck1","cwd":"C:\\proj\\api","tool_name":"Bash","tool_input":{"command":"npm run lint"}}' }
+Start-Sleep -Milliseconds 1000
+$st = State
+Check (@($st.recent | Where-Object { $_ -match "stuck1 Insight" }).Count -ge 1) "aynı adım 3 kez başarısız olunca 'takıldı' uyarısı"
+
 # Robot kapalıyken ya da ayar kapalıyken hook hemen boş döner (soru terminalde çıkar): bağlantı kurulamayan port
 $env:TELEPAITH_HOME_SAVE = $env:TELEPAITH_HOME
 $empty = Join-Path $env:RUNNER_TEMP "tp-empty"; New-Item -ItemType Directory -Force $empty | Out-Null; Set-Content (Join-Path $empty "port") "19899"

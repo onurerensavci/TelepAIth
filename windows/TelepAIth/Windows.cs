@@ -20,6 +20,7 @@ internal interface ISettingsHost
     void SetHook(HookTarget target, bool on, bool quiet);
     void SetNarrator(bool on);
     void SetShield(bool on);
+    void SetUsageLine(bool on);
     void ShowClaudeBarHelp();
     void Changed();
 }

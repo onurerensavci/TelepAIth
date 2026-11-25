@@ -69,6 +69,12 @@ enum Preferences {
         set { defaults.set(newValue, forKey: "shield") }
     }
 
+    /// Akıllı uyarılar: takıldı, iki sohbet aynı dosyada, push sonrası CI, commit'lenmemiş iş, kullanım sınırları
+    static var insights: Bool {
+        get { defaults.object(forKey: "insights") as? Bool ?? true }
+        set { defaults.set(newValue, forKey: "insights") }
+    }
+
     /// "Mac açılınca başlasın" için kullanıcı bir seçim yaptı mı (yapmadıysa ilk açılışta açılır)
     static var launchAtLoginChosen: Bool {
         get { defaults.bool(forKey: "launchAtLoginChosen") }

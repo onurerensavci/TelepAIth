@@ -288,6 +288,7 @@ internal static class Installer
         try { HookInstaller.Uninstall(HookTarget.Claude); } catch { }
         try { HookInstaller.Uninstall(HookTarget.Codex); } catch { }
         try { NarratorInstaller.Uninstall(); } catch { }
+        try { UsageLine.Disconnect(); } catch { }
         SetAutostart(false);
         try { File.Delete(ShortcutPath); } catch { }
         if (IsInstalledCopy)

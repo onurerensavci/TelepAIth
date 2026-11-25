@@ -26,7 +26,8 @@ swift test                    # birim testleri
 | `RobotWindow.swift` / `RobotView.swift` | Panel, sürükleme, sağ tık menüsü; kafa, LED gözler, balon çizimi |
 | `AppWatcher.swift` | Claude/ChatGPT masaüstü uygulamalarını Erişilebilirlik ile izleme |
 | `EventServer.swift` / `AgentEvent.swift` | Yerel HTTP sunucusu, hook/ClaudeBar/genel olay ayrıştırma |
-| `HookInstaller.swift` | Claude Code ve Codex hook'ları, Kalkan |
+| `HookInstaller.swift` | Claude Code ve Codex hook'ları, Kalkan, kullanım sınırları için durum satırı (`UsageLine`) |
+| `Insights.swift` / `InsightJobs.swift` | Akıllı uyarılar (takıldı, aynı dosya, CI, commit), kullanım sınırları, sakin çizim kuralı (Windows: `TelepAIth.Core/Insights.cs`) |
 | `MCPServer.swift` | `telepaith_say` anlatıcı aracı ve Claude masaüstü kurulumu |
 | `Updater.swift` | GitHub Releases'tan güncelleme |
 | `Diagnostics.swift` | Teşhis paneli |

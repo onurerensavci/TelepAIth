@@ -7,6 +7,7 @@ using TelepAIth.Core;
 // TelepAIthHook.exe hook <kaynak>   → stdin'deki olayı TelepAIth'e iletir (hiçbir şey yazmaz: Claude Code çıktıyı bağlama ekleyebilir)
 // TelepAIthHook.exe permission <kaynak> → izin isteğini robota sorar, cevabı (izin ver / reddet) yazar
 // TelepAIthHook.exe shield          → tehlikeli komutta "onay sor" cevabı yazar
+// TelepAIthHook.exe statusline     → durum satırı JSON'unu iletir (kullanım sınırları), kullanıcının önceki durum satırını çalıştırır
 // TelepAIthHook.exe mcp [--source claude] → anlatıcı MCP sunucusu (stdio)
 var mode = args.Length > 0 ? args[0].ToLowerInvariant() : "";
 try
@@ -53,6 +54,20 @@ try
             }
             return 0;
         }
+        case "statusline":
+        {
+            // Claude Code'un durum satırı: JSON'u TelepAIth'e ilet (kullanım sınırları), sonra kullanıcının önceki
+            // durum satırını aynı girdiyle çalıştırıp çıktısını bas. TelepAIth kapalıysa da onunki görünür.
+            var body = ReadStdin();
+            Local.Post("/statusline?source=claude", body, waitMs: 600);
+            var theirs = UsageLine.TheirsCommand();
+            if (!string.IsNullOrWhiteSpace(theirs))
+            {
+                var stdout = new StreamWriter(Console.OpenStandardOutput(), new UTF8Encoding(false)) { AutoFlush = true };
+                stdout.Write(RunTheirs(theirs, body));
+            }
+            return 0;
+        }
         case "shield":
         {
             var decision = Shield.Decide(ReadStdin());
@@ -84,6 +99,40 @@ catch
 {
     // Hook asla Claude Code'u ya da Codex'i bozmamalı
     return 0;
+}
+
+// Kullanıcının durum satırı komutu: Claude Code'un Windows'ta kullandığı Git Bash varsa onunla, yoksa cmd ile
+static string RunTheirs(string command, string input)
+{
+    try
+    {
+        var bash = Environment.GetEnvironmentVariable("CLAUDE_CODE_GIT_BASH_PATH");
+        if (string.IsNullOrEmpty(bash) || !File.Exists(bash))
+        {
+            var git = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Git", "bin", "bash.exe");
+            bash = File.Exists(git) ? git : null;
+        }
+        var psi = bash != null
+            ? new System.Diagnostics.ProcessStartInfo(bash) { ArgumentList = { "-c", command } }
+            : new System.Diagnostics.ProcessStartInfo("cmd.exe") { ArgumentList = { "/d", "/s", "/c", command } };
+        psi.RedirectStandardInput = true;
+        psi.RedirectStandardOutput = true;
+        psi.UseShellExecute = false;
+        psi.CreateNoWindow = true;
+        psi.StandardOutputEncoding = new UTF8Encoding(false);
+        psi.StandardInputEncoding = new UTF8Encoding(false);
+        using var p = System.Diagnostics.Process.Start(psi);
+        if (p == null) return "";
+        p.StandardInput.Write(input);
+        p.StandardInput.Close();
+        var output = p.StandardOutput.ReadToEndAsync();
+        if (!p.WaitForExit(5000)) { try { p.Kill(true); } catch { } return ""; }
+        return output.Result;
+    }
+    catch
+    {
+        return "";
+    }
 }
 
 static string ReadStdin()

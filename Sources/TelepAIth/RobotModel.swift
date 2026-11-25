@@ -72,7 +72,7 @@ final class RobotModel: ObservableObject {
         let age = now.timeIntervalSince(visualChangedAt)
         switch state {
         case .done where age < 1.4: return "✓"
-        case .idle where (quotaLeft ?? 100) <= 20
+        case .idle where (quotaLeft ?? usageLeft ?? 100) <= 20
             && now.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 10) < 1.6: return "%"
         default: return nil
         }
@@ -91,6 +91,8 @@ final class RobotModel: ObservableObject {
     @Published private(set) var waitingSince: Date?
     /// ClaudeBar'dan son bilinen kalan kota (%)
     @Published private(set) var quotaLeft: Int?
+    /// Claude Code'un durum satırından kalan kullanım (%); yönetici her yarım saniyede günceller
+    var usageLeft: Int?
     private var quotaAt: Date?
     /// Balondaki yazı robotun kendi söylediği bir şey mi (güncelleme, kilit, odak…)? Odak modunda da gösterilir.
     @Published private(set) var bubbleIsExplicit = false
@@ -207,6 +209,13 @@ final class RobotModel: ObservableObject {
 
         case .say:
             showOverride(withEmoji(e.emoji, e.text ?? ""), for: 4, now: now)
+
+        case .insight:
+            // Takıldı, çakışma, CI, commit, kullanım sınırı: balonda söyle ve bildir
+            let text = withEmoji(e.emoji, e.text ?? "")
+            showOverride(text, for: 8, now: now)
+            if let left = e.usageLeft { usageLeft = left }
+            notice = Notice(title: theme.displayName, body: text, important: e.important, target: sessions[e.sessionID]?.target)
 
         case .toolDone:
             if var s = sessions[e.sessionID] {

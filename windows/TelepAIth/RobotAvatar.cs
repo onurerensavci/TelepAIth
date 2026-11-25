@@ -10,7 +10,8 @@ public enum Corner { BottomLeft, BottomRight, TopLeft, TopRight }
 public enum Health { Ok, Update, Broken }
 
 /// <summary>Balonda gösterilecek izin sorusu (düğmeler)</summary>
-public sealed record ApprovalPrompt(int Id, bool HasAlways);
+/// <summary>CanAllow: "İzin ver" sadece tamamı okunabilen kısa kabuk komutunda (yoksa balondan sadece reddedilir)</summary>
+public sealed record ApprovalPrompt(int Id, bool HasAlways, bool CanAllow = true);
 
 /// <summary>
 /// Robotun yeri: köşeye yapışma, sürükleme, AI penceresine uçma. Konumlar fiziksel piksel (ekran), kafanın merkezi.
@@ -48,6 +49,24 @@ internal sealed class RobotAvatar
     public DateTime ExtrasPoppedAt { get; private set; } = DateTime.MinValue;
     /// <summary>Gözler imleci izleyebilir mi (hiçbir sohbet çalışmıyor ve son iş biteli 20 sn oldu)</summary>
     public bool GazeAllowed { get; set; }
+    /// <summary>Kullanım sınırları (Claude Code durum satırı): kafanın altında iki küçük halka</summary>
+    public List<UsageWindow> Usage { get; set; } = new();
+    /// <summary>Sakin çizim: 0 normal hareket, 1 tamamen dingin; Paused iken yeniden çizilmez</summary>
+    public double Stillness { get; set; }
+    public bool Paused { get; set; }
+    /// <summary>Kafa uçuyor ya da sürükleniyor mu (sakin çizime geçilmez)</summary>
+    public bool Moving => IsDragging || _target != null;
+    /// <summary>Ekranın altına itildi: sadece kafasının üstü görünür; tıklayınca ya da haber gelince geri çıkar</summary>
+    public bool Peeking { get; private set; }
+    private (double X, double Y) _peekPoint;
+
+    /// <summary>Saklanmaktan çık, eski yerine dön</summary>
+    public void Unpeek()
+    {
+        if (!Peeking) return;
+        Peeking = false;
+        MoveTo(HomePoint);
+    }
     public bool Focus { get; set; }
     /// <summary>Gösterilen AI'ın cevap bekleyen izin sorusu varsa balonda İzin ver / Reddet düğmeleri</summary>
     public ApprovalPrompt? Approval { get; set; }
@@ -138,6 +157,7 @@ internal sealed class RobotAvatar
     {
         get
         {
+            if (Peeking) return _peekPoint;
             var monitors = Native.Monitors();
             if (Enum.TryParse<Corner>(Prefs.AvatarCorner, out var corner))
             {
@@ -178,7 +198,7 @@ internal sealed class RobotAvatar
     /// <summary>AI penceresinin sağ-alt köşesine uç; balon pencerenin içine doğru açılsın.</summary>
     public void Dock(Native.RECT window)
     {
-        if (IsDragging || Locked) return;
+        if (IsDragging || Locked || Peeking) return;
         // Pencere iki ekrana yayılmışsa çoğunun durduğu ekran; robot hep o ekranın içinde kalır
         var m = Native.MonitorOf(window);
         var s = m.Scale * Prefs.RobotScale;
@@ -231,6 +251,7 @@ internal sealed class RobotAvatar
     {
         if (Locked) return;
         IsDragging = true;
+        Peeking = false;
         _target = null;
         _dragStartX = HeadX;
         _dragStartY = HeadY;
@@ -253,6 +274,16 @@ internal sealed class RobotAvatar
         if (!IsDragging) return;
         IsDragging = false;
         var m = MonitorFor(HeadX, HeadY);
+        // Ekranın altına itildiyse saklan: sadece kafasının üstü görünsün (kayıtlı yeri değişmez)
+        if (HeadY > m.Work.Bottom - HeadPx * 0.1)
+        {
+            var (px, _) = Clamp(HeadX, HeadY, m);
+            Peeking = true;
+            _peekPoint = (px, m.Work.Bottom + HeadPx * 0.2);
+            MoveTo(_peekPoint);
+            UserMoved?.Invoke();
+            return;
+        }
         Corner? nearest = null;
         var best = double.MaxValue;
         foreach (var c in Enum.GetValues<Corner>())

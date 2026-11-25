@@ -58,7 +58,7 @@ public sealed class RobotModel
         return State switch
         {
             RobotState.Done when age < 1.4 => '✓',
-            RobotState.Idle when QuotaLeft is <= 20 && now.TimeOfDay.TotalSeconds % 10 < 1.6 => '%',
+            RobotState.Idle when (QuotaLeft ?? UsageLeft) is <= 20 && now.TimeOfDay.TotalSeconds % 10 < 1.6 => '%',
             _ => '\0',
         };
     }
@@ -74,6 +74,8 @@ public sealed class RobotModel
     public AppTarget? Target { get; private set; }
     public DateTime? WaitingSince { get; private set; }
     public int? QuotaLeft { get; private set; }
+    /// <summary>Claude Code'un durum satırından kalan kullanım (%); uygulama her karede günceller</summary>
+    public int? UsageLeft { get; set; }
     public bool BubbleIsExplicit { get; private set; }
     public string? BestSessionId { get; private set; }
     public DateTime? LastRealEvent { get; private set; }
@@ -199,6 +201,17 @@ public sealed class RobotModel
             case EventKind.Say:
                 ShowOverride(WithEmoji(e.Emoji, e.Text ?? ""), 4, now);
                 break;
+
+            case EventKind.Insight:
+            {
+                // Takıldı, çakışma, CI, commit, kullanım sınırı: balonda söyle ve bildir
+                var text = WithEmoji(e.Emoji, e.Text ?? "");
+                ShowOverride(text, 8, now);
+                if (e.UsageLeft is { } left) UsageLeft = left;
+                var target = _sessions.TryGetValue(e.SessionId, out var ins) ? ins.Target : null;
+                notice = new Notice(Theme.DisplayName, text, e.Important, target);
+                break;
+            }
 
             case EventKind.ToolDone:
             {

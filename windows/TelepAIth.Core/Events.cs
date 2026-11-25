@@ -67,7 +67,7 @@ public static class RobotStateInfo
 /// <summary>Kısa süreli ruh hâli: gözlerin desenini ve emojiyi değiştirir.</summary>
 public enum Mood { Pleased, Shocked, Nervous, Scared, Proud, Party, Tired, Dizzy, Denied }
 
-public enum EventKind { SessionStart, Prompt, Tool, Status, ToolDone, Waiting, Stop, Failure, Interrupt, SessionEnd, Quota, Generic, Heartbeat, Say }
+public enum EventKind { SessionStart, Prompt, Tool, Status, ToolDone, Waiting, Stop, Failure, Interrupt, SessionEnd, Quota, Generic, Heartbeat, Say, Insight }
 
 /// <summary>Tıklayınca gidilecek yer: bir süreç ya da bir uygulama (süreç adı).</summary>
 public sealed record AppTarget(int? Pid, string? ProcessName)
@@ -113,6 +113,10 @@ public sealed class AgentEvent
     public int? HookParentPid;
     /// <summary>ClaudeBar'dan gelen kalan kota yüzdesi</summary>
     public int? QuotaLeft;
+    /// <summary>Uyarı (Insight) odak modunda da bildirilsin mi</summary>
+    public bool Important;
+    /// <summary>Durum satırından öğrenilen kalan kullanım (%), gözdeki "%" için</summary>
+    public int? UsageLeft;
 
     public AgentEvent() { }
 
@@ -306,7 +310,9 @@ public static class EventParser
                 e.Emoji = "✋";
                 var desc = input.Str("description");
                 var cmd = ToolDescriber.CommandString(input);
-                var detail = desc != null ? " — " + Clip(desc, 60) : cmd != null ? " — " + Clip(cmd, 60) : "";
+                // Balondan "İzin ver" denebilecek komut tam görünsün (ne onaylandığı okunabilsin)
+                var detail = Approval.CanAllow(tool, input) ? " — " + cmd
+                    : desc != null ? " — " + Clip(desc, 60) : cmd != null ? " — " + Clip(cmd, 60) : "";
                 e.Text = L("Onayını bekliyor: ", "Needs your approval: ") + ToolDescriber.ShortName(tool) + detail;
                 break;
             }
@@ -640,6 +646,10 @@ public static class Reactions
         // Windows
         @"remove-item\b.*-recurse.*-force", @"remove-item\b.*-force.*-recurse", @"\brd\s+/s\s+/q", @"\brmdir\s+/s\s+/q",
         @"\bdel\s+/[fsq]\b.*/[fsq]\b", @"\bformat\s+[a-z]:", @"\bdiskpart\b",
+        @"\b(iwr|irm|invoke-webrequest|invoke-restmethod)\b[^|]*\|\s*(iex|invoke-expression)\b",
+        // İnternetten indirilen betiği doğrudan çalıştırma, geri alınamayan silme/yıkım komutları
+        @"\b(curl|wget)\b[^|]*\|\s*(sudo\s+)?(ba|z)?sh\b", @"\btruncate\s+table\b", @"\bterraform\s+destroy\b",
+        @"\bkubectl\s+delete\b", @"\bdocker\s+system\s+prune\b", @"\bfind\b.*\s-delete\b", @"git\s+push\b.*\s--delete\b",
     }.Select(p => new Regex(p, RegexOptions.Compiled)).ToArray();
 
     public static bool IsScary(string command)

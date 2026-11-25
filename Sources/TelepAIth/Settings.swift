@@ -15,6 +15,7 @@ protocol SettingsHost: AnyObject {
     /// quiet: bilgi pencerelerini gösterme (sihirbazda)
     func setHook(_ target: HookTarget, on: Bool, quiet: Bool)
     func setNarrator(on: Bool)
+    func setUsageLine(on: Bool)
     func setShield(_ on: Bool)
     func focusChanged()
     func showClaudeBarHelp()
@@ -302,6 +303,14 @@ struct SettingsView: View {
                 }
                 Toggle("Codex", isOn: model.toggle({ HookInstaller.isInstalled(.codex) },
                                                    { model.host?.setHook(.codex, on: $0, quiet: false) }))
+                Toggle(loc("Kullanım sınırları (robotun altında iki halka)", "Usage limits (two rings under the robot)"),
+                       isOn: model.toggle({ UsageLine.isConnected }, { model.host?.setUsageLine(on: $0) }))
+                    .help(loc("Oturum ve haftalık limit; %80'de, %95'te ve yenilenince haber verir. Claude Code'un durum satırını kullanır, seninki görünmeye devam eder.",
+                              "Session and weekly limits; tells you at 80%, 95% and when they reset. Uses Claude Code's status line; yours keeps showing."))
+                Toggle(loc("Akıllı uyarılar: takıldı, aynı dosya, CI, commit", "Smart alerts: stuck, same file, CI, commit"),
+                       isOn: model.toggle({ Preferences.insights }, { Preferences.insights = $0 }))
+                    .help(loc("Aynı adımda takılınca, iki sohbet aynı dosyayı düzenleyince, push'tan sonra CI bitince, uzun süre commit'lenmemiş iş kalınca söyler.",
+                              "Tells you when a chat is stuck on the same step, two chats edit one file, CI finishes after a push, or work stays uncommitted for long."))
             }
             Section(header: Text(loc("Ekstralar", "Extras"))) {
                 Toggle(loc("Anlatıcı (Claude ne yaptığını kendisi söylesin)", "Narrator (Claude tells it in its own words)"),

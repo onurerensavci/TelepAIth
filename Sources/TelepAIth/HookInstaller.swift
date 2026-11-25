@@ -38,7 +38,7 @@ enum HookTarget: String, CaseIterable {
         switch self {
         case .claude:
             return [("SessionStart", nil), ("SessionEnd", nil), ("UserPromptSubmit", nil),
-                    ("PreToolUse", "*"), ("PostToolUse", "*"), ("Notification", nil),
+                    ("PreToolUse", "*"), ("PostToolUse", "*"), ("PostToolUseFailure", "*"), ("Notification", nil),
                     ("Stop", nil), ("StopFailure", nil), ("SubagentStart", nil), ("PreCompact", nil)]
         case .codex:
             return [("SessionStart", nil), ("SessionEnd", nil), ("UserPromptSubmit", nil),
@@ -86,7 +86,7 @@ enum HookInstaller {
 
     /// Kalkan: tehlikeli görünen Bash komutlarında Claude Code'un onay sormasını sağlar
     /// (komutu engellemez, sadece "izin veriyor musun?" diye sordurur).
-    static let shieldCommand = #"__telepaith_hook_shield() { P=$(cat); if printf '%s' "$P" | grep -qiE 'rm[[:space:]]+-[a-z]*r[a-z]*f|rm[[:space:]]+-[a-z]*f[a-z]*r|git[[:space:]]+push[^"]*(--force|[[:space:]]-f([^a-z]|$))|git[[:space:]]+reset[[:space:]]+--hard|git[[:space:]]+clean[[:space:]]+-[a-z]*f|drop[[:space:]]+(table|database)|mkfs|dd[[:space:]]+if=|chmod[[:space:]]+-r[[:space:]]+777|sudo[[:space:]]+rm'; then printf '%s' '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"TelepAIth kalkanı: tehlikeli görünen komut, onayın gerekiyor."}}'; fi; }; __telepaith_hook_shield"#
+    static let shieldCommand = #"__telepaith_hook_shield() { P=$(cat); if printf '%s' "$P" | grep -qiE 'rm[[:space:]]+-[a-z]*r[a-z]*f|rm[[:space:]]+-[a-z]*f[a-z]*r|git[[:space:]]+push[^"]*(--force|[[:space:]]-f([^a-z]|$))|git[[:space:]]+reset[[:space:]]+--hard|git[[:space:]]+clean[[:space:]]+-[a-z]*f|drop[[:space:]]+(table|database)|mkfs|dd[[:space:]]+if=|chmod[[:space:]]+-r[[:space:]]+777|sudo[[:space:]]+rm|(curl|wget)[^|]*[|][[:space:]]*(sudo[[:space:]]+)?(ba|z)?sh([^a-z]|$)|truncate[[:space:]]+table|terraform[[:space:]]+destroy|kubectl[[:space:]]+delete|docker[[:space:]]+system[[:space:]]+prune|find[[:space:]][^"]*[[:space:]]-delete|git[[:space:]]+push[^"]*[[:space:]]--delete'; then printf '%s' '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"TelepAIth kalkanı: tehlikeli görünen komut, onayın gerekiyor."}}'; fi; }; __telepaith_hook_shield"#
 
     static func isInstalled(_ target: HookTarget) -> Bool {
         guard let data = try? Data(contentsOf: target.fileURL.resolvingSymlinksInPath()),
@@ -145,7 +145,7 @@ enum HookInstaller {
         }
     }
 
-    private static func load(_ url: URL) throws -> [String: Any] {
+    static func load(_ url: URL) throws -> [String: Any] {
         guard FileManager.default.fileExists(atPath: url.path) else { return [:] }
         let data = try Data(contentsOf: url)
         if data.isEmpty { return [:] }
@@ -155,7 +155,7 @@ enum HookInstaller {
         return dict
     }
 
-    private static func save(_ root: [String: Any], to url: URL) throws {
+    static func save(_ root: [String: Any], to url: URL) throws {
         let fm = FileManager.default
         try fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         // İlk değişiklikten önce bir kez yedek al
@@ -166,5 +166,77 @@ enum HookInstaller {
         let data = try JSONSerialization.data(withJSONObject: root,
                                               options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
         try data.write(to: url, options: .atomic)
+    }
+}
+
+/// Kullanım sınırları için Claude Code'un durum satırı (statusLine): komutumuz gelen JSON'u TelepAIth'e iletir, sonra
+/// kullanıcının önceki durum satırını aynı girdiyle çalıştırıp çıktısını basar (onunki görünmeye devam eder).
+/// Önceki satır ~/.telepaith/statusline-theirs.json'da saklanır, bağlantı kesilince geri konur. (Windows: UsageLine)
+enum UsageLine {
+    static let marker = "__telepaith_line"
+    static var theirsFile: URL { AppInfo.supportDir.appendingPathComponent("statusline-theirs.json") }
+    /// Kabuk komutu okusun diye sadece komut metni
+    static var theirsCommandFile: URL { AppInfo.supportDir.appendingPathComponent("statusline-theirs") }
+
+    static var command: String {
+        let dir = "$HOME/\(AppInfo.supportDirName)"
+        let url = "http://127.0.0.1:${PORT}/statusline?source=claude"
+        return "\(marker)() { P=$(cat); PORT=$(cat \"\(dir)/port\" 2>/dev/null || echo \(AppInfo.defaultPort)); "
+            + "{ printf '%s' \"$P\" | curl -s -m 2 --noproxy '*' -H 'Content-Type: application/json' -H 'Expect:' --data-binary @- \"\(url)\"; } >/dev/null 2>&1 & "
+            + "C=$(cat \"\(dir)/statusline-theirs\" 2>/dev/null); [ -n \"$C\" ] && printf '%s' \"$P\" | bash -c \"$C\"; return 0; }; \(marker)"
+    }
+
+    private static func isOurs(_ line: Any?) -> Bool {
+        ((line as? [String: Any])?["command"] as? String ?? "").contains(marker)
+    }
+
+    private static var settingsURL: URL { HookTarget.claude.fileURL.resolvingSymlinksInPath() }
+
+    static var isConnected: Bool {
+        guard let data = try? Data(contentsOf: settingsURL),
+              let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { return false }
+        return isOurs(root["statusLine"])
+    }
+
+    static func connect() throws {
+        let url = settingsURL
+        var root = try HookInstaller.load(url)
+        let current = root["statusLine"]
+        let fm = FileManager.default
+        try? fm.createDirectory(at: AppInfo.supportDir, withIntermediateDirectories: true)
+        if let theirs = current as? [String: Any], !isOurs(theirs) {
+            if let data = try? JSONSerialization.data(withJSONObject: theirs) { try? data.write(to: theirsFile) }
+            try? ((theirs["command"] as? String) ?? "").write(to: theirsCommandFile, atomically: true, encoding: .utf8)
+        } else if current == nil {
+            try? fm.removeItem(at: theirsFile)
+            try? fm.removeItem(at: theirsCommandFile)
+        }
+        var ours: [String: Any] = ["type": "command", "command": command]
+        if let padding = (current as? [String: Any])?["padding"] { ours["padding"] = padding }
+        root["statusLine"] = ours
+        try HookInstaller.save(root, to: url)
+    }
+
+    static func disconnect() throws {
+        let url = settingsURL
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
+        var root = try HookInstaller.load(url)
+        guard isOurs(root["statusLine"]) else { return }
+        if let data = try? Data(contentsOf: theirsFile),
+           let theirs = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] {
+            root["statusLine"] = theirs
+        } else {
+            root.removeValue(forKey: "statusLine")
+        }
+        try HookInstaller.save(root, to: url)
+        try? FileManager.default.removeItem(at: theirsFile)
+        try? FileManager.default.removeItem(at: theirsCommandFile)
+    }
+
+    /// Kullanıcının önceki durum satırı komutu (yoksa nil)
+    static var theirsCommand: String? {
+        guard let data = try? Data(contentsOf: theirsFile),
+              let theirs = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { return nil }
+        return theirs["command"] as? String
     }
 }

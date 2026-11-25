@@ -44,7 +44,7 @@ static class A
     }
 }
 
-public static class Tests
+public static partial class Tests
 {
     static AgentEvent? Hook(string json, string source = "claude", Dictionary<string, string>? extra = null)
     {

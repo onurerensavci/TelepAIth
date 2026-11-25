@@ -36,6 +36,11 @@ final class RobotManager {
     private var lastApprovalCheck: CFTimeInterval = 0
     private var lastSlowCheck: CFTimeInterval = 0
     private var wasFocused = FocusMode.isActive
+    /// Takıldı, çakışma, CI, commit hatırlatması ve kullanım sınırları
+    let insights = Insights()
+    // Sakin çizim
+    private var pointerMovedAt = 0.0
+    private var lastMouse = CGPoint.zero
 
     var onChange: (() -> Void)?
     var onOpenSettings: (() -> Void)?
@@ -188,12 +193,13 @@ final class RobotManager {
 
     func approvalsChanged() {
         approvals.removeAll { $0.finished }
-        avatar?.setApproval(currentApproval.map { ApprovalPrompt(id: $0.id, hasAlways: $0.suggestions != nil) })
+        avatar?.setApproval(currentApproval.map { ApprovalPrompt(id: $0.id, hasAlways: $0.suggestions != nil, canAllow: $0.canAllow) })
     }
 
     /// Balondaki düğme: kararı Claude Code'a gönder
     func choose(_ choice: ApprovalChoice) {
         guard let p = currentApproval else { return }
+        if choice != .deny && !p.canAllow { return }   // balonda tamamı görünmeyen şeye izin verilmez
         p.answer(Approval.decision(choice, suggestions: p.suggestions))
         let m = model(for: p.event.source)
         switch choice {
@@ -215,7 +221,7 @@ final class RobotManager {
 
     func handle(_ event: AgentEvent) {
         // Claude devam etti (izin verildi, reddedildi, yeni istek…): o oturumun bekleyen sorusunu bırak
-        if event.kind != .waiting {
+        if event.kind != .waiting && event.kind != .insight {
             for p in approvals where p.event.source == event.source && p.event.sessionID == event.sessionID { p.release() }
         }
         let m = model(for: event.source)
@@ -224,6 +230,16 @@ final class RobotManager {
         }
         chooseDisplay()
         onChange?()
+    }
+
+    /// Ham istek: hook olayından ya da durum satırından çıkan uyarılar; işler (CI, commit) arka planda.
+    func handleRaw(path: String, query: [String: String], body: Data) {
+        let (events, jobs) = insights.handle(path: path, query: query, body: body, now: Date())
+        guard Preferences.insights else { return }
+        for e in events { handle(e) }
+        for job in jobs {
+            InsightJobs.run(job, insights: insights) { [weak self] e in self?.handle(e) }
+        }
     }
 
     /// Bildirimi gönderir: odak modunda sadece önemliler, kullanıcı o uygulamaya bakıyorsa hiç (ayara göre).
@@ -432,6 +448,8 @@ final class RobotManager {
 
     /// Robota tıklayınca: güncelleme varsa kur, bir sorun varsa söyle, yoksa son olayları göster.
     private func robotClicked() {
+        // Ekranın altında saklanıyorsa önce geri çıksın
+        if let avatar = avatar, avatar.peeking { avatar.unpeek(); return }
         guard let avatar = avatar else { return }
         switch avatar.health {
         case .update:
@@ -611,7 +629,17 @@ final class RobotManager {
                 avatar.setChatList(date > avatar.chatListUntil || rows.isEmpty ? nil : rows)
             }
             avatar.setExtras(RobotModel.extras(current: avatar.current, now: date))
+            // Kullanım sınırları: halkalar, gözdeki "%", yenilenme bildirimi
+            for e in insights.usage.tick(now: date) where Preferences.insights { handle(e) }
+            avatar.setUsage(insights.usage.current(now: date))
+            models["claude"]?.usageLeft = insights.usage.left(now: date)
         }
+        // Saklanırken haber gelirse (balon, onay, sohbet listesi) geri çıksın
+        if let avatar = avatar, avatar.peeking,
+           avatar.current.bubbleText != nil || avatar.approval != nil || avatar.chatList != nil || avatar.current.state == .waiting {
+            avatar.unpeek()
+        }
+        updateCalm(now: date)
         // Toplantı, odak süresi, günlük özet (5 sn'de bir)
         if now - lastSlowCheck > 5 {
             lastSlowCheck = now
@@ -619,5 +647,37 @@ final class RobotManager {
             checkDailySummary()
         }
         if visible { window?.tick(dt: dt) }
+    }
+
+    /// Sakin çizim: robot boşta ve hiçbir şey olmuyorken (balon, ruh hâli, sohbet, imleç hareketi yok) kafa yavaşça
+    /// durur ve yeniden çizilmez; sadece göz kırpma anlarında birkaç kare çizilir. (Windows'ta UpdateCalm, aynı kural)
+    private func updateCalm(now date: Date) {
+        guard let avatar = avatar else { return }
+        let time = date.timeIntervalSinceReferenceDate
+        let mouse = NSEvent.mouseLocation
+        if mouse != lastMouse {
+            lastMouse = mouse
+            let dx = mouse.x - avatar.head.x, dy = mouse.y - avatar.head.y
+            let reach = 900 * avatar.scale
+            if dx * dx + dy * dy < reach * reach { pointerMovedAt = time }
+        }
+        let m = avatar.current
+        let restingStates: [RobotState] = [.idle, .sleeping, .done]
+        var calmNow = restingStates.contains(m.state)
+        calmNow = calmNow && m.mood == nil && m.bubbleText == nil && m.eyeGlyph(at: date) == nil && m.quotaLeft == nil
+        if let start = m.celebrateStart, date.timeIntervalSince(start) <= 3 { calmNow = false }
+        calmNow = calmNow && avatar.minis.isEmpty && avatar.chatList == nil && avatar.extras.isEmpty && avatar.approval == nil
+        calmNow = calmNow && avatar.health == .ok && !avatar.isMoving && !Preferences.winterActive
+        calmNow = calmNow && date.timeIntervalSince(avatar.currentSince) > 1 && time - pointerMovedAt > 1.5
+        var calm = avatar.calm
+        calm.reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        if calmNow != calm.calm {
+            calm.from = calm.stillness(at: time)
+            calm.calm = calmNow
+            calm.since = time
+        }
+        avatar.setCalm(calm)
+        // Uyurken gözler kapalı: kırpma için de uyanmasın
+        avatar.setPaused(calmNow && time - calm.since >= Calm.settle && (m.state != .idle || !Calm.inBlink(time)))
     }
 }

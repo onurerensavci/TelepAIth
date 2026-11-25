@@ -14,7 +14,8 @@ struct AvatarView: View {
             AvatarStage(model: avatar.current, alignLeft: avatar.alignLeft, bubbleBelow: avatar.bubbleBelow,
                         health: avatar.health, locked: avatar.locked, minis: avatar.minis, focus: avatar.focus,
                         approval: avatar.approval, pointer: avatar.pointer, extras: avatar.extras,
-                        extrasPoppedAt: avatar.extrasPoppedAt, chatList: avatar.chatList)
+                        extrasPoppedAt: avatar.extrasPoppedAt, chatList: avatar.chatList,
+                        usage: avatar.usage, paused: avatar.paused, calm: avatar.calm)
                 .id(avatar.current.source)
                 .transition(.scale(scale: 0.4).combined(with: .opacity))
         }
@@ -78,6 +79,11 @@ struct AvatarStage: View {
     var extras: [RobotState] = []
     var extrasPoppedAt: Date = .distantPast
     var chatList: [RobotModel.ChatRow]? = nil
+    /// Kullanım sınırları (halkalar, sohbet listesinin başı)
+    var usage: [UsageWindow] = []
+    /// Sakin çizim: hiçbir şey olmuyorken kafa yeniden çizilmez
+    var paused = false
+    var calm = CalmState()
 
     /// Odak modunda sadece seni bekleyen, hata veren ya da robotun kendi söylediği şeyler görünür
     private var urgent: Bool { model.state == .waiting || model.state == .error || model.bubbleIsExplicit }
@@ -101,6 +107,7 @@ struct AvatarStage: View {
     private var bubble: some View {
         if let rows = chatList, !rows.isEmpty {
             ChatListBubble(rows: rows, color: Color(nsColor: model.theme.color), tailOnTop: bubbleBelow, tailLeading: alignLeft,
+                           usage: usage,
                            hoverIndex: { [weak avatar = pointer?.avatar] in avatar?.chatRowIndex(at: NSEvent.mouseLocation) })
                 .background(GeometryReader { g in
                     Color.clear.preference(key: BubbleFrameKey.self, value: g.frame(in: .named("avatar")))
@@ -145,9 +152,11 @@ struct AvatarStage: View {
     }
 
     private var head: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: false)) { context in
+        TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: paused)) { context in
             HeadFigure(model: model,
                        time: context.date.timeIntervalSinceReferenceDate,
+                       stillness: calm.stillness(at: context.date.timeIntervalSinceReferenceDate),
+                       usage: usage,
                        look: alignLeft ? 2.5 : -2.5,
                        health: health,
                        pointer: pointer,
@@ -263,6 +272,8 @@ struct ChatListBubble: View {
     let color: Color
     let tailOnTop: Bool
     let tailLeading: Bool
+    /// Kullanım sınırları: listenin başında "Oturum %42 · 16:40'ta dolar"
+    var usage: [UsageWindow] = []
     /// Farenin üstünde olduğu satır (koyulaşsın)
     var hoverIndex: () -> Int? = { nil }
 
@@ -300,6 +311,22 @@ struct ChatListBubble: View {
                 .foregroundColor(.secondary)
                 .padding(.bottom, 3)
                 .padding(.leading, 6)
+            ForEach(usage, id: \.kind) { w in
+                HStack(spacing: 6) {
+                    Text(UsageLimits.line(w, now: Date()))
+                        .font(.system(size: 9.5))
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                    Spacer(minLength: 6)
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(Color.secondary.opacity(0.25))
+                        Capsule().fill(UsageRing.tint(w.percent, normal: color)).frame(width: 34 * CGFloat(w.percent) / 100)
+                    }
+                    .frame(width: 34, height: 4)
+                }
+                .padding(.horizontal, 6)
+                .frame(height: 14)
+            }
             ForEach(Array(shown.enumerated()), id: \.element.sessionID) { index, row in
                 let aiColor = Color(nsColor: Themes.shared.theme(for: row.source).color)
                 let hovered = hover == index
@@ -349,6 +376,10 @@ struct ChatListBubble: View {
 struct HeadFigure: View {
     let model: RobotModel
     let time: TimeInterval
+    /// 0 normal hareket, 1 tamamen dingin (sakin çizim ya da "hareketi azalt"): süzülme, sallanma durur; duruş kalır
+    var stillness: Double = 0
+    /// Kullanım sınırları: ayaklarının dibinde iki küçük halka
+    var usage: [UsageWindow] = []
     let look: CGFloat
     let health: Health
     var pointer: PointerTracker? = nil
@@ -364,13 +395,15 @@ struct HeadFigure: View {
         // Yüz değişince (ör. düşünüyor → bitti) 0,35 sn'de yumuşak geçiş
         let blend = IdleMotion.smooth((time - model.visualChangedAt.timeIntervalSinceReferenceDate) / 0.35)
         let prevState = model.previousState, prevMood = model.previousMood
-        let idle = (state == .idle && model.mood == nil) ? IdleMotion.at(time) : IdleMotion()
-        let hop = hopHeight
-        let float = mix(floatOffset(prevState, prevMood), floatOffset(state, model.mood), blend)
-        let shake = shakeOffset + nudgeOffset + CGFloat(idle.head.dx)
+        let still = stillness
+        let idle = (state == .idle && model.mood == nil && still <= 0) ? IdleMotion.at(time) : IdleMotion()
+        let hop = hopHeight * CGFloat(1 - still)
+        let float = mix(mix(floatOffset(prevState, prevMood), floatOffset(state, model.mood), blend), floatOffset(state, model.mood, at: 0), still)
+        let shake = (shakeOffset + nudgeOffset) * CGFloat(1 - still) + CGFloat(idle.head.dx)
         let skin = SkinStore.shared.image(source: model.source, state: state)
         let lift = hop - float + CGFloat(idle.head.lift)
-        let tilt = Double(mix(CGFloat(headTilt(prevState, prevMood)), CGFloat(headTilt(state, model.mood)), blend)) + idle.head.tilt
+        let tilt = Double(mix(mix(CGFloat(headTilt(prevState, prevMood)), CGFloat(headTilt(state, model.mood)), blend),
+                              CGFloat(headTilt(state, model.mood, at: 0)), still)) + idle.head.tilt
         // Gözde simge (? soru, ! onay, ✓ bitti, % kota), boştayken imlece bakış, kış kostümü
         let glyph = model.eyeGlyph(at: Date(timeIntervalSinceReferenceDate: time))
         let prevGlyph: Character? = prevState == .waiting ? "!" : nil
@@ -384,6 +417,13 @@ struct HeadFigure: View {
                 .fill(Color.black.opacity(0.14))
                 .frame(width: Swift.max(24, 58 - lift * 1.5), height: 6)
                 .position(x: 50, y: 96)
+
+            // Kullanım sınırları: ayaklarının dibinde iki küçük halka (solda oturum, sağda hafta)
+            ForEach(usage, id: \.kind) { w in
+                UsageRing(percent: w.percent, color: UsageRing.tint(w.percent, normal: Color(nsColor: base.mix(.white, 0.2))))
+                    .frame(width: 11, height: 11)
+                    .position(x: w.kind == "five_hour" ? 14 : 86, y: 94)
+            }
 
             // Kota halkası (ClaudeBar): kalan kota kadar dolu, azsa kırmızı
             if let left = model.quotaLeft {
@@ -467,7 +507,8 @@ struct HeadFigure: View {
     // Havada süzülme
     private func mix(_ a: CGFloat, _ b: CGFloat, _ t: Double) -> CGFloat { a + (b - a) * CGFloat(t) }
 
-    private func floatOffset(_ state: RobotState, _ mood: Mood?) -> CGFloat {
+    private func floatOffset(_ state: RobotState, _ mood: Mood?, at t: Double? = nil) -> CGFloat {
+        let time = t ?? self.time
         if mood == .scared { return CGFloat(sin(time * 40)) * 1.2 }
         switch state {
         case .idle: return CGFloat(sin(time * 1.6)) * 2.5
@@ -479,7 +520,8 @@ struct HeadFigure: View {
         }
     }
 
-    private func headTilt(_ state: RobotState, _ mood: Mood?) -> Double {
+    private func headTilt(_ state: RobotState, _ mood: Mood?, at t: Double? = nil) -> Double {
+        let time = t ?? self.time
         switch mood {
         case .some(.dizzy): return sin(time * 6) * 9
         case .some(.tired): return 6
@@ -512,6 +554,29 @@ struct HeadFigure: View {
         let t = time - start.timeIntervalSinceReferenceDate
         guard t >= 0 && t <= 0.6 else { return 0 }
         return CGFloat(sin(t * 45) * (1 - t / 0.6)) * 5
+    }
+}
+
+/// Küçük dolum halkası (kullanım sınırı): tepeden saat yönünde
+struct UsageRing: View {
+    let percent: Int
+    let color: Color
+
+    /// Rahat → AI rengi, %60 sarı, %85 kırmızı
+    static func tint(_ percent: Int, normal: Color) -> Color {
+        if percent >= 85 { return Color(red: 0.95, green: 0.33, blue: 0.33) }
+        if percent >= 60 { return Color(red: 0.96, green: 0.66, blue: 0.2) }
+        return normal
+    }
+
+    var body: some View {
+        ZStack {
+            Circle().stroke(Color(red: 0.5, green: 0.49, blue: 0.56).opacity(0.35), lineWidth: 2)
+            Circle()
+                .trim(from: 0, to: CGFloat(Swift.min(100, Swift.max(0, percent))) / 100)
+                .stroke(color, style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+        }
     }
 }
 
@@ -839,8 +904,11 @@ struct ApprovalButtons: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            pill(.allow, loc("İzin ver", "Allow"), fill: ApprovalButtons.allow, text: .white)
-            if approval.hasAlways {
+            // "İzin ver" sadece tamamı balonda okunabilen kısa kabuk komutunda; gerisi balondan sadece reddedilir
+            if approval.canAllow {
+                pill(.allow, loc("İzin ver", "Allow"), fill: ApprovalButtons.allow, text: .white)
+            }
+            if approval.canAllow && approval.hasAlways {
                 pill(.always, loc("Hep izin ver", "Always"), fill: nil, text: color)
             }
             pill(.deny, loc("Reddet", "Deny"), fill: nil, text: ApprovalButtons.deny)

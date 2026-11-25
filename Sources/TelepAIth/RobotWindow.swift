@@ -165,10 +165,25 @@ final class RobotAvatar: ObservableObject {
     /// Gösterilen AI'ı değiştirir (küçük bir "puf" animasyonuyla).
     func show(_ model: RobotModel) {
         guard model !== current else { return }
+        currentSince = Date()
         withAnimation(.spring(response: 0.35, dampingFraction: 0.6)) {
             current = model
         }
     }
+
+    /// Gösterilen AI'ın değiştiği an (geçiş animasyonu bitmeden sakin çizime geçilmez)
+    private(set) var currentSince = Date()
+    /// Kullanım sınırları (Claude Code durum satırı): kafanın altında iki küçük halka
+    @Published private(set) var usage: [UsageWindow] = []
+    /// Sakin çizim: hiçbir şey olmuyorken kafa yeniden çizilmez (paused); calm süzülmenin yumuşakça durmasını taşır
+    @Published private(set) var paused = false
+    @Published private(set) var calm = CalmState()
+    /// Kafa uçuyor ya da sürükleniyor mu
+    var isMoving: Bool { isDragging || target != nil }
+
+    func setUsage(_ value: [UsageWindow]) { if usage != value { usage = value } }
+    func setPaused(_ value: Bool) { if paused != value { paused = value } }
+    func setCalm(_ value: CalmState) { if calm != value { calm = value } }
 
     // MARK: Ekranlar
 
@@ -236,7 +251,19 @@ final class RobotAvatar: ObservableObject {
 
     // MARK: Ev konumu (kullanıcının bıraktığı köşe ya da nokta, hangi ekranda olursa)
 
+    /// Ekranın altına itildi: sadece kafasının üstü görünür; tıklayınca ya da haber gelince geri çıkar
+    private(set) var peeking = false
+    private var peekPoint = CGPoint.zero
+
+    /// Saklanmaktan çık, eski yerine dön
+    func unpeek() {
+        guard peeking else { return }
+        peeking = false
+        moveTo(homePoint)
+    }
+
     private var homePoint: CGPoint {
+        if peeking { return peekPoint }
         let defaults = UserDefaults.standard
         if let raw = defaults.string(forKey: "avatarCorner"), let corner = Corner(rawValue: raw) {
             let screen = RobotAvatar.screen(withID: defaults.integer(forKey: "avatarScreen")) ?? NSScreen.main ?? NSScreen.screens.first
@@ -271,7 +298,7 @@ final class RobotAvatar: ObservableObject {
 
     /// AI uygulamasının penceresinin sağ-alt köşesine uç (pencere taşınırsa tekrar çağrılır).
     func dock(to window: NSRect) {
-        guard !isDragging, !locked else { return }
+        guard !isDragging, !locked, !peeking else { return }
         var p = CGPoint(x: window.maxX - RobotAvatar.dockOffset.x, y: window.minY + RobotAvatar.dockOffset.y)
         p.x = Swift.max(p.x, window.minX + Layout.headSize.width / 2)
         p.y = Swift.min(p.y, window.maxY - Layout.headSize.height / 2)
@@ -306,6 +333,7 @@ final class RobotAvatar: ObservableObject {
     func beginDrag() {
         guard !locked else { return }
         isDragging = true
+        peeking = false
         target = nil
         dragStartHead = head
     }
@@ -321,7 +349,16 @@ final class RobotAvatar: ObservableObject {
         isDragging = false
         let defaults = UserDefaults.standard
         let screen = RobotAvatar.screen(containing: head)
+            ?? NSScreen.screens.first { $0.frame.minX <= head.x && head.x < $0.frame.maxX }
         let frame = screen?.visibleFrame ?? RobotAvatar.fallbackFrame
+        // Ekranın altına itildiyse saklan: sadece kafasının üstü görünsün (kayıtlı yeri değişmez)
+        if head.y < frame.minY + Layout.headSize.height * 0.1 {
+            peeking = true
+            peekPoint = CGPoint(x: RobotAvatar.clamp(head, to: frame).x, y: frame.minY - Layout.headSize.height * 0.2)
+            moveTo(peekPoint)
+            onUserMoved?()
+            return
+        }
 
         var nearest: (corner: Corner, distance: CGFloat)?
         for corner in Corner.allCases {

@@ -25,6 +25,12 @@ internal sealed class RobotManager
     private bool _wasFocused = FocusMode.IsActive;
     private readonly AppWatcher _watcher = new();
     private readonly Dictionary<int, (int? Pid, DateTime At)> _ancestorCache = new();
+    /// <summary>Takıldı, çakışma, CI, commit hatırlatması ve kullanım sınırları</summary>
+    public readonly Insights Insights = new();
+    // Sakin çizim
+    private bool _calm;
+    private double _calmSince, _calmFrom, _pointerMovedAt;
+    private (int X, int Y) _lastCursor;
 
     public Dictionary<string, string> WatcherStatus { get; private set; } = new();
     public string WatcherDiagnostics => _watcher.Diagnostics;
@@ -165,7 +171,7 @@ internal sealed class RobotManager
         _recent.Enqueue($"{DateTime.Now:HH:mm:ss.fff} {e.Source}/{e.SessionId} {e.Kind} {e.State}");
         while (_recent.Count > 30) _recent.Dequeue();
         // Claude devam etti (izin verildi, reddedildi, yeni istek…): o oturumun bekleyen sorusunu bırak
-        if (e.Kind != EventKind.Waiting)
+        if (e.Kind != EventKind.Waiting && e.Kind != EventKind.Insight)
             foreach (var p in _approvals.Where(p => p.Event.Source == e.Source && p.Event.SessionId == e.SessionId).ToList())
                 p.Release();
         // Terminaldeki Claude Code / Codex: hook'u çalıştıran sürecin penceresi olan atası (terminal, VS Code…)
@@ -174,6 +180,16 @@ internal sealed class RobotManager
         if (m.Apply(e) is { } notice) Deliver(notice, e.QuietIfForegroundPid);
         ChooseDisplay();
         Changed?.Invoke();
+    }
+
+    /// <summary>Ham istek: hook olayından ya da durum satırından çıkan uyarılar; işler (CI, commit) arka planda.</summary>
+    public void HandleRaw(string path, IReadOnlyDictionary<string, string> query, string body)
+    {
+        var (events, jobs) = Insights.Handle(path, query, body, DateTime.Now);
+        if (!Prefs.Insights) return;
+        foreach (var e in events) Handle(e);
+        foreach (var job in jobs)
+            InsightJobs.Run(job, Insights, e => Application.Current?.Dispatcher.BeginInvoke(() => Handle(e)));
     }
 
     private int? WindowedAncestor(int pid)
@@ -220,7 +236,7 @@ internal sealed class RobotManager
         _approvals.RemoveAll(p => p.Finished);
         if (_avatar == null) return;
         var current = CurrentApproval();
-        _avatar.Approval = current == null ? null : new ApprovalPrompt(current.Id, current.Suggestions != null);
+        _avatar.Approval = current == null ? null : new ApprovalPrompt(current.Id, current.Suggestions != null, current.CanAllow);
     }
 
     /// <summary>Balondaki düğme: kararı Claude Code'a gönder</summary>
@@ -228,6 +244,7 @@ internal sealed class RobotManager
     {
         var p = CurrentApproval();
         if (p == null) return;
+        if (choice != ApprovalChoice.Deny && !p.CanAllow) return;   // balonda tamamı görünmeyen şeye izin verilmez
         p.Answer(Approval.Decision(choice, p.Suggestions));
         var m = Model(p.Event.Source);
         m.Say(choice == ApprovalChoice.Deny
@@ -332,6 +349,8 @@ internal sealed class RobotManager
     private void RobotClicked()
     {
         if (_avatar == null) return;
+        // Ekranın altında saklanıyorsa önce geri çıksın
+        if (_avatar.Peeking) { _avatar.Unpeek(); return; }
         switch (_avatar.Health)
         {
             case Health.Update:
@@ -599,9 +618,15 @@ internal sealed class RobotManager
             ["approval"] = _avatar?.Approval is { } ap ? new System.Text.Json.Nodes.JsonObject
             {
                 ["always"] = ap.HasAlways,
+                ["canAllow"] = ap.CanAllow,
                 ["buttons"] = _window?.ApprovalButtonsJson(),
             } : null,
             ["gazeAllowed"] = _avatar?.GazeAllowed ?? false,
+            ["paused"] = _avatar?.Paused ?? false,
+            ["peeking"] = _avatar?.Peeking ?? false,
+            ["usage"] = _avatar is { Usage.Count: > 0 } ua
+                ? new System.Text.Json.Nodes.JsonArray(ua.Usage.Select(w => (System.Text.Json.Nodes.JsonNode?)$"{w.Kind}={w.Percent}").ToArray())
+                : null,
             ["glyph"] = _avatar?.Current.EyeGlyph(DateTime.Now) is { } g && g != '\0' ? g.ToString() : "",
             ["mood"] = _avatar?.Current.Mood?.ToString(),
             ["celebrating"] = _avatar?.Current.CelebrateStart is { } cs && (DateTime.Now - cs).TotalSeconds is >= 0 and <= 2.4,
@@ -664,7 +689,16 @@ internal sealed class RobotManager
                 _avatar.ChatList = date > _avatar.ChatListUntil || rows.Count == 0 ? null : rows;
             }
             _avatar.Extras = DisplayPicker.Extras(_avatar.Current, date);
+            // Kullanım sınırları: halkalar, gözdeki "%", yenilenme bildirimi
+            foreach (var e in Insights.Usage.Tick(date)) if (Prefs.Insights) Handle(e);
+            _avatar.Usage = Insights.Usage.Current(date);
+            if (_models.TryGetValue("claude", out var claude)) claude.UsageLeft = Insights.Usage.Left(date);
         }
+        // Saklanırken haber gelirse (balon, onay, sohbet listesi) geri çıksın
+        if (_avatar is { Peeking: true } pk && (pk.Current.BubbleText != null || pk.Approval != null || pk.ChatList != null
+                                                || pk.Current.State == RobotState.Waiting))
+            pk.Unpeek();
+        UpdateCalm(now);
         // Toplantı, odak süresi, günlük özet (5 sn'de bir)
         if (now - _lastSlowCheck > 5)
         {
@@ -672,6 +706,43 @@ internal sealed class RobotManager
             UpdateMeeting();
             CheckDailySummary();
         }
-        _window?.Frame(dt);
+        _window?.Frame(dt, render: !(_avatar?.Paused ?? false));
+    }
+
+    /// <summary>
+    /// Sakin çizim: robot boşta ve hiçbir şey olmuyorken (balon, ruh hâli, sohbet, imleç hareketi yok) kafa yavaşça
+    /// durur ve yeniden çizilmez; sadece göz kırpma anlarında birkaç kare çizilir. Zamanlayıcı da seyrekleşir.
+    /// </summary>
+    private void UpdateCalm(double now)
+    {
+        if (_avatar == null) return;
+        var c = Native.Cursor();
+        if (c.X != _lastCursor.X || c.Y != _lastCursor.Y)
+        {
+            _lastCursor = (c.X, c.Y);
+            double dx = c.X - _avatar.HeadX, dy = c.Y - _avatar.HeadY;
+            if (dx * dx + dy * dy < Math.Pow(900 * _avatar.PixelScale, 2)) _pointerMovedAt = now;
+        }
+        var m = _avatar.Current;
+        var date = DateTime.Now;
+        var calm = m.State is RobotState.Idle or RobotState.Sleeping or RobotState.Done
+                   && m.Mood == null && m.BubbleText == null && m.EyeGlyph(date) == '\0' && m.QuotaLeft == null
+                   && (m.CelebrateStart is not { } cs || (date - cs).TotalSeconds > 3)
+                   && _avatar.Minis.Count == 0 && _avatar.ChatList == null && _avatar.Extras.Count == 0 && _avatar.Approval == null
+                   && _avatar.Health == Health.Ok && !_avatar.Moving && !RobotView.WinterActive
+                   && (date - _avatar.CurrentSince).TotalSeconds > 1 && now - _pointerMovedAt > 1.5;
+        var time = RobotView.Seconds(date);
+        if (calm != _calm)
+        {
+            _calmFrom = _avatar.Stillness;
+            _calm = calm;
+            _calmSince = time;
+        }
+        var reduce = !SystemParameters.ClientAreaAnimation;   // Windows'ta "animasyonları göster" kapalı
+        _avatar.Stillness = reduce ? 1 : Calm.Stillness(calm, _calmSince, time, _calmFrom);
+        // Uyurken gözler kapalı: kırpma için de uyanmasın
+        _avatar.Paused = calm && time - _calmSince >= Calm.Settle && (m.State != RobotState.Idle || !Calm.InBlink(time));
+        var interval = _avatar.Paused ? 100 : 33;
+        if ((int)_timer.Interval.TotalMilliseconds != interval) _timer.Interval = TimeSpan.FromMilliseconds(interval);
     }
 }

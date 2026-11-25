@@ -22,6 +22,8 @@ internal sealed class EventServer
 
     /// <summary>Gelen olay (arka plan iş parçacığında çağrılır)</summary>
     public event Action<AgentEvent>? EventReceived;
+    /// <summary>Ham istek (hook olayı ya da durum satırı): uyarılar (takıldı, çakışma, CI, kullanım) için</summary>
+    public event Action<string, IReadOnlyDictionary<string, string>, string>? RawReceived;
 
     /// <summary>Claude Code izin istiyor: bağlantı açık kalır, robotun cevabı (ya da boş cevap) dönene kadar.</summary>
     public event Action<PendingApproval>? PermissionRequested;
@@ -125,6 +127,13 @@ internal sealed class EventServer
                     return;
                 }
                 if (request.Method != "POST") { await Respond(stream, 405, "method not allowed"); return; }
+                // Claude Code'un durum satırı (kullanım sınırları): olay değil, uyarılara gider
+                if (request.Path.StartsWith("/statusline", StringComparison.Ordinal))
+                {
+                    RawReceived?.Invoke(request.Path, request.Query, request.Body);
+                    try { await Respond(stream, 200, "ok"); } catch { }
+                    return;
+                }
                 var e = EventParser.Parse(request.Path, request.Query, request.Body);
                 if (Debug) Log($"{request.Method} {request.Path} q={string.Join("&", request.Query.Select(kv => kv.Key + "=" + kv.Value))} body={request.Body.Length} → {(e == null ? "400" : e.Source + "/" + e.SessionId + " " + e.Kind)}");
                 if (e == null) { await Respond(stream, 400, "unrecognized event"); return; }
@@ -140,6 +149,7 @@ internal sealed class EventServer
                 // Önce olayı ilet, sonra cevap ver: hook yardımcısı cevabın başını okuyunca bağlantıyı kapatıyor,
                 // cevap yazılırken bağlantı koparsa olay kaybolmasın.
                 EventReceived?.Invoke(e);
+                RawReceived?.Invoke(request.Path, request.Query, request.Body);
                 try { await Respond(stream, 200, "ok"); } catch { }
             }
             catch
@@ -184,11 +194,14 @@ internal sealed class PendingApproval
     public DateTime Created { get; } = DateTime.Now;
     public bool Finished => _answer.Task.IsCompleted;
     public bool Closed { get; private set; }
+    /// <summary>Balondan "İzin ver" denebilir mi (kısa, tek satırlık, tamamı görünen kabuk komutu)</summary>
+    public bool CanAllow { get; }
 
     public PendingApproval(AgentEvent e, string body)
     {
         Event = e;
         Suggestions = Approval.Suggestions(body);
+        CanAllow = Approval.CanAllow(body);
     }
 
     /// <summary>Karar (boşsa soru terminale bırakıldı)</summary>

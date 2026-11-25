@@ -97,12 +97,16 @@ internal sealed class RobotWindow : Window
 
     // MARK: Kare (yönetici saniyede 30 kez çağırır)
 
-    public void Frame(double dt)
+    private bool _wasRendering = true;
+
+    public void Frame(double dt, bool render = true)
     {
         if (!IsVisible) return;
         _avatar.Step(dt);
         ApplyRect(force: false);
-        _view.InvalidateVisual();
+        // Sakin çizim: hiçbir şey değişmiyorsa yeniden çizme (son kare ekranda kalır)
+        if (render || _wasRendering) _view.InvalidateVisual();
+        _wasRendering = render;
         UpdateClickThrough();
     }
 

@@ -43,6 +43,7 @@ internal sealed class AppController : ISettingsHost
         Manager.Start();
 
         _server.EventReceived += e => Application.Current.Dispatcher.BeginInvoke(() => Manager.Handle(e));
+        _server.RawReceived += (path, query, body) => Application.Current.Dispatcher.BeginInvoke(() => Manager.HandleRaw(path, query, body));
         _server.PermissionRequested += p => Application.Current.Dispatcher.BeginInvoke(() => Manager.OnPermission(p));
         _server.StateProvider = () => Application.Current.Dispatcher.Invoke(Manager.StateJson);
         _server.DebugHandler = (path, query) => Application.Current.Dispatcher.Invoke(() => Debug(path, query));
@@ -58,6 +59,8 @@ internal sealed class AppController : ISettingsHost
         {
             try { if (HookInstaller.IsInstalled(t)) HookInstaller.Install(t, Installer.HookExe, Prefs.Shield && t == HookTarget.Claude); } catch { }
         }
+        // Durum satırı bağlıysa güncel yolla yenile
+        try { if (UsageLine.IsConnected()) UsageLine.Connect(UsageLine.Command(Installer.HookExe)); } catch { }
         if (Installer.IsInstalledCopy && Prefs.StartWithWindows && !Installer.AutostartEnabled) Installer.SetAutostart(true);
         Changed();
 
@@ -483,6 +486,20 @@ internal sealed class AppController : ISettingsHost
         if (HookInstaller.IsInstalled(HookTarget.Claude))
         {
             try { HookInstaller.Install(HookTarget.Claude, Installer.HookExe, on); } catch { }
+        }
+        Changed();
+    }
+
+    public void SetUsageLine(bool on)
+    {
+        try
+        {
+            if (on) UsageLine.Connect(UsageLine.Command(Installer.HookExe));
+            else UsageLine.Disconnect();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(ex.Message, L("Bağlanamadı", "Couldn't connect"));
         }
         Changed();
     }

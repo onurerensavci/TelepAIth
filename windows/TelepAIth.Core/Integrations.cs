@@ -36,7 +36,7 @@ public static class HookInstaller
         ? new (string, string?)[]
         {
             ("SessionStart", null), ("SessionEnd", null), ("UserPromptSubmit", null), ("PreToolUse", "*"), ("PostToolUse", "*"),
-            ("Notification", null), ("Stop", null), ("StopFailure", null), ("SubagentStart", null), ("PreCompact", null),
+            ("PostToolUseFailure", "*"), ("Notification", null), ("Stop", null), ("StopFailure", null), ("SubagentStart", null), ("PreCompact", null),
         }
         : new (string, string?)[]
         {
@@ -177,6 +177,76 @@ public static class HookInstaller
         var tmp = path + ".tmp";
         File.WriteAllText(tmp, root.ToJsonString(new JsonSerializerOptions { WriteIndented = true }), new UTF8Encoding(false));
         File.Move(tmp, path, true);
+    }
+}
+
+/// <summary>
+/// Kullanım sınırları için Claude Code'un durum satırı (statusLine): komutumuz gelen JSON'u TelepAIth'e iletir, sonra
+/// kullanıcının önceki durum satırını aynı girdiyle çalıştırıp çıktısını basar (onunki görünmeye devam eder).
+/// Önceki satır ~/.telepaith/statusline-theirs.json'da saklanır, bağlantı kesilince geri konur.
+/// </summary>
+public static class UsageLine
+{
+    public const string Marker = "__telepaith_line";
+    public static string TheirsFile => Path.Combine(AppInfo.SupportDir, "statusline-theirs.json");
+    /// <summary>Mac'teki kabuk komutu okusun diye sadece komut metni</summary>
+    public static string TheirsCommandFile => Path.Combine(AppInfo.SupportDir, "statusline-theirs");
+
+    public static string Command(string helperPath) => $"{HookInstaller.ShellPath(helperPath)} statusline {Marker}";
+
+    private static bool IsOurs(JsonNode? line) => (line.Str("command") ?? "").Contains(Marker);
+
+    public static bool IsConnected()
+    {
+        try
+        {
+            var path = HookInstaller.FilePath(HookTarget.Claude);
+            return File.Exists(path) && IsOurs(HookInstaller.Load(path)["statusLine"]);
+        }
+        catch { return false; }
+    }
+
+    public static void Connect(string command)
+    {
+        var path = HookInstaller.FilePath(HookTarget.Claude);
+        var root = HookInstaller.Load(path);
+        var current = root["statusLine"];
+        if (current is JsonObject theirs && !IsOurs(theirs))
+        {
+            File.WriteAllText(TheirsFile, theirs.ToJsonString());
+            File.WriteAllText(TheirsCommandFile, theirs.Str("command") ?? "");
+        }
+        else if (current == null)
+        {
+            File.Delete(TheirsFile);
+            File.Delete(TheirsCommandFile);
+        }
+        var ours = new JsonObject { ["type"] = "command", ["command"] = command };
+        if (current is JsonObject old && old["padding"] is { } padding) ours["padding"] = padding.DeepClone();
+        root["statusLine"] = ours;
+        HookInstaller.Save(root, path);
+    }
+
+    public static void Disconnect()
+    {
+        var path = HookInstaller.FilePath(HookTarget.Claude);
+        if (!File.Exists(path)) return;
+        var root = HookInstaller.Load(path);
+        if (!IsOurs(root["statusLine"])) return;
+        JsonNode? theirs = null;
+        try { if (File.Exists(TheirsFile)) theirs = JsonNode.Parse(File.ReadAllText(TheirsFile)); } catch { }
+        if (theirs is JsonObject) root["statusLine"] = theirs;
+        else root.Remove("statusLine");
+        HookInstaller.Save(root, path);
+        File.Delete(TheirsFile);
+        File.Delete(TheirsCommandFile);
+    }
+
+    /// <summary>Kullanıcının önceki durum satırı komutu (yoksa null)</summary>
+    public static string? TheirsCommand()
+    {
+        try { return File.Exists(TheirsFile) ? JsonNode.Parse(File.ReadAllText(TheirsFile)).Str("command") : null; }
+        catch { return null; }
     }
 }
 
@@ -424,6 +494,28 @@ public enum ApprovalChoice { Allow, Always, Deny }
 
 public static class Approval
 {
+    /// <summary>Balondan izin verilebilecek en uzun komut (tamamı balonda okunabilsin).</summary>
+    public const int MaxAllowLength = 120;
+    private static readonly string[] PlainKeys = { "command", "description", "timeout", "run_in_background" };
+
+    /// <summary>
+    /// "İzin ver" sadece tamamı okunabilen kısa, tek satırlık bir kabuk komutunda gösterilir. Dosya düzenlemesi (balon
+    /// değişikliği göstermez), uzun komut ya da ne yaptığını söylemeyen araç balondan sadece reddedilebilir.
+    /// </summary>
+    public static bool CanAllow(string? tool, JsonObject input)
+    {
+        if (tool is not ("Bash" or "PowerShell")) return false;
+        var cmd = ToolDescriber.CommandString(input);
+        if (string.IsNullOrWhiteSpace(cmd) || cmd.Contains('\n') || cmd.Contains('\r') || cmd.Length > MaxAllowLength) return false;
+        return input.All(kv => PlainKeys.Contains(kv.Key));
+    }
+
+    public static bool CanAllow(string body)
+    {
+        try { return JsonNode.Parse(body) is JsonObject j && CanAllow(j.Str("tool_name"), j.Obj("tool_input")); }
+        catch { return false; }
+    }
+
     /// <summary>Claude'un önerdiği izin kuralları (permission_suggestions) varsa "Hep izin ver" gösterilir.</summary>
     public static JsonArray? Suggestions(string body)
     {

@@ -46,7 +46,7 @@ internal sealed class RobotView : FrameworkElement
         RenderOptions.SetEdgeMode(this, EdgeMode.Unspecified);
     }
 
-    private static double Seconds(DateTime d) => (d.ToUniversalTime() - Epoch).TotalSeconds;
+    internal static double Seconds(DateTime d) => (d.ToUniversalTime() - Epoch).TotalSeconds;
 
     // MARK: Fırçalar (önbellekli; her karede yeniden oluşturmamak için)
 
@@ -340,8 +340,10 @@ internal sealed class RobotView : FrameworkElement
         var accent = C(_avatar.Current.Theme.Color);
         const double padX = 10, padY = 7, titleH = 14;
         var shown = rows.Take(ChatListMax).ToList();
+        var usage = _avatar.Usage;
+        const double usageH = 14;
         var cardW = Math.Min(W - 2 * M, 250.0);
-        var cardH = padY + titleH + 3 + shown.Count * ChatRowH + padY - 2;
+        var cardH = padY + titleH + usage.Count * usageH + 3 + shown.Count * ChatRowH + padY - 2;
         var cardX = alignLeft ? M : W - M - cardW;
         var cardY = below ? headY + Head + Gap + TailH : headY - Gap - TailH - cardH;
         var full = DrawCard(dc, new Rect(cardX, cardY, cardW, cardH), alignLeft, below, fill, accent);
@@ -352,9 +354,22 @@ internal sealed class RobotView : FrameworkElement
         var header = new FormattedText(headerText, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, UiSemi, 10, B(secondary), dpi);
         dc.DrawText(header, new Point(tx, ty + (titleH - header.Height) / 2));
 
+        // Kullanım sınırları: "Oturum %42 · 16:40'ta dolar" ve küçük bir çubuk
+        var uy = ty + titleH;
+        foreach (var w in usage)
+        {
+            var line = new FormattedText(UsageLimits.Line(w, DateTime.Now), CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, Ui, 9.5, B(secondary), dpi);
+            const double barW = 34;
+            var bar = new Rect(cardX + cardW - padX - barW, uy + usageH / 2 - 2, barW, 4);
+            dc.DrawRoundedRectangle(B(secondary, 0.25), null, bar, 2, 2);
+            dc.DrawRoundedRectangle(B(UsageColor(w.Percent, accent)), null, new Rect(bar.X, bar.Y, barW * w.Percent / 100.0, 4), 2, 2);
+            dc.DrawText(line, new Point(tx, uy + (usageH - line.Height) / 2));
+            uy += usageH;
+        }
+
         var scale = _drawScale;
         var hover = Mouse.GetPosition(this);
-        var y = ty + titleH + 3;
+        var y = uy + 3;
         for (var i = 0; i < shown.Count; i++)
         {
             var row = shown[i];
@@ -403,8 +418,10 @@ internal sealed class RobotView : FrameworkElement
 
     private static List<ButtonSpec> ApprovalButtons(ApprovalPrompt approval, double dpi)
     {
-        var list = new List<(ApprovalChoice, string)> { (ApprovalChoice.Allow, L("İzin ver", "Allow")) };
-        if (approval.HasAlways) list.Add((ApprovalChoice.Always, L("Hep izin ver", "Always")));
+        // "İzin ver" sadece tamamı balonda okunabilen kısa kabuk komutunda; gerisi balondan sadece reddedilir
+        var list = new List<(ApprovalChoice, string)>();
+        if (approval.CanAllow) list.Add((ApprovalChoice.Allow, L("İzin ver", "Allow")));
+        if (approval.CanAllow && approval.HasAlways) list.Add((ApprovalChoice.Always, L("Hep izin ver", "Always")));
         list.Add((ApprovalChoice.Deny, L("Reddet", "Deny")));
         return list.Select(x =>
         {
@@ -425,12 +442,14 @@ internal sealed class RobotView : FrameworkElement
 
         // Yüz değişince (ör. düşünüyor → bitti) 0,35 sn'de yumuşak geçiş
         var blend = IdleMotion.Smooth((time - Seconds(model.VisualChangedAt == DateTime.MinValue ? Epoch : model.VisualChangedAt)) / 0.35);
-        var idle = state == RobotState.Idle && mood == null ? IdleMotion.At(time) : default;
-        var hop = HopHeight(model, time);
-        var flt = Mix(FloatOffset(model.PreviousState, model.PreviousMood, time), FloatOffset(state, mood, time), blend);
-        var shake = ShakeOffset(model, time) + NudgeOffset(model, time) + idle.Dx;
+        // Dinginlik (sakin çizim ya da "hareketi azalt"): süzülme ve sallanma durur, duruş (uyurken eğik baş) kalır
+        var still = _avatar.Stillness;
+        var idle = state == RobotState.Idle && mood == null && still <= 0 ? IdleMotion.At(time) : default;
+        var hop = HopHeight(model, time) * (1 - still);
+        var flt = Mix(Mix(FloatOffset(model.PreviousState, model.PreviousMood, time), FloatOffset(state, mood, time), blend), FloatOffset(state, mood, 0), still);
+        var shake = (ShakeOffset(model, time) + NudgeOffset(model, time)) * (1 - still) + idle.Dx;
         var lift = hop - flt + idle.Lift;
-        var tilt = Mix(HeadTilt(model.PreviousState, model.PreviousMood, time), HeadTilt(state, mood, time), blend) + idle.Tilt;
+        var tilt = Mix(Mix(HeadTilt(model.PreviousState, model.PreviousMood, time), HeadTilt(state, mood, time), blend), HeadTilt(state, mood, 0), still) + idle.Tilt;
 
         // Gözde simge: ? soru, ! onay bekliyor, ✓ yeni bitti, % kota azaldı
         var glyph = model.EyeGlyph(DateTime.Now);
@@ -459,6 +478,12 @@ internal sealed class RobotView : FrameworkElement
 
         // Gölge
         dc.DrawEllipse(B(Colors.Black, 0.14), null, new Point(50, 96), Math.Max(24, 58 - lift * 1.5) / 2, 3);
+        // Kullanım sınırları: ayaklarının dibinde iki küçük halka (solda oturum, sağda hafta)
+        foreach (var w in _avatar.Usage)
+        {
+            var center = new Point(w.Kind == "five_hour" ? 14 : 86, 94);
+            DrawRing(dc, center, 5.5, w.Percent / 100.0, UsageColor(w.Percent, baseColor.Mix(Rgb.White, 0.2)));
+        }
 
         dc.PushTransform(new TranslateTransform(shake, -lift));
 
@@ -890,6 +915,32 @@ internal sealed class RobotView : FrameworkElement
                 B(Muted, 1 - p), VisualTreeHelper.GetDpi(this).PixelsPerDip);
             dc.DrawText(z, new Point(82 + p * 12 - z.Width / 2, 22 - p * 22 - z.Height / 2));
         }
+    }
+
+    /// <summary>Kullanım rengi: rahat → AI rengi, %60 sarı, %85 kırmızı</summary>
+    private static Color UsageColor(int percent, Color normal) =>
+        percent >= 85 ? C(0.95, 0.33, 0.33) : percent >= 60 ? C(0.96, 0.66, 0.2) : normal;
+
+    private static Color UsageColor(int percent, Rgb normal) => UsageColor(percent, C(normal));
+
+    /// <summary>Küçük dolum halkası (saat yönünde, tepeden başlar)</summary>
+    private static void DrawRing(DrawingContext dc, Point c, double r, double fraction, Color color)
+    {
+        dc.DrawEllipse(null, new Pen(B(Color.FromRgb(0x80, 0x7C, 0x90), 0.35), 2), c, r, r);
+        fraction = Math.Clamp(fraction, 0, 1);
+        if (fraction <= 0) return;
+        var pen = new Pen(B(color), 2) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round };
+        if (fraction >= 0.999) { dc.DrawEllipse(null, pen, c, r, r); return; }
+        var angle = fraction * 2 * Math.PI;
+        var end = new Point(c.X + r * Math.Sin(angle), c.Y - r * Math.Cos(angle));
+        var g = new StreamGeometry();
+        using (var ctx = g.Open())
+        {
+            ctx.BeginFigure(new Point(c.X, c.Y - r), false, false);
+            ctx.ArcTo(end, new Size(r, r), 0, fraction > 0.5, SweepDirection.Clockwise, true, false);
+        }
+        g.Freeze();
+        dc.DrawGeometry(null, pen, g);
     }
 
     private static void DrawQuota(DrawingContext dc, int left, Color color)
