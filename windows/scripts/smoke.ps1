@@ -270,7 +270,8 @@ $reset = [DateTimeOffset]::UtcNow.AddHours(2).ToUnixTimeSeconds()
 $week = [DateTimeOffset]::UtcNow.AddDays(3).ToUnixTimeSeconds()
 $line = '{"rate_limits":{"five_hour":{"used_percentage":42,"resets_at":' + $reset + '},"seven_day":{"used_percentage":12,"resets_at":' + $week + '}}}'
 $ErrorActionPreference = "Continue"
-$lineOut = ($line | & $hookAbs statusline 2>&1 | Out-String).Trim()
+# Sadece standart çıktı (TELEPAITH_HOOK_DEBUG açıkken yardımcı stderr'e günlük yazar)
+$lineOut = ($line | & $hookAbs statusline 2>$null | Out-String).Trim()
 $ErrorActionPreference = "Stop"
 Start-Sleep -Milliseconds 1200
 $st = State
