@@ -23,7 +23,7 @@ internal sealed class EventServer
     /// <summary>Gelen olay (arka plan iş parçacığında çağrılır)</summary>
     public event Action<AgentEvent>? EventReceived;
     /// <summary>Ham istek (hook olayı ya da durum satırı): uyarılar (takıldı, çakışma, CI, kullanım) için</summary>
-    public event Action<string, IReadOnlyDictionary<string, string>, string>? RawReceived;
+    public event Action<string, System.Collections.Generic.IReadOnlyDictionary<string, string>, string>? RawReceived;
 
     /// <summary>Claude Code izin istiyor: bağlantı açık kalır, robotun cevabı (ya da boş cevap) dönene kadar.</summary>
     public event Action<PendingApproval>? PermissionRequested;
