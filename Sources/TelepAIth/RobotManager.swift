@@ -44,6 +44,11 @@ final class RobotManager {
 
     var onChange: (() -> Void)?
     var onOpenSettings: (() -> Void)?
+    var onOpenRoom: (() -> Void)?
+
+    /// Oda için: kullanım sınırları ve şu an gösterilen AI
+    var usageWindows: [UsageWindow] { insights.usage.current(now: Date()) }
+    var currentSource: String { avatar?.current.source ?? "claude" }
     var onReportBug: (() -> Void)?
 
     var visible: Bool = Preferences.robotsVisible {
@@ -87,6 +92,7 @@ final class RobotManager {
         window.onApproval = { [weak self] choice in self?.choose(choice) }
         window.onFocusChanged = { [weak self] in self?.focusChanged() }
         window.onOpenSettings = { [weak self] in self?.onOpenSettings?() }
+        window.onOpenRoom = { [weak self] in self?.onOpenRoom?() }
         window.onShowSummary = { [weak self] in self?.showSummary() }
         window.onReportBug = { [weak self] in self?.onReportBug?() }
         window.onLockChanged = { [weak self] locked in
@@ -633,6 +639,10 @@ final class RobotManager {
             for e in insights.usage.tick(now: date) where Preferences.insights { handle(e) }
             avatar.setUsage(insights.usage.current(now: date))
             models["claude"]?.usageLeft = insights.usage.left(now: date)
+            // Oda: sayaçlar, gardırop, yeni başarım / seviye
+            Progress.shared.parallel(models.values.reduce(0) { $0 + $1.workingCount(now: date) })
+            avatar.setOutfit(Outfits.worn(Progress.shared.snapshot()))
+            announceProgress()
         }
         // Saklanırken haber gelirse (balon, onay, sohbet listesi) geri çıksın
         if let avatar = avatar, avatar.peeking,
@@ -647,6 +657,23 @@ final class RobotManager {
             checkDailySummary()
         }
         if visible { window?.tick(dt: dt) }
+    }
+
+    /// Yeni başarım ya da seviye: robot balonda söyler (bildirim atmaz). Odak modunda bekler.
+    private func announceProgress() {
+        guard !FocusMode.isActive, let avatar = avatar else { return }
+        let news = Progress.shared.takeNews()
+        var lines: [String] = news.achievements.prefix(2).map { "🏅 " + loc("Yeni başarım: ", "New achievement: ") + $0.title }
+        if let level = news.level {
+            var text = "⭐ " + loc("Seviye \(level)!", "Level \(level)!")
+            let opened = Outfits.all.filter { $0.achievement == nil && $0.level == level }.map(\.name)
+            if !opened.isEmpty { text += " " + loc("Gardıropta açıldı: ", "Unlocked: ") + opened.joined(separator: ", ") }
+            lines.append(text)
+        }
+        let opened = news.achievements.compactMap { a in Outfits.all.first { $0.achievement == a.id }?.name }
+        if !opened.isEmpty { lines.append("👕 " + loc("Gardıropta açıldı: ", "Unlocked: ") + opened.joined(separator: ", ")) }
+        guard !lines.isEmpty else { return }
+        _ = avatar.current.apply(AgentEvent(source: avatar.current.source, sessionID: "room", kind: .say, text: lines.joined(separator: "\n")), now: Date())
     }
 
     /// Sakin çizim: robot boşta ve hiçbir şey olmuyorken (balon, ruh hâli, sohbet, imleç hareketi yok) kafa yavaşça

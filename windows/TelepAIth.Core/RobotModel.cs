@@ -321,7 +321,10 @@ public sealed class RobotModel
                             s.Emoji = e.Emoji ?? DoneEmoji();
                         }
                         if (duration >= 1 || s.Tools > 0)
-                            DailyStats.Shared.RecordTurn(Source, duration, s.Tools, s.Edits, now);
+                        {
+                            DailyStats.Shared.RecordTurn(Source, duration, s.Tools, s.Edits, now, s.Project);
+                            Progress.Shared.Turn(Source, duration, s.Tools, s.Edits, now, DailyStats.Shared.TurnsOn(now));
+                        }
                         s.TurnStart = null;
                         CelebrateStart = now;
                         // Gurur/parti anında alkış (normal bitişte el hareketi yok: zıplama ve parıltı yeter)
@@ -343,6 +346,7 @@ public sealed class RobotModel
                         {
                             s.LastWaitNotice = now;
                             DailyStats.Shared.RecordWait(Source, now);
+                            Progress.Shared.Wait();
                             Play("Ping");
                             notice = new Notice(WithEmoji(s.Emoji, Theme.DisplayName + L(" seni bekliyor", " needs you") + place),
                                                 s.Text ?? L("Cevabını bekliyor", "Waiting for your reply"), true, s.Target);
@@ -611,6 +615,9 @@ public sealed class RobotModel
         return rows;
     }
 
+    /// <summary>Şu an çalışan sohbet sayısı (başarım: aynı anda 3 sohbet)</summary>
+    public int WorkingCount(DateTime now) => _sessions.Count(kv => EffectiveState(kv.Value, kv.Key, now).IsWorking());
+
     private static RobotState EffectiveState(Session s, string id, DateTime now)
     {
         var age = (now - s.Updated).TotalSeconds;
@@ -634,7 +641,12 @@ public sealed class DailyStats
         public int Tools { get; set; }
         public int Edits { get; set; }
         public int Waits { get; set; }
+        /// <summary>Proje → (saniye, tur): Emek sekmesi için</summary>
+        public Dictionary<string, (double Seconds, int Turns)> Projects { get; } = new();
     }
+
+    /// <summary>Kaç gün saklanır (Emek sekmesi son 30 günü gösterir)</summary>
+    public const int KeepDays = 90;
 
     private readonly string? _file;
     private readonly Dictionary<string, Dictionary<string, Day>> _days = new();
@@ -653,7 +665,7 @@ public sealed class DailyStats
                 var map = new Dictionary<string, Day>();
                 foreach (var (src, node) in so)
                 {
-                    map[src] = new Day
+                    var d = new Day
                     {
                         Turns = (int)(node.Num("turns") ?? 0),
                         Seconds = node.Num("seconds") ?? 0,
@@ -661,6 +673,11 @@ public sealed class DailyStats
                         Edits = (int)(node.Num("edits") ?? 0),
                         Waits = (int)(node.Num("waits") ?? 0),
                     };
+                    if (node?["projects"] is System.Text.Json.Nodes.JsonObject projects)
+                        foreach (var (name, pv) in projects)
+                            if (pv is System.Text.Json.Nodes.JsonArray { Count: 2 } a)
+                                d.Projects[name] = (a[0]!.GetValue<double>(), a[1]!.GetValue<int>());
+                    map[src] = d;
                 }
                 _days[day] = map;
             }
@@ -670,8 +687,62 @@ public sealed class DailyStats
 
     public static string DayKey(DateTime d) => d.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
 
-    public void RecordTurn(string source, double seconds, int tools, int edits, DateTime at) =>
-        Update(source, at, d => { d.Turns++; d.Seconds += Math.Max(0, seconds); d.Tools += tools; d.Edits += edits; });
+    public void RecordTurn(string source, double seconds, int tools, int edits, DateTime at, string? project = null) =>
+        Update(source, at, d =>
+        {
+            d.Turns++;
+            d.Seconds += Math.Max(0, seconds);
+            d.Tools += tools;
+            d.Edits += edits;
+            if (!string.IsNullOrWhiteSpace(project))
+            {
+                var p = d.Projects.GetValueOrDefault(project);
+                d.Projects[project] = (p.Seconds + Math.Max(0, seconds), p.Turns + 1);
+            }
+        });
+
+    /// <summary>Bugün (tüm AI'lar) kaç tur</summary>
+    public int TurnsOn(DateTime date)
+    {
+        lock (_gate) return _days.TryGetValue(DayKey(date), out var m) ? m.Values.Sum(d => d.Turns) : 0;
+    }
+
+    /// <summary>Emek: son `days` gün (bugün dahil), günlük AI saniyeleri ve projeler.</summary>
+    public Effort Effort(DateTime today, int days)
+    {
+        lock (_gate)
+        {
+            var list = new List<EffortDay>();
+            var bySource = new Dictionary<string, double>();
+            var projects = new Dictionary<string, (double Seconds, int Turns)>();
+            int turns = 0, edits = 0;
+            for (var i = days - 1; i >= 0; i--)
+            {
+                var key = DayKey(today.AddDays(-i));
+                var secs = new Dictionary<string, double>();
+                if (_days.TryGetValue(key, out var map))
+                    foreach (var (src, d) in map)
+                    {
+                        var canon = Themes.Canonical(src);
+                        secs[canon] = secs.GetValueOrDefault(canon) + d.Seconds;
+                        bySource[canon] = bySource.GetValueOrDefault(canon) + d.Seconds;
+                        turns += d.Turns;
+                        edits += d.Edits;
+                        foreach (var (name, pv) in d.Projects)
+                        {
+                            var old = projects.GetValueOrDefault(name);
+                            projects[name] = (old.Seconds + pv.Seconds, old.Turns + pv.Turns);
+                        }
+                    }
+                list.Add(new EffortDay(key, secs));
+            }
+            var total = bySource.Values.Sum();
+            var projectSeconds = projects.Values.Sum(p => p.Seconds);
+            var rows = projects.Select(p => new EffortProject(p.Key, p.Value.Seconds, p.Value.Turns, projectSeconds > 0 ? p.Value.Seconds / projectSeconds : 0))
+                .OrderByDescending(p => p.Seconds).ToList();
+            return new Effort(list, rows, bySource, total, turns, edits);
+        }
+    }
 
     public void RecordWait(string source, DateTime at) => Update(source, at, d => d.Waits++);
 
@@ -683,7 +754,7 @@ public sealed class DailyStats
             if (!_days.TryGetValue(key, out var map)) _days[key] = map = new();
             if (!map.TryGetValue(source, out var day)) map[source] = day = new Day();
             change(day);
-            foreach (var old in _days.Keys.OrderBy(k => k, StringComparer.Ordinal).Take(Math.Max(0, _days.Count - 14)).ToList())
+            foreach (var old in _days.Keys.OrderBy(k => k, StringComparer.Ordinal).Take(Math.Max(0, _days.Count - KeepDays)).ToList())
                 _days.Remove(old);
             Save();
         }
@@ -699,10 +770,19 @@ public sealed class DailyStats
             {
                 var so = new System.Text.Json.Nodes.JsonObject();
                 foreach (var (src, d) in map)
-                    so[src] = new System.Text.Json.Nodes.JsonObject
+                {
+                    var o = new System.Text.Json.Nodes.JsonObject
                     {
                         ["turns"] = d.Turns, ["seconds"] = d.Seconds, ["tools"] = d.Tools, ["edits"] = d.Edits, ["waits"] = d.Waits,
                     };
+                    if (d.Projects.Count > 0)
+                    {
+                        var po = new System.Text.Json.Nodes.JsonObject();
+                        foreach (var (name, pv) in d.Projects) po[name] = new System.Text.Json.Nodes.JsonArray(pv.Seconds, pv.Turns);
+                        o["projects"] = po;
+                    }
+                    so[src] = o;
+                }
                 root[day] = so;
             }
             File.WriteAllText(_file, root.ToJsonString());

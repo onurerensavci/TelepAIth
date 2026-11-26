@@ -51,6 +51,8 @@ internal sealed class RobotAvatar
     public bool GazeAllowed { get; set; }
     /// <summary>Kullanım sınırları (Claude Code durum satırı): kafanın altında iki küçük halka</summary>
     public List<UsageWindow> Usage { get; set; } = new();
+    /// <summary>Gardırop: takılı parçalar (kafada çizilir)</summary>
+    public List<OutfitItem> Outfit { get; set; } = new();
     /// <summary>Sakin çizim: 0 normal hareket, 1 tamamen dingin; Paused iken yeniden çizilmez</summary>
     public double Stillness { get; set; }
     public bool Paused { get; set; }

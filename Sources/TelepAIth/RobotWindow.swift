@@ -182,6 +182,9 @@ final class RobotAvatar: ObservableObject {
     var isMoving: Bool { isDragging || target != nil }
 
     func setUsage(_ value: [UsageWindow]) { if usage != value { usage = value } }
+    /// Gardırop: takılı parçalar (kafada çizilir)
+    @Published private(set) var outfit: [OutfitItem] = []
+    func setOutfit(_ value: [OutfitItem]) { if outfit.map(\.id) != value.map(\.id) { outfit = value } }
     func setPaused(_ value: Bool) { if paused != value { paused = value } }
     func setCalm(_ value: CalmState) { if calm != value { calm = value } }
 
@@ -518,6 +521,7 @@ final class AvatarWindowController: NSObject {
     var onApproval: ((ApprovalChoice) -> Void)?
     var onFocusChanged: (() -> Void)?
     var onOpenSettings: (() -> Void)?
+    var onOpenRoom: (() -> Void)?
     var onShowSummary: (() -> Void)?
     var onReportBug: (() -> Void)?
 
@@ -649,6 +653,9 @@ final class AvatarWindowController: NSObject {
         let summary = NSMenuItem(title: loc("📊 Bugünün özeti", "📊 Today's summary"), action: #selector(summaryAction), keyEquivalent: "")
         summary.target = self
         menu.addItem(summary)
+        let room = NSMenuItem(title: loc("🏠 Robotun odası…", "🏠 Robot's room…"), action: #selector(roomAction), keyEquivalent: "")
+        room.target = self
+        menu.addItem(room)
         let settings = NSMenuItem(title: loc("Ayarlar…", "Settings…"), action: #selector(settingsAction), keyEquivalent: "")
         settings.target = self
         menu.addItem(settings)
@@ -710,6 +717,7 @@ final class AvatarWindowController: NSObject {
 
     @objc private func summaryAction() { onShowSummary?() }
     @objc private func settingsAction() { onOpenSettings?() }
+    @objc private func roomAction() { onOpenRoom?() }
     @objc private func bugAction() { onReportBug?() }
 
     @objc private func diagnosticsAction() {

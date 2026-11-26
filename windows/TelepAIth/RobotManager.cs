@@ -27,6 +27,8 @@ internal sealed class RobotManager
     private readonly Dictionary<int, (int? Pid, DateTime At)> _ancestorCache = new();
     /// <summary>Takıldı, çakışma, CI, commit hatırlatması ve kullanım sınırları</summary>
     public readonly Insights Insights = new();
+    /// <summary>Şu an gösterilen AI (oda onun renginde)</summary>
+    public string CurrentSource => _avatar?.Current.Source ?? "claude";
     // Sakin çizim
     private bool _calm;
     private double _calmSince, _calmFrom, _pointerMovedAt;
@@ -624,6 +626,9 @@ internal sealed class RobotManager
             ["gazeAllowed"] = _avatar?.GazeAllowed ?? false,
             ["paused"] = _avatar?.Paused ?? false,
             ["peeking"] = _avatar?.Peeking ?? false,
+            ["room"] = RoomWindow.IsOpen ? RoomWindow.CurrentTab : null,
+            ["outfit"] = _avatar is { Outfit.Count: > 0 } ao ? string.Join(",", ao.Outfit.Select(i => i.Id)) : null,
+            ["level"] = Levels.Level(Progress.Shared.Snapshot()),
             ["usage"] = _avatar is { Usage.Count: > 0 } ua
                 ? new System.Text.Json.Nodes.JsonArray(ua.Usage.Select(w => (System.Text.Json.Nodes.JsonNode?)$"{w.Kind}={w.Percent}").ToArray())
                 : null,
@@ -693,6 +698,11 @@ internal sealed class RobotManager
             foreach (var e in Insights.Usage.Tick(date)) if (Prefs.Insights) Handle(e);
             _avatar.Usage = Insights.Usage.Current(date);
             if (_models.TryGetValue("claude", out var claude)) claude.UsageLeft = Insights.Usage.Left(date);
+            // Oda: sayaçlar, gardırop, yeni başarım / seviye
+            Progress.Shared.Parallel(_models.Values.Sum(m => m.WorkingCount(date)));
+            var worn = Outfits.Worn(Progress.Shared.Snapshot());
+            if (!worn.Select(i => i.Id).SequenceEqual(_avatar.Outfit.Select(i => i.Id))) _avatar.Outfit = worn;
+            AnnounceProgress();
         }
         // Saklanırken haber gelirse (balon, onay, sohbet listesi) geri çıksın
         if (_avatar is { Peeking: true } pk && (pk.Current.BubbleText != null || pk.Approval != null || pk.ChatList != null
@@ -707,6 +717,25 @@ internal sealed class RobotManager
             CheckDailySummary();
         }
         _window?.Frame(dt, render: !(_avatar?.Paused ?? false));
+    }
+
+    /// <summary>Yeni başarım ya da seviye: robot balonda söyler (bildirim atmaz). Odak modunda bekler.</summary>
+    private void AnnounceProgress()
+    {
+        if (FocusMode.IsActive || _avatar == null) return;
+        var (achievements, level) = Progress.Shared.TakeNews();
+        var lines = achievements.Take(2).Select(a => "🏅 " + L("Yeni başarım: ", "New achievement: ") + a.Title).ToList();
+        if (level is { } lv)
+        {
+            var text = "⭐ " + L($"Seviye {lv}!", $"Level {lv}!");
+            var opened = Outfits.All.Where(i => i.Achievement == null && i.Level == lv).Select(i => i.Name).ToList();
+            if (opened.Count > 0) text += " " + L("Gardıropta açıldı: ", "Unlocked: ") + string.Join(", ", opened);
+            lines.Add(text);
+        }
+        var byAchievement = achievements.Select(a => Outfits.All.FirstOrDefault(i => i.Achievement == a.Id)?.Name).OfType<string>().ToList();
+        if (byAchievement.Count > 0) lines.Add("👕 " + L("Gardıropta açıldı: ", "Unlocked: ") + string.Join(", ", byAchievement));
+        if (lines.Count == 0) return;
+        _avatar.Current.Apply(new AgentEvent(_avatar.Current.Source, "room", EventKind.Say, text: string.Join("\n", lines)), DateTime.Now);
     }
 
     /// <summary>

@@ -304,7 +304,9 @@ final class RobotModel: ObservableObject {
                     s.emoji = e.emoji ?? RobotModel.doneEmoji()
                 }
                 if duration >= 1 || s.tools > 0 {
-                    DailyStats.shared.recordTurn(source: source, seconds: duration, tools: s.tools, edits: s.edits, at: now)
+                    DailyStats.shared.recordTurn(source: source, seconds: duration, tools: s.tools, edits: s.edits, at: now, project: s.project)
+                    Progress.shared.turn(source: source, seconds: duration, tools: s.tools, edits: s.edits, at: now,
+                                         todayTurns: DailyStats.shared.turnsOn(now))
                 }
                 s.turnStart = nil
                 celebrateStart = now
@@ -323,6 +325,7 @@ final class RobotModel: ObservableObject {
                 if canNotify {
                     s.lastWaitNotice = now
                     DailyStats.shared.recordWait(source: source, at: now)
+                    Progress.shared.wait()
                     RobotModel.play("Ping")
                     notice = Notice(title: withEmoji(s.emoji, theme.displayName + loc(" seni bekliyor", " needs you") + place),
                                     body: s.text ?? loc("Cevabını bekliyor", "Waiting for your reply"),
@@ -627,6 +630,11 @@ final class RobotModel: ObservableObject {
             return a.rank == 2 ? a.at > b.at : a.at < b.at
         }
         return Array(all.prefix(max))
+    }
+
+    /// Şu an çalışan sohbet sayısı (başarım: aynı anda 3 sohbet)
+    func workingCount(now: Date) -> Int {
+        sessions.filter { effectiveState($0.value, id: $0.key, now: now).isWorking }.count
     }
 
     private func effectiveState(_ s: Session, id: String, now: Date) -> RobotState {

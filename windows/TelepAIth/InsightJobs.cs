@@ -41,6 +41,7 @@ internal static class InsightJobs
             if (r == null && DateTime.Now - started > TimeSpan.FromMinutes(3)) return;   // bu depoda CI yok
             if (r is { Done: true })
             {
+                if (r.Ok) Progress.Shared.Ci();
                 say(Insights.CiEvent(job, r));
                 return;
             }

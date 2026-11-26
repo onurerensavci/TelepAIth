@@ -87,6 +87,14 @@ enum Preferences {
         set { defaults.set(newValue, forKey: "costume") }
     }
 
+    /// Gardırop: yuvaya (head, eyes, face, side) takılı parça; yoksa nil
+    static func outfit(_ slot: String) -> String? {
+        let v = defaults.string(forKey: "outfit." + slot) ?? ""
+        return v.isEmpty ? nil : v
+    }
+
+    static func setOutfit(_ slot: String, _ id: String?) { defaults.set(id ?? "", forKey: "outfit." + slot) }
+
     /// Kış kostümü şu an takılı mı?
     static var winterActive: Bool {
         switch costume {

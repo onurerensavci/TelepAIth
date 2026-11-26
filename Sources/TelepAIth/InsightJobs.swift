@@ -23,6 +23,7 @@ enum InsightJobs {
             let result = CiStatus.summarize(json)
             if result == nil && Date().timeIntervalSince(started) > 180 { return }   // bu depoda CI yok
             if let r = result, r.done {
+                if r.ok { Progress.shared.ci() }
                 say(Insights.ciEvent(job, r))
                 return
             }

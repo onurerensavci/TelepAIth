@@ -216,7 +216,8 @@ Write-Host "tray: $(Dbg 'tray')"
 Check ($tr.fill16 -gt 0.6 -and $tr.fill -gt 0.6) "tepsi simgesi dolu (%$([int]($tr.fill16 * 100)))"
 
 # Yeni görünüm: menüler ve pencereler açılıp hatasız çiziliyor mu?
-foreach ($ui in @("robotmenu", "traymenu", "settings&page=0", "settings&page=1", "settings&page=2", "settings&page=3", "onboarding", "diagnostics")) {
+foreach ($ui in @("robotmenu", "traymenu", "settings&page=0", "settings&page=1", "settings&page=2", "settings&page=3", "onboarding", "diagnostics",
+                  "room&tab=wardrobe", "room&tab=achievements", "room&tab=effort", "room&tab=usage")) {
   $r = Dbg ("ui?open=" + $ui)
   Check ($r -eq "ok") "açıldı: $ui"
   Start-Sleep -Milliseconds 900
@@ -224,6 +225,18 @@ foreach ($ui in @("robotmenu", "traymenu", "settings&page=0", "settings&page=1",
   Dbg "ui?open=close" | Out-Null
   Start-Sleep -Milliseconds 300
 }
+# Robotun odası: sekme açılıyor, gardıroptan takılan parça robotta çiziliyor
+Dbg "ui?open=room&tab=effort" | Out-Null
+Start-Sleep -Milliseconds 600
+Check ((State).room -eq "effort") "robotun odası açıldı (Emek sekmesi)"
+Dbg "ui?open=close" | Out-Null
+Dbg "outfit?slot=head&id=beanie" | Out-Null
+Start-Sleep -Milliseconds 1200
+$st = State
+Shot "9-outfit-beanie"
+Check ($st.outfit -like "*beanie*") "gardıroptan takılan bere robotta ($($st.outfit), seviye $($st.level))"
+Dbg "outfit?slot=head" | Out-Null
+
 # Robottan onay: hook izin ister, robotun balonundaki düğmeye tıklanır, karar hook'un çıktısına yazılır
 $hookAbs = (Resolve-Path $Hook).Path
 function AskPermission($session) {

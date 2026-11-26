@@ -60,6 +60,11 @@
 - **Kullanım sınırları:** Claude Code'un oturum (5 saat) ve haftalık limiti robotun ayaklarının dibinde iki küçük halka olur; sohbet listesinin başında *Oturum %42 · 16:40'ta dolar* yazar. %80'de, %95'te ve limit yenilenince haber verir. Ayarlar → Kodlama ajanları → *Kullanım sınırları* (Claude Code'un durum satırını kullanır, seninki görünmeye devam eder).
 - **Akıllı uyarılar:** bir sohbet aynı adımda üst üste 3 kez başarısız olunca *takıldı gibi* der; iki sohbet aynı dosyayı düzenlerse uyarır; Claude `git push` yapınca o commit'in CI'sini izleyip *CI geçti* / *CI kırmızı* der (`gh` gerekir); tur bittiğinde 1,5 saattir commit'lenmemiş iş varsa bir kez hatırlatır.
 - **Pil dostu:** boştayken robot yavaşça durur ve yeniden çizilmez (sadece göz kırparken birkaç kare); bir şey olunca hemen canlanır. Sistemde *hareketi azalt* açıksa süzülmez.
+- **Robotun odası:** menüden ya da robota sağ tıklayıp *🏠 Robotun odası*. Solda robotun, seviyesi ve serisi; sağda dört sekme:
+  - **Gardırop:** bere, kep, kulaklık, taç, gözlükler, bıyık, papyon, yanında kaktüs ya da kahve… Parçalar seviye atladıkça ya da başarımla açılır, takınca robotun başında görünür.
+  - **Başarımlar:** gerçek işle XP kazanır (tur, düzenleme, çalışılan dakika, aktif gün); *Geveze*, *Büyük gün*, *Gece kuşu*, *Takım lideri* gibi 31 başarım. Yenisi açılınca robot söyler.
+  - **Emek:** son 7 ya da 30 günde hangi AI ve hangi projede ne kadar çalışıldı: günlük grafik ve proje tablosu.
+  - **Kullanım:** oturum ve haftalık limit büyük halkalarla, bugün AI başına tur ve süre.
 - **Saklan:** robotu ekranın altına sürükle, sadece kafasının üstü görünsün. Tıklayınca ya da haber gelince geri çıkar.
 
 **🪄 Yerini bilir**

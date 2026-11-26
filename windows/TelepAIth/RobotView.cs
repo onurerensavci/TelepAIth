@@ -567,6 +567,8 @@ internal sealed class RobotView : FrameworkElement
             var center = new Point(w.Kind == "five_hour" ? 14 : 86, 94);
             DrawRing(dc, center, 5.5, w.Percent / 100.0, UsageColor(w.Percent, baseColor.Mix(Rgb.White, 0.2)));
         }
+        // Gardırop: yanındaki parça (kaktüs, kahve…) kafayla birlikte sallanmaz
+        DrawOutfit(dc, _avatar.Outfit.Where(i => i.Slot == "side"), baseColor);
 
         dc.PushTransform(new TranslateTransform(shake, -lift));
 
@@ -634,6 +636,10 @@ internal sealed class RobotView : FrameworkElement
         dc.DrawRoundedRectangle(ShellBrush, null, new Rect(7, 15, 86, 70), 24, 24);
         dc.DrawRoundedRectangle(B(Visor), null, new Rect(15, 30, 70, 44), 18, 18);
         DrawEyes(dc, time, eyeColor, f);
+        var themeRgb = new Rgb(theme.R, theme.G, theme.B);
+        var worn = _avatar.Outfit;
+        var hasHat = worn.Any(i => i.Slot == "head");
+        DrawOutfit(dc, worn.Where(i => i.Slot is "face" or "eyes"), themeRgb);
 
         // Alında sağlık ışığı (berede ponpon o renkte yanar)
         var (led, op) = _avatar.Health switch
@@ -642,13 +648,53 @@ internal sealed class RobotView : FrameworkElement
             Health.Broken => (C(0.97, 0.3, 0.3), Math.Sin(time * 6) > 0 ? 1.0 : 0.3),
             _ => (C(0.2, 0.83, 0.47), f.State == RobotState.Sleeping ? 0.45 : 0.85 + 0.15 * Math.Sin(time * 2)),
         };
-        if (f.Winter)
+        if (f.Winter && !hasHat)
         {
             DrawBeanie(dc, theme, _avatar.Health == Health.Ok ? null : led, op);
             return;
         }
+        if (hasHat)
+        {
+            DrawOutfit(dc, worn.Where(i => i.Slot == "head"), themeRgb);
+            if (_avatar.Health == Health.Ok) return;   // şapka varken ışık sadece bir sorun olunca görünür
+        }
         dc.DrawEllipse(B(led, 0.3 * op), null, new Point(50, 22.5), 5.5, 5.5);
         dc.DrawEllipse(B(led, op), null, new Point(50, 22.5), 2.5, 2.5);
+    }
+
+    // MARK: Gardırop
+
+    private static readonly Dictionary<string, Geometry> OutfitPaths = new();
+
+    /// <summary>Gardırop parçalarını çizer (100×100 kafa alanı; Mac'te OutfitView, aynı veri: assets/outfits.json)</summary>
+    internal static void DrawOutfit(DrawingContext dc, IEnumerable<OutfitItem> items, Rgb theme)
+    {
+        Brush Paint(string token)
+        {
+            var (c, a) = Outfits.Color(token, theme);
+            return B(C(c), a);
+        }
+        foreach (var item in items)
+        foreach (var s in item.Shapes)
+        {
+            var fill = s.Fill is { } f ? Paint(f) : null;
+            var pen = s.Stroke is { } st
+                ? new Pen(Paint(st), s.Width) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round, LineJoin = PenLineJoin.Round }
+                : null;
+            if (s.Path is { } d)
+            {
+                if (!OutfitPaths.TryGetValue(d, out var g))
+                {
+                    try { g = Frozen(Geometry.Parse(d)); } catch { g = Geometry.Empty; }
+                    OutfitPaths[d] = g;
+                }
+                dc.DrawGeometry(fill, pen, g);
+            }
+            else if (s.Ellipse is { Length: 4 } e)
+                dc.DrawEllipse(fill, pen, new Point(e[0], e[1]), e[2], e[3]);
+            else if (s.Rect is { Length: 5 } r)
+                dc.DrawRoundedRectangle(fill, pen, new Rect(r[0], r[1], r[2], r[3]), r[4], r[4]);
+        }
     }
 
     // MARK: Kış kostümü

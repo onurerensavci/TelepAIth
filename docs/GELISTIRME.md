@@ -27,6 +27,7 @@ swift test                    # birim testleri
 | `AppWatcher.swift` | Claude/ChatGPT masaüstü uygulamalarını Erişilebilirlik ile izleme |
 | `EventServer.swift` / `AgentEvent.swift` | Yerel HTTP sunucusu, hook/ClaudeBar/genel olay ayrıştırma |
 | `HookInstaller.swift` | Claude Code ve Codex hook'ları, Kalkan, kullanım sınırları için durum satırı (`UsageLine`) |
+| `Room.swift` / `RoomView.swift` | Robotun odası: gardırop, seviye ve başarımlar, emek, kullanım (Windows: `TelepAIth.Core/Room.cs`, `RoomWindow.cs`). Gardırop parçaları `assets/outfits.json`'da; değiştirince `python3 scripts/gen-outfits.py` |
 | `Insights.swift` / `InsightJobs.swift` | Akıllı uyarılar (takıldı, aynı dosya, CI, commit), kullanım sınırları, sakin çizim kuralı (Windows: `TelepAIth.Core/Insights.cs`) |
 | `MCPServer.swift` | `telepaith_say` anlatıcı aracı ve Claude masaüstü kurulumu |
 | `Updater.swift` | GitHub Releases'tan güncelleme |

@@ -15,7 +15,7 @@ struct AvatarView: View {
                         health: avatar.health, locked: avatar.locked, minis: avatar.minis, focus: avatar.focus,
                         approval: avatar.approval, pointer: avatar.pointer, extras: avatar.extras,
                         extrasPoppedAt: avatar.extrasPoppedAt, chatList: avatar.chatList,
-                        usage: avatar.usage, paused: avatar.paused, calm: avatar.calm)
+                        usage: avatar.usage, paused: avatar.paused, calm: avatar.calm, outfit: avatar.outfit)
                 .id(avatar.current.source)
                 .transition(.scale(scale: 0.4).combined(with: .opacity))
         }
@@ -84,6 +84,8 @@ struct AvatarStage: View {
     /// Sakin çizim: hiçbir şey olmuyorken kafa yeniden çizilmez
     var paused = false
     var calm = CalmState()
+    /// Gardırop: takılı parçalar
+    var outfit: [OutfitItem] = []
 
     /// Odak modunda sadece seni bekleyen, hata veren ya da robotun kendi söylediği şeyler görünür
     private var urgent: Bool { model.state == .waiting || model.state == .error || model.bubbleIsExplicit }
@@ -157,6 +159,7 @@ struct AvatarStage: View {
                        time: context.date.timeIntervalSinceReferenceDate,
                        stillness: calm.stillness(at: context.date.timeIntervalSinceReferenceDate),
                        usage: usage,
+                       outfit: outfit,
                        look: alignLeft ? 2.5 : -2.5,
                        health: health,
                        pointer: pointer,
@@ -431,6 +434,8 @@ struct HeadFigure: View {
     var stillness: Double = 0
     /// Kullanım sınırları: ayaklarının dibinde iki küçük halka
     var usage: [UsageWindow] = []
+    /// Gardırop: takılı parçalar
+    var outfit: [OutfitItem] = []
     let look: CGFloat
     let health: Health
     var pointer: PointerTracker? = nil
@@ -469,12 +474,16 @@ struct HeadFigure: View {
                 .frame(width: Swift.max(24, 58 - lift * 1.5), height: 6)
                 .position(x: 50, y: 96)
 
-            // Kullanım sınırları: ayaklarının dibinde iki küçük halka (solda oturum, sağda hafta)
-            ForEach(usage, id: \.kind) { w in
-                UsageRing(percent: w.percent, color: UsageRing.tint(w.percent, normal: Color(nsColor: base.mix(.white, 0.2))))
-                    .frame(width: 11, height: 11)
-                    .position(x: w.kind == "five_hour" ? 14 : 86, y: 94)
+            // Kullanım sınırları: ayaklarının dibinde iki küçük halka (solda oturum, sağda hafta); yanındaki parça (kaktüs…)
+            ZStack {
+                ForEach(usage, id: \.kind) { w in
+                    UsageRing(percent: w.percent, color: UsageRing.tint(w.percent, normal: Color(nsColor: base.mix(.white, 0.2))))
+                        .frame(width: 11, height: 11)
+                        .position(x: w.kind == "five_hour" ? 14 : 86, y: 94)
+                }
+                OutfitView(items: outfit.filter { $0.slot == "side" }, theme: base)
             }
+            .frame(width: 100, height: 100)
 
             // Kota halkası (ClaudeBar): kalan kota kadar dolu, azsa kırmızı
             if let left = model.quotaLeft {
@@ -495,7 +504,8 @@ struct HeadFigure: View {
                 } else {
                     FaceView(state: state, mood: model.mood, time: time, look: look, eyeColor: eyeColor, health: health,
                              prevState: prevState, prevMood: prevMood, blend: blend, idle: idle,
-                             glyph: glyph, prevGlyph: prevGlyph, gaze: gaze, winter: winter, theme: Color(nsColor: base))
+                             glyph: glyph, prevGlyph: prevGlyph, gaze: gaze, winter: winter, theme: Color(nsColor: base),
+                             outfit: outfit.filter { $0.slot != "side" }, themeColor: base)
                     // Diğer sohbetler: ekranın altında küçük ışıklar (mavi çalışıyor, turuncu seni bekliyor)
                     if !extras.isEmpty {
                         ExtraLightsView(extras: extras, time: time,
@@ -647,6 +657,11 @@ struct FaceView: View {
     var gaze = Gaze()
     var winter = false
     var theme: Color = .purple
+    /// Gardırop: yüz, gözlük, baş parçaları (yanındaki parça kafanın dışında çizilir)
+    var outfit: [OutfitItem] = []
+    var themeColor: NSColor = .systemPurple
+
+    private var hasHat: Bool { outfit.contains { $0.slot == "head" } }
 
     var body: some View {
         ZStack {
@@ -667,12 +682,18 @@ struct FaceView: View {
                     glyph: glyph, prevGlyph: prevGlyph, gaze: gaze)
                 .frame(width: 70, height: 44)
                 .position(x: 50, y: 52)
-            if winter {
+            OutfitView(items: outfit.filter { $0.slot == "face" || $0.slot == "eyes" }, theme: themeColor)
+            if winter && !hasHat {
                 // Kış: bere (ponpon sağlık ışığı renginde yanar, sorun yoksa beyaz)
                 BeanieView(theme: theme, glow: health == .ok ? nil : ledColor, glowOpacity: ledOpacity)
                     .frame(width: 100, height: 100)
             } else {
-                ledView
+                ZStack {
+                    OutfitView(items: outfit.filter { $0.slot == "head" }, theme: themeColor)
+                    // Şapka varken sağlık ışığı sadece bir sorun olunca görünür
+                    if !hasHat || health != .ok { ledView }
+                }
+                .frame(width: 100, height: 100)
             }
         }
     }
@@ -1283,6 +1304,47 @@ struct BeanieView: View {
             ctx.fill(pompom, with: .color(glow.map { $0.opacity(Swift.max(0.5, glowOpacity)) } ?? wool))
             ctx.stroke(pompom, with: .color(edge), lineWidth: 1)
         }
+        .allowsHitTesting(false)
+    }
+}
+
+/// Gardırop parçalarını çizer (100×100 kafa alanı; parçalar dışarı taşabilir: tuval 140×140, 20 nokta kaydırılmış).
+/// Windows'ta RobotView.DrawOutfit ile aynı veri (assets/outfits.json).
+struct OutfitView: View {
+    let items: [OutfitItem]
+    let theme: NSColor
+
+    var body: some View {
+        Canvas { ctx, _ in
+            ctx.translateBy(x: 20, y: 20)
+            let t = theme.usingColorSpace(.sRGB) ?? .systemPurple
+            let rgb = (r: Double(t.redComponent), g: Double(t.greenComponent), b: Double(t.blueComponent))
+            func color(_ token: String) -> Color {
+                let c = Outfits.color(token, theme: rgb)
+                return Color(red: c.r, green: c.g, blue: c.b).opacity(c.a)
+            }
+            for item in items {
+                for s in item.shapes {
+                    var path: Path
+                    if let d = s.path {
+                        path = SVGPath.parse(d)
+                    } else if let e = s.ellipse, e.count == 4 {
+                        path = Path(ellipseIn: CGRect(x: e[0] - e[2], y: e[1] - e[3], width: e[2] * 2, height: e[3] * 2))
+                    } else if let r = s.rect, r.count == 5 {
+                        path = Path(roundedRect: CGRect(x: r[0], y: r[1], width: r[2], height: r[3]), cornerRadius: r[4])
+                    } else {
+                        continue
+                    }
+                    if let fill = s.fill { ctx.fill(path, with: .color(color(fill)), style: FillStyle(eoFill: true)) }
+                    if let stroke = s.stroke {
+                        ctx.stroke(path, with: .color(color(stroke)),
+                                   style: StrokeStyle(lineWidth: s.width, lineCap: .round, lineJoin: .round))
+                    }
+                }
+            }
+        }
+        .frame(width: 140, height: 140)
+        .position(x: 50, y: 50)
         .allowsHitTesting(false)
     }
 }

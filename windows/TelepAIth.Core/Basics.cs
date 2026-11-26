@@ -31,6 +31,7 @@ public static class AppInfo
     /// <summary>Uygulamanın iç ayarları ve sayaçları</summary>
     public static string PrefsFile => Path.Combine(SupportDir, "settings.json");
     public static string StatsFile => Path.Combine(SupportDir, "daily-stats.json");
+    public static string ProgressFile => Path.Combine(SupportDir, "progress.json");
 
     public static string Version
     {
@@ -218,6 +219,9 @@ public static class Prefs
     public static bool Insights { get => GetBool("insights", true); set => Set("insights", value); }
     /// <summary>Mevsimlik kostüm: "auto" (Aralık – 6 Ocak kış), "winter" (hep), "off"</summary>
     public static string Costume { get => GetString("costume") ?? "auto"; set => Set("costume", value); }
+    /// <summary>Gardırop: yuvaya (head, eyes, face, side) takılı parça; yoksa null</summary>
+    public static string? Outfit(string slot) => GetString("outfit." + slot) is { Length: > 0 } s ? s : null;
+    public static void SetOutfit(string slot, string? id) => Set("outfit." + slot, id ?? "");
     /// <summary>Claude Code izin isteyince robotun balonunda İzin ver / Reddet düğmeleri</summary>
     public static bool ApproveFromRobot { get => GetBool("approveFromRobot", true); set => Set("approveFromRobot", value); }
     public static bool Speak { get => GetBool("speak", false); set => Set("speak", value); }

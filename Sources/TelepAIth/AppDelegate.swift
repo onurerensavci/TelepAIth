@@ -32,6 +32,7 @@ final class AppController: NSObject {
 
         manager.onChange = { [weak self] in self?.rebuildMenu() }
         manager.onOpenSettings = { [weak self] in self?.openSettings() }
+        manager.onOpenRoom = { [weak self] in self?.openRoom() }
         manager.onReportBug = { [weak self] in self?.reportBug() }
         manager.start()
 
@@ -240,6 +241,7 @@ final class AppController: NSObject {
         menu.addItem(actionItem(loc("Bugünün özeti", "Today's summary"), #selector(showSummaryAction)))
 
         menu.addItem(.separator())
+        menu.addItem(actionItem(loc("Robotun odası…", "Robot's room…"), #selector(openRoom)))
         menu.addItem(actionItem(loc("Ayarlar…", "Settings…"), #selector(openSettings), key: ","))
 
         // Az kullanılanlar Yardım'ın altında: güncelleme, robotu buraya getir, kurulum, deneme, teşhis
@@ -379,6 +381,10 @@ final class AppController: NSObject {
 
     @objc private func showSummaryAction() {
         manager.showSummary()
+    }
+
+    @objc func openRoom() {
+        RoomWindow.shared.show(host: self)
     }
 
     @objc func openSettings() {
@@ -702,6 +708,11 @@ final class AppController: NSObject {
 
 
 // MARK: - Ayarlar penceresi ve kurulum sihirbazı için
+
+extension AppController: RoomHost {
+    var roomUsage: [UsageWindow] { manager.usageWindows }
+    var roomSource: String { manager.currentSource }
+}
 
 extension AppController: SettingsHost {
     var robotVisible: Bool {

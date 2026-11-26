@@ -60,6 +60,11 @@
 - **Usage limits:** Claude Code's session (5-hour) and weekly limits become two small rings at the robot's feet, and the chat list starts with *Session 42% · full at 16:40*. It tells you at 80%, at 95% and when a limit resets. Settings → Coding agents → *Usage limits* (uses Claude Code's status line; yours keeps showing).
 - **Smart alerts:** says *looks stuck* when a chat fails the same step 3 times in a row; warns when two chats edit the same file; after Claude runs `git push` it watches that commit's CI and says *CI passed* / *CI failed* (needs `gh`); when a turn ends with work left uncommitted for 1.5 hours, it reminds you once.
 - **Easy on the battery:** when idle the robot settles and stops redrawing (only a few frames to blink); it springs back the moment something happens. With *reduce motion* on, it doesn't bob.
+- **The robot's room:** from the menu or right-click the robot → *🏠 Robot's room*. The robot, its level and streak on the left; four tabs on the right:
+  - **Wardrobe:** beanie, cap, headphones, crown, glasses, mustache, bow tie, a cactus or coffee beside it… Items unlock as it levels up or with achievements, and show on the robot once worn.
+  - **Achievements:** it earns XP from real work (turns, edits, minutes worked, active days); 31 achievements like *Chatty*, *Big day*, *Night owl*, *Team lead*. The robot tells you when one unlocks.
+  - **Effort:** how long each AI and each project worked over the last 7 or 30 days: a daily chart and a project table.
+  - **Usage:** session and weekly limits as big rings, plus today's turns and time per AI.
 - **Hide:** drag the robot off the bottom of the screen and only the top of its head peeks out. Click it, or let news come, and it's back.
 
 **🪄 Knows its place**

@@ -149,6 +149,7 @@ internal sealed class AppController : ISettingsHost
         list.Add(new MenuEntry(L("Odak modu", "Focus mode"), Children: FocusEntries(), Icon: "\uE708"));
         list.Add(new MenuEntry(L("Bugünün özeti", "Today's summary"), Manager.ShowSummary, Icon: "\uE787"));
         list.Add(null);
+        list.Add(new MenuEntry(L("Robotun odası", "Robot's room"), OpenRoom, Icon: "\uE80F"));
         list.Add(new MenuEntry(L("Ayarlar", "Settings"), () => SettingsWindow.Show(this), Icon: "\uE713"));
         // Az kullanılanlar Yardım'ın altında: güncelleme, robotu buraya getir, kurulum, deneme, teşhis
         var demo = new MenuEntry(L("Dene", "Try it"), Icon: "\uE768", Children: new List<MenuEntry?>
@@ -244,6 +245,7 @@ internal sealed class AppController : ISettingsHost
             }, Prefs.Muted, Icon: Prefs.Muted ? "\uE767" : "\uE74F"),
             new(L("Bugünün özeti", "Today's summary"), Manager.ShowSummary, Icon: "\uE787"),
             null,
+            new(L("Robotun odası", "Robot's room"), OpenRoom, Icon: "\uE80F"),
             new(L("Ayarlar", "Settings"), () => SettingsWindow.Show(this), Icon: "\uE713"),
             new(L("Teşhis", "Diagnostics"), OpenDiagnostics, Icon: "\uE9D9"),
             new(L("Hata bildir", "Report a problem"), ReportBug, Icon: "\uEBE8"),
@@ -345,6 +347,10 @@ internal sealed class AppController : ISettingsHost
                     var px = AppIcon.TraySize;
                     return $"{{\"px\":{px},\"fill16\":{AppIcon.TrayFill(16).ToString(System.Globalization.CultureInfo.InvariantCulture)},\"fill\":{AppIcon.TrayFill(px).ToString(System.Globalization.CultureInfo.InvariantCulture)}}}";
                 }
+                case "/debug/outfit":
+                    // Duman testi için: gardıroptan parça tak (açık değilse çizilmez)
+                    Prefs.SetOutfit(query.TryGetValue("slot", out var slot) ? slot : "head", query.TryGetValue("id", out var oid) ? oid : null);
+                    return "ok";
                 case "/debug/ui":
                 {
                     var what = query.TryGetValue("open", out var o) ? o : "";
@@ -354,6 +360,10 @@ internal sealed class AppController : ISettingsHost
                     {
                         case "settings": SettingsWindow.Show(this, query.TryGetValue("page", out var pg) && int.TryParse(pg, out var pi) ? pi : 0); break;
                         case "onboarding": OnboardingWindow.Show(this); break;
+                        case "room":
+                            OpenRoom();
+                            if (query.TryGetValue("tab", out var tab)) RoomWindow.Select(tab);
+                            break;
                         case "diagnostics": OpenDiagnostics(); break;
                         case "traymenu": ShowTrayMenu(); break;
                         case "robotmenu":
@@ -364,6 +374,7 @@ internal sealed class AppController : ISettingsHost
                         case "close":
                             SettingsWindow.Close();
                             OnboardingWindow.Close();
+                            RoomWindow.Close();
                             DiagnosticsWindow.Close();
                             break;
                     }
@@ -489,6 +500,9 @@ internal sealed class AppController : ISettingsHost
         }
         Changed();
     }
+
+    /// <summary>Robotun odası: gardırop, başarımlar, emek, kullanım</summary>
+    public void OpenRoom() => RoomWindow.Show(Manager, SetUsageLine);
 
     public void SetUsageLine(bool on)
     {

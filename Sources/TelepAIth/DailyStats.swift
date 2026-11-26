@@ -1,7 +1,7 @@
 import Foundation
 
 /// Günlük özet için sayaçlar: her AI'ın bugün kaç iş bitirdiği, ne kadar çalıştığı, kaç dosya düzenlediği.
-/// UserDefaults'ta gün gün tutulur (son 14 gün).
+/// UserDefaults'ta gün gün tutulur (son 90 gün; Emek sekmesi son 30 günü gösterir).
 final class DailyStats {
     static let shared = DailyStats()
 
@@ -11,7 +11,11 @@ final class DailyStats {
         var tools = 0
         var edits = 0
         var waits = 0
+        /// Proje → [saniye, tur]: Emek sekmesi için (eski kayıtlarda yok)
+        var projects: [String: [Double]]? = nil
     }
+
+    static let keepDays = 90
 
     private let key = "dailyStats"
     private let shownKey = "dailySummaryShown"
@@ -33,13 +37,55 @@ final class DailyStats {
         return f.string(from: date)
     }
 
-    func recordTurn(source: String, seconds: Double, tools: Int, edits: Int, at date: Date = Date()) {
+    func recordTurn(source: String, seconds: Double, tools: Int, edits: Int, at date: Date = Date(), project: String? = nil) {
         update(source: source, at: date) { d in
             d.turns += 1
             d.seconds += max(0, seconds)
             d.tools += tools
             d.edits += edits
+            if let project = project, !project.trimmingCharacters(in: .whitespaces).isEmpty {
+                var projects = d.projects ?? [:]
+                let old = projects[project] ?? [0, 0]
+                projects[project] = [old[0] + max(0, seconds), old[1] + 1]
+                d.projects = projects
+            }
         }
+    }
+
+    /// Bugün (tüm AI'lar) kaç tur
+    func turnsOn(_ date: Date) -> Int {
+        (days[DailyStats.dayKey(date)] ?? [:]).values.reduce(0) { $0 + $1.turns }
+    }
+
+    /// Emek: son `count` gün (bugün dahil), günlük AI saniyeleri ve projeler.
+    func effort(today: Date, days count: Int) -> Effort {
+        var list: [EffortDay] = []
+        var bySource: [String: Double] = [:]
+        var projects: [String: (seconds: Double, turns: Int)] = [:]
+        var turns = 0, edits = 0
+        for i in stride(from: count - 1, through: 0, by: -1) {
+            let date = Calendar.current.date(byAdding: .day, value: -i, to: today) ?? today
+            let key = DailyStats.dayKey(date)
+            var secs: [String: Double] = [:]
+            for (src, d) in days[key] ?? [:] {
+                let canon = Themes.canonical(src)
+                secs[canon, default: 0] += d.seconds
+                bySource[canon, default: 0] += d.seconds
+                turns += d.turns
+                edits += d.edits
+                for (name, pv) in d.projects ?? [:] where pv.count == 2 {
+                    let old = projects[name] ?? (0, 0)
+                    projects[name] = (old.seconds + pv[0], old.turns + Int(pv[1]))
+                }
+            }
+            list.append(EffortDay(day: key, secondsBySource: secs))
+        }
+        let total = bySource.values.reduce(0, +)
+        let projectSeconds = projects.values.reduce(0) { $0 + $1.seconds }
+        let rows = projects.map { EffortProject(name: $0.key, seconds: $0.value.seconds, turns: $0.value.turns,
+                                                share: projectSeconds > 0 ? $0.value.seconds / projectSeconds : 0) }
+            .sorted { $0.seconds > $1.seconds }
+        return Effort(days: list, projects: rows, bySource: bySource, totalSeconds: total, totalTurns: turns, totalEdits: edits)
     }
 
     func recordWait(source: String, at date: Date = Date()) {
@@ -52,8 +98,8 @@ final class DailyStats {
         change(&day)
         days[k, default: [:]][source] = day
         // Eski günleri at
-        if days.count > 14 {
-            for old in days.keys.sorted().prefix(days.count - 14) { days.removeValue(forKey: old) }
+        if days.count > DailyStats.keepDays {
+            for old in days.keys.sorted().prefix(days.count - DailyStats.keepDays) { days.removeValue(forKey: old) }
         }
         save()
     }
