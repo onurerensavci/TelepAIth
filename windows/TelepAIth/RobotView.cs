@@ -340,21 +340,29 @@ internal sealed class RobotView : FrameworkElement
         var primary = dark ? Colors.White : Color.FromRgb(0x1E, 0x1C, 0x26);
         var secondary = dark ? Color.FromRgb(0xA8, 0xA5, 0xB8) : Color.FromRgb(0x77, 0x74, 0x86);
         var accent = C(_avatar.Current.Theme.Color);
-        const double padX = 10, padY = 7, titleH = 14;
-        var shown = rows.Take(ChatListMax).ToList();
+        const double padX = 10, padY = 7, titleH = 15;
+        // Sığmayan varsa son satır "+2 sohbet daha" olur
+        var shown = rows.Take(rows.Count > ChatListMax ? ChatListMax - 1 : ChatListMax).ToList();
+        var more = rows.Count - shown.Count;
+        const double moreH = 14;
         var usage = _avatar.Usage;
         const double usageH = 14;
         var cardW = Math.Min(W - 2 * M, 250.0);
-        var cardH = padY + titleH + usage.Count * usageH + 3 + shown.Count * ChatRowH + padY - 2;
+        var cardH = padY + titleH + usage.Count * usageH + 3 + shown.Count * ChatRowH + (more > 0 ? moreH : 0) + padY - 2;
         var cardX = alignLeft ? M : W - M - cardW;
         var cardY = below ? headY + Head + Gap + TailH : headY - Gap - TailH - cardH;
         var full = DrawCard(dc, new Rect(cardX, cardY, cardW, cardH), alignLeft, below, fill, accent);
 
+        // Başlık: "Sohbetler" ve özet ("1 bekliyor · 1 yeni · 2 çalışıyor")
         var tx = cardX + padX;
         var ty = cardY + padY;
-        var headerText = L("Sohbetler", "Chats") + (rows.Count > shown.Count ? $" · +{rows.Count - shown.Count}" : "");
-        var header = new FormattedText(headerText, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, UiSemi, 10, B(secondary), dpi);
+        var header = new FormattedText(L("Sohbetler", "Chats"), CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, UiBoldText, 10.5, B(primary), dpi);
         dc.DrawText(header, new Point(tx, ty + (titleH - header.Height) / 2));
+        var summary = new FormattedText(DisplayPicker.ChatSummary(rows), CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, Ui, 9.5, B(secondary), dpi)
+        {
+            MaxTextWidth = Math.Max(20, cardW - 2 * padX - header.Width - 8), MaxLineCount = 1, Trimming = TextTrimming.CharacterEllipsis,
+        };
+        dc.DrawText(summary, new Point(cardX + cardW - padX - summary.Width, ty + (titleH - summary.Height) / 2));
 
         // Kullanım sınırları: "Oturum %42 · 16:40'ta dolar" ve küçük bir çubuk
         var uy = ty + titleH;
@@ -371,6 +379,7 @@ internal sealed class RobotView : FrameworkElement
 
         var scale = _drawScale;
         var hover = Mouse.GetPosition(this);
+        var time = Seconds(DateTime.Now);
         var y = uy + 3;
         for (var i = 0; i < shown.Count; i++)
         {
@@ -383,21 +392,83 @@ internal sealed class RobotView : FrameworkElement
             var hovered = screen.Contains(hover);
             dc.DrawRoundedRectangle(B(aiColor, hovered ? 0.28 : 0.13), null, new Rect(rr.X, rr.Y + 1, rr.Width, rr.Height - 2), 6, 6);
             dc.PushOpacity(hovered ? 0.82 : 1);
-            dc.DrawEllipse(B(aiColor), null, new Point(tx + 3, y + ChatRowH / 2), 3, 3);
-            var statusColor = row.State == RobotState.Waiting ? ExtraWaiting : row.State.IsWorking() ? ExtraWorking : secondary;
-            var status = new FormattedText(row.Status, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, Ui, 9.5, B(statusColor), dpi);
-            var name = new FormattedText(row.Title, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, UiSemi, 10.5, B(primary), dpi)
+            var mid = y + ChatRowH / 2;
+            DrawChatStateIcon(dc, row.State, aiColor, new Point(tx + 5, mid), time, dpi);
+            // Sağda: süre ve okunmamış noktası (bildirim gelmiş ama bakılmamış)
+            var right = cardX + cardW - padX;
+            if (row.Unread) dc.DrawEllipse(B(Unread), null, new Point(right - 3.5, mid), 3.5, 3.5);
+            var timeText = new FormattedText(row.Time, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, Ui, 9.5, B(secondary), dpi);
+            var timeX = right - 11 - timeText.Width;
+            dc.DrawText(timeText, new Point(timeX, mid - timeText.Height / 2));
+            var name = new FormattedText(row.Title, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, row.Unread ? UiBoldText : UiSemi, 10.5, B(primary), dpi)
             {
-                MaxTextWidth = Math.Max(20, cardW - 2 * padX - 10 - status.Width - 8),
+                MaxTextWidth = Math.Max(20, timeX - 6 - (tx + 14)),
                 MaxLineCount = 1,
                 Trimming = TextTrimming.CharacterEllipsis,
             };
-            dc.DrawText(name, new Point(tx + 10, y + (ChatRowH - name.Height) / 2));
-            dc.DrawText(status, new Point(cardX + cardW - padX - status.Width, y + (ChatRowH - status.Height) / 2));
+            dc.DrawText(name, new Point(tx + 14, mid - name.Height / 2));
             dc.Pop();
             y += ChatRowH;
         }
+        if (more > 0)
+        {
+            var m = new FormattedText(L($"+{more} sohbet daha", $"+{more} more"), CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, Ui, 9.5, B(secondary), dpi);
+            dc.DrawText(m, new Point(tx, y + 2));
+        }
         return full;
+    }
+
+    private static readonly Color Unread = Color.FromRgb(0x0A, 0x84, 0xFF);
+    private static readonly Typeface UiBoldText = new(new FontFamily("Segoe UI Variable Text, Segoe UI"), FontStyles.Normal, FontWeights.Bold, FontStretches.Normal);
+
+    /// <summary>
+    /// Sohbetin durumu tek bakışta (Mac'te ChatStateIcon): dönen halka (çalışıyor, AI renginde), turuncu ! (seni bekliyor),
+    /// yeşil ✓ (bitti), kırmızı ✕ (hata).
+    /// </summary>
+    private static void DrawChatStateIcon(DrawingContext dc, RobotState state, Color ai, Point c, double time, double dpi)
+    {
+        const double r = 5;
+        if (state == RobotState.Waiting)
+        {
+            dc.DrawEllipse(B(Color.FromRgb(0xF5, 0x8C, 0x1A)), null, c, r, r);
+            var bang = new FormattedText("!", CultureInfo.InvariantCulture, FlowDirection.LeftToRight, UiBoldText, 8.5, Brushes.White, dpi);
+            dc.DrawText(bang, new Point(c.X - bang.Width / 2, c.Y - bang.Height / 2));
+        }
+        else if (state.IsWorking())
+        {
+            dc.DrawEllipse(null, new Pen(B(ai, 0.25), 2), c, r - 1, r - 1);
+            var a0 = time * 2 * Math.PI;
+            var a1 = a0 + 0.3 * 2 * Math.PI;
+            var g = new StreamGeometry();
+            using (var ctx = g.Open())
+            {
+                ctx.BeginFigure(new Point(c.X + (r - 1) * Math.Sin(a0), c.Y - (r - 1) * Math.Cos(a0)), false, false);
+                ctx.ArcTo(new Point(c.X + (r - 1) * Math.Sin(a1), c.Y - (r - 1) * Math.Cos(a1)), new Size(r - 1, r - 1), 0, false, SweepDirection.Clockwise, true, false);
+            }
+            dc.DrawGeometry(null, new Pen(B(ai), 2) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round }, g);
+        }
+        else
+        {
+            var error = state == RobotState.Error;
+            dc.DrawEllipse(B(error ? Color.FromRgb(0xE6, 0x4D, 0x4D) : Color.FromRgb(0x33, 0xB8, 0x66)), null, c, r, r);
+            var pen = new Pen(Brushes.White, 1.5) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round, LineJoin = PenLineJoin.Round };
+            if (error)
+            {
+                dc.DrawLine(pen, new Point(c.X - 2, c.Y - 2), new Point(c.X + 2, c.Y + 2));
+                dc.DrawLine(pen, new Point(c.X + 2, c.Y - 2), new Point(c.X - 2, c.Y + 2));
+            }
+            else
+            {
+                var g = new StreamGeometry();
+                using (var ctx = g.Open())
+                {
+                    ctx.BeginFigure(new Point(c.X - 2.3, c.Y + 0.2), false, false);
+                    ctx.LineTo(new Point(c.X - 0.6, c.Y + 1.9), true, true);
+                    ctx.LineTo(new Point(c.X + 2.4, c.Y - 1.8), true, true);
+                }
+                dc.DrawGeometry(null, pen, g);
+            }
+        }
     }
 
     // MARK: Onay düğmeleri
@@ -641,23 +712,16 @@ internal sealed class RobotView : FrameworkElement
         var hasHat = worn.Any(i => i.Slot == "head");
         DrawOutfit(dc, worn.Where(i => i.Slot is "face" or "eyes"), themeRgb);
 
-        // Alında sağlık ışığı (berede ponpon o renkte yanar)
+        // Baş parçası (kışın şapka takılı değilse bere); alındaki sağlık ışığı her zaman üstte görünür:
+        // ışığı örten kep ve berede ışığın olduğu yerde delik var
+        if (hasHat) DrawOutfit(dc, worn.Where(i => i.Slot == "head"), themeRgb);
+        else if (f.Winter && Outfits.Find("beanie") is { } beanie) DrawOutfit(dc, new[] { beanie }, themeRgb);
         var (led, op) = _avatar.Health switch
         {
             Health.Update => (C(1.0, 0.6, 0.2), 0.6 + 0.4 * Math.Sin(time * 3)),
             Health.Broken => (C(0.97, 0.3, 0.3), Math.Sin(time * 6) > 0 ? 1.0 : 0.3),
             _ => (C(0.2, 0.83, 0.47), f.State == RobotState.Sleeping ? 0.45 : 0.85 + 0.15 * Math.Sin(time * 2)),
         };
-        if (f.Winter && !hasHat)
-        {
-            DrawBeanie(dc, theme, _avatar.Health == Health.Ok ? null : led, op);
-            return;
-        }
-        if (hasHat)
-        {
-            DrawOutfit(dc, worn.Where(i => i.Slot == "head"), themeRgb);
-            if (_avatar.Health == Health.Ok) return;   // şapka varken ışık sadece bir sorun olunca görünür
-        }
         dc.DrawEllipse(B(led, 0.3 * op), null, new Point(50, 22.5), 5.5, 5.5);
         dc.DrawEllipse(B(led, op), null, new Point(50, 22.5), 2.5, 2.5);
     }
@@ -698,19 +762,6 @@ internal sealed class RobotView : FrameworkElement
     }
 
     // MARK: Kış kostümü
-
-    private static readonly Geometry BeanieDome = Frozen(Geometry.Parse("M 15,23 C 15,8 30,1 50,1 C 70,1 85,8 85,23 Z"));
-
-    private static void DrawBeanie(DrawingContext dc, Color theme, Color? pompomGlow, double glowOpacity)
-    {
-        var edge = new Pen(B(HandEdge), 1);
-        dc.DrawGeometry(B(theme), null, BeanieDome);
-        var rib = new Pen(B(Color.FromRgb((byte)(theme.R * 0.82), (byte)(theme.G * 0.82), (byte)(theme.B * 0.82))), 1.2);
-        foreach (var x in new[] { 32.0, 41, 50, 59, 68 }) dc.DrawLine(rib, new Point(x, x == 50 ? 5 : 8), new Point(x, 19));
-        dc.DrawRoundedRectangle(B(C(0.965, 0.953, 0.933)), edge, new Rect(11, 17, 78, 10), 5, 5);
-        if (pompomGlow is { } g) dc.DrawEllipse(B(g, 0.35 * glowOpacity), null, new Point(50, 2), 9, 9);
-        dc.DrawEllipse(pompomGlow is { } g2 ? B(g2, Math.Max(0.5, glowOpacity)) : B(C(0.965, 0.953, 0.933)), edge, new Point(50, 2), 5.5, 5.5);
-    }
 
     private static void DrawSnow(DrawingContext dc, double time)
     {
@@ -1003,10 +1054,6 @@ internal sealed class RobotView : FrameworkElement
         }
         dc.Pop();
     }
-
-    // Kenar ve açık dolgu tonları (bere vb.)
-    private static readonly Color HandEdge = C(0.54, 0.51, 0.65);
-    private static readonly Color HandFill = C(0.96, 0.945, 0.965);
 
     // MARK: Efektler
 

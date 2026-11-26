@@ -84,3 +84,33 @@ public static partial class Tests
         File.Delete(file);
     }
 }
+
+public static partial class Tests
+{
+    public static void MenuTitlesCapitalized()
+    {
+        Lang.Set(Language.Tr);
+        A.Eq("Robotun Odası", Text.MenuTitle("Robotun odası…"));
+        A.Eq("Güncellemeleri Denetle", Text.MenuTitle("Güncellemeleri denetle…"));
+        A.Eq("Robotu Bu Masaüstüne Getir", Text.MenuTitle("Robotu bu masaüstüne getir"));
+        A.Eq("İzni Sıfırla ve Yeniden İste", Text.MenuTitle("İzni sıfırla ve yeniden iste"));
+        A.Eq("Renkleri ve Kostümleri Yeniden Yükle", Text.MenuTitle("Renkleri ve kostümleri yeniden yükle"));
+        A.Eq("⚠︎ Bildirimler macOS'ta Kapalı — Aç", Text.MenuTitle("⚠︎ Bildirimler macOS'ta kapalı — aç…"));
+        A.Eq("Claude: İzin İstesin (İzin Ver / Reddet)", Text.MenuTitle("Claude: izin istesin (İzin ver / Reddet)"));
+        A.Eq("1 Saat", Text.MenuTitle("1 saat"));
+        Lang.Set(Language.En);
+        A.Eq("Bring Robot to This Desktop", Text.MenuTitle("Bring robot to this desktop"));
+        A.Eq("Robot's Room", Text.MenuTitle("Robot's room…"));
+        Lang.Set(Language.Tr);
+        // Yan menüdeki simge yazıları sohbet adı sayılmaz
+        A.Eq("", SidebarChats.StripStatus("Includes an artifact"));
+        A.Eq("Tarif", SidebarChats.StripStatus("Tarif, running"));
+        var rows = SidebarChats.Parse(new[]
+        {
+            new SidebarItem("", "running", null, new RectD(0, 100, 8, 8)),
+            new SidebarItem("Includes an artifact", "", null, new RectD(150, 100, 12, 12)),
+            new SidebarItem("UGC video akışı", "", "https://claude.ai/chat/u1", new RectD(20, 96, 120, 16)),
+        });
+        A.Eq("UGC video akışı", rows[0].Row.Title);
+    }
+}

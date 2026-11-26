@@ -23,13 +23,32 @@ public sealed class RobotModel
         public AppTarget? Target;
         public DateTime? WaitingSince;
         public bool Reminded;
+        /// <summary>Kullanıcı bu sohbete en son ne zaman baktı (listeden açtı, uygulamada öndeydi)</summary>
+        public DateTime SeenAt = DateTime.MinValue;
     }
 
     public sealed record Notice(string Title, string Body, bool Important = false, AppTarget? Target = null);
 
     /// <summary>Kafaya tıklayınca açılan listedeki bir sohbet: ad, durum, "çalışıyor · 3 dk" gibi durum yazısı</summary>
+    /// <summary>
+    /// Rank: 0 seni bekliyor, 1 yeni bitti (bakılmadı), 2 çalışıyor, 3 bitti (bakıldı). Time: "2 dk" / "5 dk önce".
+    /// Unread: bildirim gelmiş ama sohbete bakılmamış (listede nokta).
+    /// </summary>
     public sealed record ChatRow(string Source, string SessionId, string Title, RobotState State, string Status,
-                                 AppTarget? Target, int Rank, DateTime At);
+                                 AppTarget? Target, int Rank, DateTime At, string Time = "", bool Unread = false);
+
+    /// <summary>Ön plandaki uygulamanın açık sohbeti ("app-{pid}-…") görülüyor sayılır</summary>
+    public void MarkSeenPrefix(string prefix, DateTime now)
+    {
+        foreach (var (id, s) in _sessions)
+            if (id.StartsWith(prefix, StringComparison.Ordinal)) s.SeenAt = now;
+    }
+
+    /// <summary>Sohbete bakıldı: okunmamış noktası söner</summary>
+    public void MarkSeen(string sessionId, DateTime now)
+    {
+        if (_sessions.TryGetValue(sessionId, out var s)) s.SeenAt = now;
+    }
 
     /// <summary>Robotun yanındaki minik kafalar: aynı anda çalışan diğer oturumlar.</summary>
     public sealed record MiniSession(string Id, string Source, RobotState State, string Label);
@@ -584,33 +603,39 @@ public sealed class RobotModel
             if (id == "mcp") continue;   // anlatıcı: açık sohbetle aynı
             var st = EffectiveState(s, id, now);
             var age = (now - s.Updated).TotalSeconds;
-            string status;
+            string status, time;
             int rank;
             DateTime at;
+            var unread = false;
             if (st == RobotState.Waiting)
             {
                 at = s.WaitingSince ?? s.Updated;
-                status = L("seni bekliyor · ", "waiting for you · ") + ShortDuration((now - at).TotalSeconds);
+                time = ShortDuration((now - at).TotalSeconds);
+                status = L("seni bekliyor · ", "waiting for you · ") + time;
                 rank = 0;
+                unread = s.SeenAt < at;
             }
             else if (st.IsWorking())
             {
                 at = s.TurnStart ?? s.Updated;
-                status = L("çalışıyor · ", "working · ") + ShortDuration((now - at).TotalSeconds);
-                rank = 1;
+                time = ShortDuration((now - at).TotalSeconds);
+                status = L("çalışıyor · ", "working · ") + time;
+                rank = 2;
             }
             else if (s.State is RobotState.Done or RobotState.Error && age < 15 * 60)
             {
                 at = s.Updated;
                 var ago = ShortDuration(age);
+                time = L($"{ago} önce", $"{ago} ago");
                 status = s.State == RobotState.Error
                     ? L($"hata verdi · {ago} önce", $"hit an error · {ago} ago")
                     : L($"bitti · {ago} önce", $"done · {ago} ago");
-                rank = 2;
+                unread = s.SeenAt < at;
+                rank = unread ? 1 : 3;
             }
             else continue;
             var title = s.Project ?? (id.StartsWith("app-", StringComparison.Ordinal) ? L("Açık sohbet", "Open chat") : L("Oturum", "Session"));
-            rows.Add(new ChatRow(Source, id, title, st, status, s.Target, rank, at));
+            rows.Add(new ChatRow(Source, id, title, st == RobotState.Idle ? s.State : st, status, s.Target, rank, at, time, unread));
         }
         return rows;
     }

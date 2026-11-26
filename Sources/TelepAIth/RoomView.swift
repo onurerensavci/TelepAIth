@@ -331,6 +331,7 @@ struct RoomMiniRobot: View {
             Capsule().fill(Color(nsColor: theme).opacity(0.9)).frame(width: 9, height: 16).position(x: 36, y: 52)
             Capsule().fill(Color(nsColor: theme).opacity(0.9)).frame(width: 9, height: 16).position(x: 64, y: 52)
             OutfitView(items: items, theme: theme)
+            Circle().fill(Color(red: 0.2, green: 0.83, blue: 0.47)).frame(width: 5, height: 5).position(x: 50, y: 22.5)
         }
         .frame(width: 100, height: 100)
         .scaleEffect(0.58)

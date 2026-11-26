@@ -388,6 +388,37 @@ func clip(_ s: String, _ max: Int) -> String {
 }
 
 /// Kısa süre: 40 → "40 sn", 200 → "3 dk", 4000 → "1 sa 6 dk"
+private let smallWords: Set<String> = ["ve", "ile", "ya", "da", "de", "ki", "mi",
+                                       "a", "an", "the", "and", "or", "of", "to", "in", "on", "at", "for", "by", "with", "from"]
+
+/// Menü başlığı: her kelime büyük harfle ("Robotun Odası", "Güncellemeleri Denetle"), bağlaçlar küçük, içinde büyük
+/// harf olan kelime (macOS, GPT) olduğu gibi, sondaki üç nokta yok. (Windows'ta Text.MenuTitle, aynı kural)
+func menuTitle(_ text: String) -> String {
+    let t = text.replacingOccurrences(of: "…", with: "").replacingOccurrences(of: "...", with: "")
+        .trimmingCharacters(in: .whitespaces)
+    let locale = Locale(identifier: Language.current == .tr ? "tr_TR" : "en_US")
+    var words = t.components(separatedBy: " ")
+    for i in words.indices {
+        let w = words[i]
+        guard let idx = w.firstIndex(where: { $0.isLetter }), w[idx].isLowercase, !w.contains(where: { $0.isUppercase }) else { continue }
+        let core = String(w.filter { $0.isLetter })
+        if i > 0 && smallWords.contains(core) { continue }
+        words[i] = String(w[..<idx]) + String(w[idx]).uppercased(with: locale) + String(w[w.index(after: idx)...])
+    }
+    return words.joined(separator: " ")
+}
+
+/// Menüdeki tüm başlıkları (alt menüler dahil) menü kuralına göre yazar; durum satırları (renkli, devre dışı) dokunulmaz.
+func applyMenuTitles(_ menu: NSMenu) {
+    for item in menu.items where !item.isSeparatorItem {
+        if item.attributedTitle == nil && item.isEnabled { item.title = menuTitle(item.title) }
+        if let sub = item.submenu {
+            item.title = menuTitle(item.title)
+            applyMenuTitles(sub)
+        }
+    }
+}
+
 func shortDuration(_ seconds: TimeInterval) -> String {
     let total = Swift.max(0, Int(seconds))
     if total < 60 { return "\(total) \(loc("sn", "s"))" }

@@ -351,20 +351,29 @@ struct ChatListBubble: View {
     }
 
     private var card: some View {
-        // Fare üstündeki satırı izlemek için kendi saati (balon kafanın saatinin dışında)
-        TimelineView(.animation(minimumInterval: 1.0 / 20.0, paused: false)) { _ in
-            cardContent(hover: hoverIndex())
+        // Fare üstündeki satırı izlemek ve çalışan sohbetin dönen simgesi için kendi saati
+        TimelineView(.animation(minimumInterval: 1.0 / 20.0, paused: false)) { context in
+            cardContent(hover: hoverIndex(), time: context.date.timeIntervalSinceReferenceDate)
         }
     }
 
-    private func cardContent(hover: Int?) -> some View {
-        let shown = Array(rows.prefix(ChatListBubble.maxRows))
+    private func cardContent(hover: Int?, time: TimeInterval) -> some View {
+        // Sığmayan varsa son satır "+2 sohbet daha" olur
+        let shown = Array(rows.prefix(rows.count > ChatListBubble.maxRows ? ChatListBubble.maxRows - 1 : ChatListBubble.maxRows))
         return VStack(alignment: .leading, spacing: 0) {
-            Text(loc("Sohbetler", "Chats") + (rows.count > shown.count ? " · +\(rows.count - shown.count)" : ""))
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundColor(.secondary)
-                .padding(.bottom, 3)
-                .padding(.leading, 6)
+            // Başlık: "Sohbetler" ve özet ("1 bekliyor · 1 yeni · 2 çalışıyor")
+            HStack(spacing: 4) {
+                Text(loc("Sohbetler", "Chats"))
+                    .font(.system(size: 10.5, weight: .bold))
+                    .foregroundColor(.primary)
+                Spacer(minLength: 6)
+                Text(RobotModel.chatSummary(rows))
+                    .font(.system(size: 9.5))
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+            }
+            .padding(.horizontal, 6)
+            .padding(.bottom, 4)
             ForEach(usage, id: \.kind) { w in
                 HStack(spacing: 6) {
                     Text(UsageLimits.line(w, now: Date()))
@@ -385,20 +394,23 @@ struct ChatListBubble: View {
                 let aiColor = Color(nsColor: Themes.shared.theme(for: row.source).color)
                 let hovered = hover == index
                 HStack(spacing: 6) {
-                    Circle()
-                        .fill(aiColor)
-                        .frame(width: 6, height: 6)
+                    ChatStateIcon(state: row.state, color: aiColor, time: time)
+                        .frame(width: 12, height: 12)
                     Text(row.title)
-                        .font(.system(size: 10.5, weight: .semibold))
+                        .font(.system(size: 10.5, weight: row.unread ? .bold : .medium))
                         .foregroundColor(.primary)
                         .lineLimit(1)
                         .truncationMode(.tail)
                     Spacer(minLength: 6)
-                    Text(row.status)
+                    Text(row.time)
                         .font(.system(size: 9.5))
-                        .foregroundColor(statusColor(row))
+                        .foregroundColor(.secondary)
                         .lineLimit(1)
                         .fixedSize()
+                    // Bildirim gelmiş ama bakılmamış: mavi nokta (sohbete gidince söner)
+                    Circle()
+                        .fill(row.unread ? ChatListBubble.unreadColor : Color.clear)
+                        .frame(width: 7, height: 7)
                 }
                 .opacity(hovered ? 0.82 : 1)
                 .padding(.horizontal, 6)
@@ -410,6 +422,13 @@ struct ChatListBubble: View {
                     Color.clear.preference(key: ChatRowFramesKey.self, value: [index: g.frame(in: .named("avatar"))])
                 })
             }
+            if rows.count > shown.count {
+                Text(loc("+\(rows.count - shown.count) sohbet daha", "+\(rows.count - shown.count) more"))
+                    .font(.system(size: 9.5))
+                    .foregroundColor(.secondary)
+                    .padding(.leading, 6)
+                    .padding(.top, 2)
+            }
         }
         .padding(.horizontal, 6)
         .padding(.vertical, 7)
@@ -418,10 +437,36 @@ struct ChatListBubble: View {
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(color.opacity(0.35), lineWidth: 1))
     }
 
-    private func statusColor(_ row: RobotModel.ChatRow) -> Color {
-        if row.state == .waiting { return Color(red: 0.95, green: 0.45, blue: 0.05) }
-        if row.state.isWorking { return Color(red: 0.13, green: 0.47, blue: 0.95) }
-        return .secondary
+    static let unreadColor = Color(red: 0.04, green: 0.52, blue: 1.0)
+}
+
+/// Sohbetin durumu tek bakışta: dönen halka (çalışıyor, AI renginde), turuncu ! (seni bekliyor),
+/// yeşil ✓ (bitti), kırmızı ✕ (hata). Windows'ta DrawChatStateIcon.
+struct ChatStateIcon: View {
+    let state: RobotState
+    let color: Color
+    let time: TimeInterval
+
+    var body: some View {
+        ZStack {
+            if state == .waiting {
+                Circle().fill(Color(red: 0.96, green: 0.55, blue: 0.1))
+                Text("!").font(.system(size: 9, weight: .heavy)).foregroundColor(.white)
+            } else if state.isWorking {
+                Circle().stroke(color.opacity(0.25), lineWidth: 2)
+                Circle()
+                    .trim(from: 0, to: 0.3)
+                    .stroke(color, style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                    .rotationEffect(.degrees((time * 360).truncatingRemainder(dividingBy: 360)))
+            } else if state == .error {
+                Circle().fill(Color(red: 0.9, green: 0.3, blue: 0.3))
+                Image(systemName: "xmark").font(.system(size: 6.5, weight: .heavy)).foregroundColor(.white)
+            } else {
+                Circle().fill(Color(red: 0.2, green: 0.72, blue: 0.4))
+                Image(systemName: "checkmark").font(.system(size: 6.5, weight: .heavy)).foregroundColor(.white)
+            }
+        }
+        .padding(1)
     }
 }
 
@@ -663,6 +708,12 @@ struct FaceView: View {
 
     private var hasHat: Bool { outfit.contains { $0.slot == "head" } }
 
+    private var headItems: [OutfitItem] {
+        if hasHat { return outfit.filter { $0.slot == "head" } }
+        if winter, let beanie = Outfits.find("beanie") { return [beanie] }
+        return []
+    }
+
     var body: some View {
         ZStack {
             Circle().fill(Color(red: 0.74, green: 0.71, blue: 0.84)).frame(width: 12, height: 12).position(x: 6, y: 50)
@@ -683,18 +734,13 @@ struct FaceView: View {
                 .frame(width: 70, height: 44)
                 .position(x: 50, y: 52)
             OutfitView(items: outfit.filter { $0.slot == "face" || $0.slot == "eyes" }, theme: themeColor)
-            if winter && !hasHat {
-                // Kış: bere (ponpon sağlık ışığı renginde yanar, sorun yoksa beyaz)
-                BeanieView(theme: theme, glow: health == .ok ? nil : ledColor, glowOpacity: ledOpacity)
-                    .frame(width: 100, height: 100)
-            } else {
-                ZStack {
-                    OutfitView(items: outfit.filter { $0.slot == "head" }, theme: themeColor)
-                    // Şapka varken sağlık ışığı sadece bir sorun olunca görünür
-                    if !hasHat || health != .ok { ledView }
-                }
-                .frame(width: 100, height: 100)
+            // Baş parçası (kışın şapka takılı değilse bere); alındaki sağlık ışığı her zaman üstte görünür:
+            // ışığı örten kep ve berede ışığın olduğu yerde delik var
+            ZStack {
+                OutfitView(items: headItems, theme: themeColor)
+                ledView
             }
+            .frame(width: 100, height: 100)
         }
     }
 
@@ -1271,42 +1317,6 @@ struct ExtraLightsView: View {
 }
 
 // MARK: - Kış kostümü
-
-/// Bere: uygulamanın renginde, beyaz kenarlı ve ponponlu (ponpon sorun varsa sağlık ışığı renginde yanar)
-struct BeanieView: View {
-    let theme: Color
-    var glow: Color? = nil
-    var glowOpacity: Double = 1
-
-    var body: some View {
-        Canvas { ctx, _ in
-            let edge = Color(red: 0.54, green: 0.51, blue: 0.65)
-            let wool = Color(red: 0.965, green: 0.953, blue: 0.933)
-            var dome = Path()
-            dome.move(to: CGPoint(x: 15, y: 23))
-            dome.addCurve(to: CGPoint(x: 50, y: 1), control1: CGPoint(x: 15, y: 8), control2: CGPoint(x: 30, y: 1))
-            dome.addCurve(to: CGPoint(x: 85, y: 23), control1: CGPoint(x: 70, y: 1), control2: CGPoint(x: 85, y: 8))
-            dome.closeSubpath()
-            ctx.fill(dome, with: .color(theme))
-            for x: CGFloat in [32, 41, 50, 59, 68] {
-                var rib = Path()
-                rib.move(to: CGPoint(x: x, y: x == 50 ? 5 : 8))
-                rib.addLine(to: CGPoint(x: x, y: 19))
-                ctx.stroke(rib, with: .color(Color.black.opacity(0.18)), lineWidth: 1.2)
-            }
-            let band = Path(roundedRect: CGRect(x: 11, y: 17, width: 78, height: 10), cornerRadius: 5)
-            ctx.fill(band, with: .color(wool))
-            ctx.stroke(band, with: .color(edge), lineWidth: 1)
-            if let glow = glow {
-                ctx.fill(Path(ellipseIn: CGRect(x: 41, y: -7, width: 18, height: 18)), with: .color(glow.opacity(0.35 * glowOpacity)))
-            }
-            let pompom = Path(ellipseIn: CGRect(x: 44.5, y: -3.5, width: 11, height: 11))
-            ctx.fill(pompom, with: .color(glow.map { $0.opacity(Swift.max(0.5, glowOpacity)) } ?? wool))
-            ctx.stroke(pompom, with: .color(edge), lineWidth: 1)
-        }
-        .allowsHitTesting(false)
-    }
-}
 
 /// Gardırop parçalarını çizer (100×100 kafa alanı; parçalar dışarı taşabilir: tuval 140×140, 20 nokta kaydırılmış).
 /// Windows'ta RobotView.DrawOutfit ile aynı veri (assets/outfits.json).

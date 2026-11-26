@@ -1,3 +1,5 @@
+using static TelepAIth.Core.Text;
+
 namespace TelepAIth.Core;
 
 /// <summary>
@@ -44,13 +46,31 @@ public static class DisplayPicker
     public static bool CanGaze(IEnumerable<RobotModel> models, DateTime now) =>
         models.All(m => (now - m.LastBusyAt).TotalSeconds >= GazeDelay);
 
-    /// <summary>Kafaya tıklayınca açılan sohbet listesi: tüm AI'lardan, seni bekleyenler önce, sonra çalışanlar, sonra bitenler (en fazla 6)</summary>
+    /// <summary>
+    /// Kafaya tıklayınca açılan sohbet listesi: tüm AI'lardan; seni bekleyenler, yeni bitenler (bakılmamış),
+    /// çalışanlar, sonra bakılmış bitenler (en fazla max).
+    /// </summary>
     public static List<RobotModel.ChatRow> ChatRows(IEnumerable<RobotModel> models, DateTime now, int max = 6) =>
+        AllChatRows(models, now).Take(max).ToList();
+
+    public static List<RobotModel.ChatRow> AllChatRows(IEnumerable<RobotModel> models, DateTime now) =>
         models.SelectMany(m => m.ChatRows(now))
             .OrderBy(r => r.Rank)
-            .ThenBy(r => r.Rank == 2 ? -r.At.Ticks : r.At.Ticks)   // bekleyen/çalışan: en eski önce; biten: en yeni önce
-            .Take(max)
+            .ThenBy(r => r.Rank is 1 or 3 ? -r.At.Ticks : r.At.Ticks)   // bekleyen/çalışan: en eski önce; biten: en yeni önce
             .ToList();
+
+    /// <summary>Listenin başlığı: "2 çalışıyor · 1 bekliyor · 1 yeni"</summary>
+    public static string ChatSummary(IReadOnlyCollection<RobotModel.ChatRow> rows)
+    {
+        var parts = new List<string>();
+        var waiting = rows.Count(r => r.Rank == 0);
+        var fresh = rows.Count(r => r.Rank == 1);
+        var working = rows.Count(r => r.Rank == 2);
+        if (waiting > 0) parts.Add(L($"{waiting} bekliyor", $"{waiting} waiting"));
+        if (fresh > 0) parts.Add(L($"{fresh} yeni", $"{fresh} new"));
+        if (working > 0) parts.Add(L($"{working} çalışıyor", $"{working} working"));
+        return parts.Count > 0 ? string.Join(" · ", parts) : L("hepsi bitti", "all done");
+    }
 
     /// <summary>
     /// Kafadaki küçük ışıklar: büyük kafadaki AI'ın, gösterilen dışında çalışan ya da seni bekleyen diğer sohbetleri

@@ -470,7 +470,7 @@ final class RobotManager {
                 avatar.setChatList(nil)
                 return
             }
-            let rows = RobotModel.chatRows(allModels)
+            let rows = RobotModel.allChatRows(allModels)
             if rows.isEmpty {
                 avatar.current.showHistory()
             } else {
@@ -483,6 +483,7 @@ final class RobotManager {
     /// Listeden bir sohbet seçildi: o AI'a geç ve sohbeti aç
     private func openChat(_ row: RobotModel.ChatRow) {
         avatar?.setChatList(nil)
+        models[row.source]?.markSeen(row.sessionID)   // bakıldı: okunmamış noktası söner
         if let m = models[row.source] {
             pinnedSource = row.source
             show(m)
@@ -631,7 +632,7 @@ final class RobotManager {
             avatar.setMinis(RobotModel.minis(allModels, current: avatar.current, now: date))
             // Açık sohbet listesi canlı kalsın (süreler ilerler), süresi dolunca kapansın
             if avatar.chatList != nil {
-                let rows = RobotModel.chatRows(allModels, now: date)
+                let rows = RobotModel.allChatRows(allModels, now: date)
                 avatar.setChatList(date > avatar.chatListUntil || rows.isEmpty ? nil : rows)
             }
             avatar.setExtras(RobotModel.extras(current: avatar.current, now: date))
@@ -639,6 +640,10 @@ final class RobotManager {
             for e in insights.usage.tick(now: date) where Preferences.insights { handle(e) }
             avatar.setUsage(insights.usage.current(now: date))
             models["claude"]?.usageLeft = insights.usage.left(now: date)
+            // Öndeki uygulamanın açık sohbeti görülüyor: okunmamış noktası sönsün
+            if let front = NSWorkspace.shared.frontmostApplication?.processIdentifier {
+                for m in models.values { m.markSeen(prefix: "app-\(front)-", now: date) }
+            }
             // Oda: sayaçlar, gardırop, yeni başarım / seviye
             Progress.shared.parallel(models.values.reduce(0) { $0 + $1.workingCount(now: date) })
             avatar.setOutfit(Outfits.worn(Progress.shared.snapshot()))

@@ -493,9 +493,25 @@ public sealed class SidebarChats
         || Separators.Any(sep => l.EndsWith(sep + w, StringComparison.Ordinal) || l.StartsWith(w + sep, StringComparison.Ordinal));
 
     /// <summary>Addaki durum ekini at: "Tarif, running" → "Tarif"</summary>
+    /// <summary>Yan menü satırındaki simge ve düğme yazıları sohbet adı değildir ("Includes an artifact", "More options")</summary>
+    private static readonly string[] NoiseLabels =
+    {
+        "includes an artifact", "contains an artifact", "has an artifact", "artifact", "starred", "pinned", "more options",
+        "options", "chat options", "open menu", "menu", "rename", "delete", "archive", "share", "new chat",
+        "yıldızlı", "sabitlendi", "sabitlenmiş", "seçenekler", "daha fazla seçenek", "sohbet seçenekleri", "yeni sohbet",
+        "artifact içerir", "yeniden adlandır", "sil", "arşivle", "paylaş",
+    };
+
+    public static bool IsNoise(string text)
+    {
+        var l = text.Trim().ToLowerInvariant().TrimEnd('.', '…', ' ');
+        return NoiseLabels.Contains(l) || l.StartsWith("includes ", StringComparison.Ordinal);
+    }
+
     public static string StripStatus(string name)
     {
         var t = name.Trim();
+        if (IsNoise(t)) return "";
         var l = t.ToLowerInvariant().TrimEnd('.', '…', ' ');
         foreach (var w in WaitingWords.Concat(WorkingWords))
         {

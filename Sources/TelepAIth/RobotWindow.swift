@@ -669,6 +669,7 @@ final class AvatarWindowController: NSObject {
         let hide = NSMenuItem(title: loc("Robotu gizle", "Hide robot"), action: #selector(hideAction), keyEquivalent: "")
         hide.target = self
         menu.addItem(hide)
+        applyMenuTitles(menu)
         NSMenu.popUpContextMenu(menu, with: event, for: host)
     }
 

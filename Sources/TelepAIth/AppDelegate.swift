@@ -284,6 +284,7 @@ final class AppController: NSObject {
         menu.addItem(.separator())
         menu.addItem(actionItem(loc("Çıkış", "Quit"), #selector(quit), key: "q"))
 
+        applyMenuTitles(menu)
         statusItem?.menu = menu
     }
 

@@ -522,12 +522,10 @@ internal static class RoomWindow
             var eye = new SolidColorBrush(Color.FromRgb(_theme.Mix(Rgb.White, 0.18).R, _theme.Mix(Rgb.White, 0.18).G, _theme.Mix(Rgb.White, 0.18).B));
             dc.DrawRoundedRectangle(eye, null, new Rect(31, 43, 10, 18), 5, 5);
             dc.DrawRoundedRectangle(eye, null, new Rect(59, 43, 10, 18), 5, 5);
-            if (!_items.Any(i => i.Slot == "head"))
-            {
-                var led = new SolidColorBrush(Color.FromRgb(0x33, 0xD4, 0x78));
-                dc.DrawEllipse(led, null, new Point(50, 22.5), 2.5, 2.5);
-            }
             RobotView.DrawOutfit(dc, _items, _theme);
+            // Alındaki sağlık ışığı her zaman üstte (kep ve berede delikten görünür)
+            dc.DrawEllipse(new SolidColorBrush(Color.FromArgb(0x4D, 0x33, 0xD4, 0x78)), null, new Point(50, 22.5), 5.5, 5.5);
+            dc.DrawEllipse(new SolidColorBrush(Color.FromRgb(0x33, 0xD4, 0x78)), null, new Point(50, 22.5), 2.5, 2.5);
             dc.Pop();
             dc.Pop();
         }

@@ -369,7 +369,7 @@ internal sealed class RobotManager
                     _avatar.ChatList = null;
                     break;
                 }
-                var rows = DisplayPicker.ChatRows(AllModels, DateTime.Now);
+                var rows = DisplayPicker.AllChatRows(AllModels, DateTime.Now);
                 if (rows.Count > 0)
                 {
                     _avatar.ChatList = rows;
@@ -387,6 +387,7 @@ internal sealed class RobotManager
     private void OpenChat(RobotModel.ChatRow row)
     {
         if (_avatar != null) _avatar.ChatList = null;
+        if (_models.TryGetValue(row.Source, out var seen)) seen.MarkSeen(row.SessionId, DateTime.Now);   // bakıldı: nokta söner
         if (_models.TryGetValue(row.Source, out var m))
         {
             _pinnedSource = row.Source;
@@ -690,7 +691,7 @@ internal sealed class RobotManager
             // Açık sohbet listesi canlı kalsın (süreler ilerler), süresi dolunca kapansın
             if (_avatar.ChatList != null)
             {
-                var rows = DisplayPicker.ChatRows(AllModels, date);
+                var rows = DisplayPicker.AllChatRows(AllModels, date);
                 _avatar.ChatList = date > _avatar.ChatListUntil || rows.Count == 0 ? null : rows;
             }
             _avatar.Extras = DisplayPicker.Extras(_avatar.Current, date);
@@ -698,6 +699,9 @@ internal sealed class RobotManager
             foreach (var e in Insights.Usage.Tick(date)) if (Prefs.Insights) Handle(e);
             _avatar.Usage = Insights.Usage.Current(date);
             if (_models.TryGetValue("claude", out var claude)) claude.UsageLeft = Insights.Usage.Left(date);
+            // Öndeki uygulamanın açık sohbeti görülüyor: okunmamış noktası sönsün
+            var fg = Native.WindowPid(Native.GetForegroundWindow());
+            if (fg > 0) foreach (var m in _models.Values) m.MarkSeenPrefix($"app-{fg}-", date);
             // Oda: sayaçlar, gardırop, yeni başarım / seviye
             Progress.Shared.Parallel(_models.Values.Sum(m => m.WorkingCount(date)));
             var worn = Outfits.Worn(Progress.Shared.Snapshot());

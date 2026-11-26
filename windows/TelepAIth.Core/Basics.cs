@@ -79,6 +79,35 @@ public static class Text
     }
 
     /// <summary>Kısa süre: 40 → "40 sn", 200 → "3 dk", 4000 → "1 sa 6 dk"</summary>
+    private static readonly HashSet<string> SmallWords = new(StringComparer.Ordinal)
+    {
+        "ve", "ile", "ya", "da", "de", "ki", "mi",
+        "a", "an", "the", "and", "or", "of", "to", "in", "on", "at", "for", "by", "with", "from",
+    };
+
+    /// <summary>
+    /// Menü başlığı: her kelime büyük harfle ("Robotun Odası", "Güncellemeleri Denetle"), bağlaçlar küçük, içinde büyük
+    /// harf olan kelime (macOS, GPT) olduğu gibi, sondaki üç nokta yok. (Mac'te menuTitle, aynı kural)
+    /// </summary>
+    public static string MenuTitle(string text)
+    {
+        var t = text.Replace("…", "").Replace("...", "").TrimEnd();
+        var culture = Lang.Current == Language.Tr ? new System.Globalization.CultureInfo("tr-TR") : System.Globalization.CultureInfo.InvariantCulture;
+        var words = t.Split(' ');
+        for (var i = 0; i < words.Length; i++)
+        {
+            var w = words[i];
+            var letter = -1;
+            for (var j = 0; j < w.Length; j++)
+                if (char.IsLetter(w[j])) { letter = j; break; }
+            if (letter < 0 || !char.IsLower(w[letter]) || w.Any(char.IsUpper)) continue;
+            var core = new string(w.Where(char.IsLetter).ToArray());
+            if (i > 0 && SmallWords.Contains(core)) continue;
+            words[i] = w[..letter] + char.ToUpper(w[letter], culture) + w[(letter + 1)..];
+        }
+        return string.Join(' ', words);
+    }
+
     public static string ShortDuration(double seconds)
     {
         var total = Math.Max(0, (int)seconds);

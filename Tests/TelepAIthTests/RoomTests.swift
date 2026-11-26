@@ -80,4 +80,15 @@ final class RoomTests: XCTestCase {
         XCTAssertNotNil(e.projects.first { $0.name == "shop-\(tag)" })
         XCTAssertGreaterThanOrEqual(e.totalSeconds, 5400)
     }
+
+    func testMenuTitlesCapitalized() {
+        XCTAssertEqual(menuTitle("Robotun odası…"), "Robotun Odası")
+        XCTAssertEqual(menuTitle("Güncellemeleri denetle…"), "Güncellemeleri Denetle")
+        XCTAssertEqual(menuTitle("İzni sıfırla ve yeniden iste"), "İzni Sıfırla ve Yeniden İste")
+        XCTAssertEqual(menuTitle("⚠︎ Bildirimler macOS'ta kapalı — aç…"), "⚠︎ Bildirimler macOS'ta Kapalı — Aç")
+        XCTAssertEqual(menuTitle("Claude: izin istesin (İzin ver / Reddet)"), "Claude: İzin İstesin (İzin Ver / Reddet)")
+        Language.set(.en)
+        XCTAssertEqual(menuTitle("Bring robot to this desktop"), "Bring Robot to This Desktop")
+        Language.set(.tr)
+    }
 }

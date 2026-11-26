@@ -265,7 +265,9 @@ internal sealed class AppController : ISettingsHost
     private static object ToWpf(MenuEntry? e)
     {
         if (e == null) return new Separator();
-        var header = new TextBlock { VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis, MaxWidth = 380 }.WithText(e.Title);
+        // Başlıklar "Robotun Odası" gibi; durum satırları (renkli nokta, başlık, devre dışı) olduğu gibi
+        var title = e.Dot == null && !e.Header && e.Enabled ? MenuTitle(e.Title) : e.Title;
+        var header = new TextBlock { VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis, MaxWidth = 380 }.WithText(title);
         if (e.Header)
         {
             header.FontWeight = FontWeights.SemiBold;

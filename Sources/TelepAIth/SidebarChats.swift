@@ -78,9 +78,23 @@ final class SidebarChats {
         return nil
     }
 
+    /// Yan menü satırındaki simge ve düğme yazıları sohbet adı değildir ("Includes an artifact", "More options")
+    private static let noiseLabels: Set<String> = [
+        "includes an artifact", "contains an artifact", "has an artifact", "artifact", "starred", "pinned", "more options",
+        "options", "chat options", "open menu", "menu", "rename", "delete", "archive", "share", "new chat",
+        "yıldızlı", "sabitlendi", "sabitlenmiş", "seçenekler", "daha fazla seçenek", "sohbet seçenekleri", "yeni sohbet",
+        "artifact içerir", "yeniden adlandır", "sil", "arşivle", "paylaş",
+    ]
+
+    static func isNoise(_ text: String) -> Bool {
+        let l = normalized(text)
+        return noiseLabels.contains(l) || l.hasPrefix("includes ")
+    }
+
     /// Addaki durum ekini at: "Tarif, running" → "Tarif"
     static func stripStatus(_ name: String) -> String {
         let t = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        if isNoise(t) { return "" }
         let l = normalized(t)
         // Küçük harfe çevirmek uzunluğu değiştirebilir (Türkçe İ); karakter sayısıyla kes
         func dropLast(_ n: Int) -> String { String(t.prefix(Swift.max(0, l.count - n))).trimmingCharacters(in: .whitespaces) }

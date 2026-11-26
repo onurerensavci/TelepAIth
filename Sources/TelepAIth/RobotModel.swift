@@ -21,6 +21,8 @@ final class RobotModel: ObservableObject {
         var target: AppTarget?
         var waitingSince: Date?
         var reminded = false
+        /// Kullanıcı bu sohbete en son ne zaman baktı (listeden açtı, uygulamada öndeydi)
+        var seenAt = Date.distantPast
     }
 
     struct Notice {
@@ -39,10 +41,24 @@ final class RobotModel: ObservableObject {
         let state: RobotState
         let status: String
         let target: AppTarget?
-        /// 0 bekliyor, 1 çalışıyor, 2 bitti/hata
+        /// 0 seni bekliyor, 1 yeni bitti (bakılmadı), 2 çalışıyor, 3 bitti (bakıldı)
         let rank: Int
         /// O hâle girdiği an (süre bundan)
         let at: Date
+        /// "2 dk" / "5 dk önce"
+        var time = ""
+        /// Bildirim gelmiş ama sohbete bakılmamış (listede nokta)
+        var unread = false
+    }
+
+    /// Ön plandaki uygulamanın açık sohbeti ("app-{pid}-…") görülüyor sayılır
+    func markSeen(prefix: String, now: Date = Date()) {
+        for id in sessions.keys where id.hasPrefix(prefix) { sessions[id]?.seenAt = now }
+    }
+
+    /// Sohbete bakıldı: okunmamış noktası söner
+    func markSeen(_ sessionID: String, now: Date = Date()) {
+        sessions[sessionID]?.seenAt = now
     }
 
     /// Robotun yanındaki minik kafalar: aynı anda çalışan diğer oturumlar.
@@ -597,39 +613,62 @@ final class RobotModel: ObservableObject {
             let st = effectiveState(s, id: id, now: now)
             let age = now.timeIntervalSince(s.updated)
             let status: String
+            let time: String
             let rank: Int
             let at: Date
+            var unread = false
             if st == .waiting {
                 at = s.waitingSince ?? s.updated
-                status = loc("seni bekliyor · ", "waiting for you · ") + shortDuration(now.timeIntervalSince(at))
+                time = shortDuration(now.timeIntervalSince(at))
+                status = loc("seni bekliyor · ", "waiting for you · ") + time
                 rank = 0
+                unread = s.seenAt < at
             } else if st.isWorking {
                 at = s.turnStart ?? s.updated
-                status = loc("çalışıyor · ", "working · ") + shortDuration(now.timeIntervalSince(at))
-                rank = 1
+                time = shortDuration(now.timeIntervalSince(at))
+                status = loc("çalışıyor · ", "working · ") + time
+                rank = 2
             } else if (s.state == .done || s.state == .error) && age < 15 * 60 {
                 at = s.updated
                 let ago = shortDuration(age)
+                time = loc("\(ago) önce", "\(ago) ago")
                 status = s.state == .error ? loc("hata verdi · \(ago) önce", "hit an error · \(ago) ago")
                     : loc("bitti · \(ago) önce", "done · \(ago) ago")
-                rank = 2
+                unread = s.seenAt < at
+                rank = unread ? 1 : 3
             } else {
                 continue
             }
             let title = s.project ?? (id.hasPrefix("app-") ? loc("Açık sohbet", "Open chat") : loc("Oturum", "Session"))
-            rows.append(ChatRow(source: source, sessionID: id, title: title, state: st, status: status,
-                                target: s.target, rank: rank, at: at))
+            rows.append(ChatRow(source: source, sessionID: id, title: title, state: st == .idle ? s.state : st, status: status,
+                                target: s.target, rank: rank, at: at, time: time, unread: unread))
         }
         return rows
     }
 
-    /// Tüm AI'lardan sohbet listesi: seni bekleyenler önce, sonra çalışanlar (en eski önce), sonra bitenler (en yeni önce)
+    /// Tüm AI'lardan sohbet listesi: seni bekleyenler, yeni bitenler (bakılmamış), çalışanlar (en eski önce),
+    /// sonra bakılmış bitenler (en yeni önce)
     static func chatRows(_ models: [RobotModel], now: Date = Date(), max: Int = 6) -> [ChatRow] {
-        let all = models.flatMap { $0.chatRows(now: now) }.sorted { a, b in
+        Array(allChatRows(models, now: now).prefix(max))
+    }
+
+    static func allChatRows(_ models: [RobotModel], now: Date = Date()) -> [ChatRow] {
+        models.flatMap { $0.chatRows(now: now) }.sorted { a, b in
             if a.rank != b.rank { return a.rank < b.rank }
-            return a.rank == 2 ? a.at > b.at : a.at < b.at
+            return a.rank == 1 || a.rank == 3 ? a.at > b.at : a.at < b.at
         }
-        return Array(all.prefix(max))
+    }
+
+    /// Listenin başlığı: "1 bekliyor · 1 yeni · 2 çalışıyor"
+    static func chatSummary(_ rows: [ChatRow]) -> String {
+        var parts: [String] = []
+        let waiting = rows.filter { $0.rank == 0 }.count
+        let fresh = rows.filter { $0.rank == 1 }.count
+        let working = rows.filter { $0.rank == 2 }.count
+        if waiting > 0 { parts.append(loc("\(waiting) bekliyor", "\(waiting) waiting")) }
+        if fresh > 0 { parts.append(loc("\(fresh) yeni", "\(fresh) new")) }
+        if working > 0 { parts.append(loc("\(working) çalışıyor", "\(working) working")) }
+        return parts.isEmpty ? loc("hepsi bitti", "all done") : parts.joined(separator: " · ")
     }
 
     /// Şu an çalışan sohbet sayısı (başarım: aynı anda 3 sohbet)

@@ -655,10 +655,18 @@ public static partial class Tests
         A.Eq(3, rows.Count);
         A.Eq("gpt", rows[0].Source);                       // seni bekleyen önce
         A.True(rows[0].Status.Contains(Text.L("2 dk", "2 min")), rows[0].Status);
-        A.Eq("Tarif", rows[1].Title);                      // sonra çalışan
-        A.True(rows[1].Status.StartsWith(Text.L("çalışıyor", "working")) && rows[1].Status.Contains(Text.L("3 dk", "3 min")), rows[1].Status);
-        A.Eq("Kod incelemesi", rows[2].Title);             // sonra biten
-        A.True(rows[2].Status.Contains(Text.L("2 dk", "2 min")), rows[2].Status);
+        A.True(rows[0].Unread);
+        A.Eq("Kod incelemesi", rows[1].Title);             // sonra yeni biten (bakılmadı: nokta)
+        A.True(rows[1].Unread && rows[1].Status.Contains(Text.L("2 dk", "2 min")), rows[1].Status);
+        A.Eq(Text.L("2 dk önce", "2 min ago"), rows[1].Time);
+        A.Eq("Tarif", rows[2].Title);                      // sonra çalışan
+        A.True(!rows[2].Unread && rows[2].Status.StartsWith(Text.L("çalışıyor", "working")) && rows[2].Status.Contains(Text.L("3 dk", "3 min")), rows[2].Status);
+        A.Eq(Text.L("1 bekliyor · 1 yeni · 1 çalışıyor", "1 waiting · 1 new · 1 working"), DisplayPicker.ChatSummary(rows));
+        // Bakılınca nokta söner, biten sona iner
+        claude.MarkSeen("bg-1-x", t0.AddSeconds(200));
+        rows = DisplayPicker.ChatRows(new[] { claude, gpt }, t0.AddSeconds(220));
+        A.Eq("Kod incelemesi", rows[2].Title);
+        A.True(!rows[2].Unread && rows[2].State == RobotState.Done);
         // 15 dk'dan eski bitenler listede yok
         A.True(DisplayPicker.ChatRows(new[] { claude, gpt }, t0.AddSeconds(70 + 16 * 60)).All(r => r.Title != "Kod incelemesi"));
         A.Eq(Text.L("1 sa 6 dk", "1 h 6 min"), Text.ShortDuration(3960));
