@@ -10,9 +10,9 @@
     {"d":"M 50,4 L 50,24","stroke":"#00000022","w":1},
     {"ellipse":[50,4,3,2],"fill":"theme-dark"}]},
   {"id":"headphones","slot":"head","tr":"Kulaklık","en":"Headphones","level":5,"shapes":[
-    {"d":"M 6,44 C 6,6 94,6 94,44","stroke":"#3A3A48","w":5},
-    {"rect":[-2,35,12,28,5],"fill":"#3A3A48"},
-    {"rect":[90,35,12,28,5],"fill":"#3A3A48"},
+    {"d":"M 6,44 C 6,6 94,6 94,44","stroke":"#6E6A88","w":5},
+    {"rect":[-3,35,13,28,5],"fill":"#5A5674","stroke":"#3A3850","w":1},
+    {"rect":[90,35,13,28,5],"fill":"#5A5674","stroke":"#3A3850","w":1},
     {"rect":[8,39,4,20,2],"fill":"theme"},
     {"rect":[88,39,4,20,2],"fill":"theme"}]},
   {"id":"tophat","slot":"head","tr":"Silindir şapka","en":"Top hat","level":10,"shapes":[
@@ -61,8 +61,8 @@
     {"d":"M 64,64 C 51,56 48,47 54,42 C 58,39 62,41 64,45 C 66,41 70,39 74,42 C 80,47 77,56 64,64 Z","fill":"#FF4F8BCC","stroke":"#C2185B","w":1.2},
     {"d":"M 46,47 C 50,45 50,45 54,47","stroke":"#C2185B","w":2}]},
   {"id":"blush","slot":"face","tr":"Pembe yanak","en":"Rosy cheeks","level":2,"shapes":[
-    {"ellipse":[23,67,6,3],"fill":"#FF8FB180"},
-    {"ellipse":[77,67,6,3],"fill":"#FF8FB180"}]},
+    {"ellipse":[25,66,6,3.2],"fill":"#FF8FB1B0"},
+    {"ellipse":[75,66,6,3.2],"fill":"#FF8FB1B0"}]},
   {"id":"mustache","slot":"face","tr":"Bıyık","en":"Mustache","level":12,"shapes":[
     {"d":"M 50,66 C 46,63 40,63 37,66 C 34,69 30,69 28,66 C 30,72 38,73 44,70 C 47,69 49,68 50,68 C 51,68 53,69 56,70 C 62,73 70,72 72,66 C 70,69 66,69 63,66 C 60,63 54,63 50,66 Z","fill":"#6B4428"}]},
   {"id":"bowtie","slot":"face","tr":"Papyon","en":"Bow tie","achievement":"team","shapes":[
