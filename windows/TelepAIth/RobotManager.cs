@@ -236,7 +236,7 @@ internal sealed class RobotManager
         _approvals.RemoveAll(p => p.Finished);
         if (_avatar == null) return;
         var current = CurrentApproval();
-        _avatar.Approval = current == null ? null : new ApprovalPrompt(current.Id, current.Suggestions != null, current.CanAllow);
+        _avatar.Approval = current == null ? null : new ApprovalPrompt(current.Id, current.Suggestions != null, current.CanAllow, current.Card);
     }
 
     /// <summary>Balondaki düğme: kararı Claude Code'a gönder</summary>

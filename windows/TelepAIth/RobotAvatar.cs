@@ -11,7 +11,7 @@ public enum Health { Ok, Update, Broken }
 
 /// <summary>Balonda gösterilecek izin sorusu (düğmeler)</summary>
 /// <summary>CanAllow: "İzin ver" sadece tamamı okunabilen kısa kabuk komutunda (yoksa balondan sadece reddedilir)</summary>
-public sealed record ApprovalPrompt(int Id, bool HasAlways, bool CanAllow = true);
+public sealed record ApprovalPrompt(int Id, bool HasAlways, bool CanAllow = true, ApprovalCard? Card = null);
 
 /// <summary>
 /// Robotun yeri: köşeye yapışma, sürükleme, AI penceresine uçma. Konumlar fiziksel piksel (ekran), kafanın merkezi.

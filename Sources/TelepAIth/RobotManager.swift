@@ -193,7 +193,7 @@ final class RobotManager {
 
     func approvalsChanged() {
         approvals.removeAll { $0.finished }
-        avatar?.setApproval(currentApproval.map { ApprovalPrompt(id: $0.id, hasAlways: $0.suggestions != nil, canAllow: $0.canAllow) })
+        avatar?.setApproval(currentApproval.map { ApprovalPrompt(id: $0.id, hasAlways: $0.suggestions != nil, canAllow: $0.canAllow, card: $0.card) })
     }
 
     /// Balondaki düğme: kararı Claude Code'a gönder

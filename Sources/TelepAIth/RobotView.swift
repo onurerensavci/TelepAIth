@@ -224,7 +224,58 @@ struct BubbleView: View {
             .padding(tailLeading ? .leading : .trailing, 43)
     }
 
+    @ViewBuilder
     private var card: some View {
+        if let approval = approval, let info = approval.card {
+            approvalCard(approval, info)
+        } else {
+            plainCard
+        }
+    }
+
+    /// Onay balonu (Windows'ta DrawApprovalBubble): "‘shop’ seni bekliyor", "Bash kullanmak istiyor",
+    /// kod kutusunda komut (en fazla iki satır), eşit genişlikte büyük düğmeler.
+    private func approvalCard(_ approval: ApprovalPrompt, _ info: ApprovalCard) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 6) {
+                Circle().fill(color).frame(width: 8, height: 8)
+                Text(info.title)
+                    .font(.system(size: 11.5, weight: .semibold))
+                    .foregroundColor(.primary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+            .frame(height: 15)
+            Text(info.action)
+                .font(.system(size: 10.5, weight: .semibold))
+                .foregroundColor(.primary.opacity(0.92))
+                .lineLimit(1)
+                .padding(.leading, 14)
+                .frame(height: 14)
+            if let code = info.code {
+                Text(code)
+                    .font(.system(size: 9.5, design: .monospaced))
+                    .foregroundColor(.primary)
+                    .lineLimit(2)
+                    .truncationMode(.tail)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 5)
+                    .background(RoundedRectangle(cornerRadius: 6).fill(Color.primary.opacity(0.06)))
+                    .padding(.top, 5)
+            }
+            ApprovalButtons(approval: approval, color: color)
+                .padding(.top, 7)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .frame(width: 248, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 12).fill(fill))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(color.opacity(0.35), lineWidth: 1))
+    }
+
+    private var plainCard: some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 4) {
                 Circle().fill(color).frame(width: 7, height: 7)
@@ -894,36 +945,44 @@ struct WavesView: View {
     }
 }
 
-/// İzin sorusu düğmeleri: İzin ver · Hep izin ver · Reddet. Tıklamayı AppKit tarafı yakalar (yerlerini bildiriyoruz).
+/// İzin sorusu düğmeleri: eşit genişlikte İzin ver (AI renginde) · Hep izin ver · Reddet.
+/// Tıklamayı AppKit tarafı yakalar (yerlerini bildiriyoruz). (Windows'ta DrawApprovalBubble'daki düğmeler)
 struct ApprovalButtons: View {
     let approval: ApprovalPrompt
     let color: Color
-
-    private static let allow = Color(red: 0.14, green: 0.61, blue: 0.34)
-    private static let deny = Color(red: 0.88, green: 0.31, blue: 0.31)
 
     var body: some View {
         HStack(spacing: 6) {
             // "İzin ver" sadece tamamı balonda okunabilen kısa kabuk komutunda; gerisi balondan sadece reddedilir
             if approval.canAllow {
-                pill(.allow, loc("İzin ver", "Allow"), fill: ApprovalButtons.allow, text: .white)
+                button(.allow, loc("İzin ver", "Allow"), fill: allowFill, text: allowText)
             }
             if approval.canAllow && approval.hasAlways {
-                pill(.always, loc("Hep izin ver", "Always"), fill: nil, text: color)
+                button(.always, loc("Hep izin ver", "Always"), fill: Color.primary.opacity(0.1), text: color)
             }
-            pill(.deny, loc("Reddet", "Deny"), fill: nil, text: ApprovalButtons.deny)
+            button(.deny, loc("Reddet", "Deny"), fill: Color.primary.opacity(0.1), text: .primary)
         }
-        .fixedSize()
+        .frame(height: 23)
     }
 
-    private func pill(_ choice: ApprovalChoice, _ label: String, fill: Color?, text: Color) -> some View {
+    /// AI rengi biraz açılmış; üstündeki yazı renge göre koyu ya da beyaz
+    private var allowFill: Color {
+        Color(nsColor: (NSColor(color).usingColorSpace(.sRGB) ?? .systemOrange).blended(withFraction: 0.12, of: .white) ?? .systemOrange)
+    }
+
+    private var allowText: Color {
+        let c = NSColor(allowFill).usingColorSpace(.sRGB) ?? .white
+        let luma = 0.299 * c.redComponent + 0.587 * c.greenComponent + 0.114 * c.blueComponent
+        return luma > 150.0 / 255.0 ? Color(red: 0.12, green: 0.11, blue: 0.15) : .white
+    }
+
+    private func button(_ choice: ApprovalChoice, _ label: String, fill: Color, text: Color) -> some View {
         Text(label)
-            .font(.system(size: 10.5, weight: .semibold))
+            .font(.system(size: 11, weight: .semibold))
             .foregroundColor(text)
-            .padding(.horizontal, 11)
-            .frame(height: 22)
-            .background(Capsule().fill(fill ?? text.opacity(0.08)))
-            .overlay(Capsule().stroke(fill ?? text.opacity(0.75), lineWidth: 1))
+            .lineLimit(1)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(RoundedRectangle(cornerRadius: 7).fill(fill))
             .background(GeometryReader { g in
                 Color.clear.preference(key: ApprovalFramesKey.self, value: [choice: g.frame(in: .named("avatar"))])
             })

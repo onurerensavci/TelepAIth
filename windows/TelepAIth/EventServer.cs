@@ -202,7 +202,11 @@ internal sealed class PendingApproval
         Event = e;
         Suggestions = Approval.Suggestions(body);
         CanAllow = Approval.CanAllow(body);
+        Card = Approval.Card(body, Themes.Shared.Theme(e.Source).DisplayName);
     }
+
+    /// <summary>Balonun içeriği: başlık, ne istediği, kod kutusundaki komut</summary>
+    public ApprovalCard Card { get; }
 
     /// <summary>Karar (boşsa soru terminale bırakıldı)</summary>
     public Task<string> Result => _answer.Task;

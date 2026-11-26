@@ -492,10 +492,13 @@ public sealed class HttpRequest
 /// <summary>Robottan onay: Claude Code'un PermissionRequest hook'una dönen karar.</summary>
 public enum ApprovalChoice { Allow, Always, Deny }
 
+/// <summary>Onay balonunun içeriği: başlık, ne istediği, kod kutusundaki metin (yoksa null)</summary>
+public sealed record ApprovalCard(string Title, string Action, string? Code);
+
 public static class Approval
 {
-    /// <summary>Balondan izin verilebilecek en uzun komut (tamamı balonda okunabilsin).</summary>
-    public const int MaxAllowLength = 120;
+    /// <summary>Balondan izin verilebilecek en uzun komut: balondaki kod kutusunun iki satırına sığsın, tamamı okunsun.</summary>
+    public const int MaxAllowLength = 80;
     private static readonly string[] PlainKeys = { "command", "description", "timeout", "run_in_background" };
 
     /// <summary>
@@ -515,6 +518,39 @@ public static class Approval
         try { return JsonNode.Parse(body) is JsonObject j && CanAllow(j.Str("tool_name"), j.Obj("tool_input")); }
         catch { return false; }
     }
+
+    /// <summary>
+    /// Onay balonu: "‘shop’ seni bekliyor" başlığı, "Bash kullanmak istiyor" satırı ve kod kutusundaki komut
+    /// (ya da dosya adı, adres, arama). Mac'te Approval.card ile aynı.
+    /// </summary>
+    public static ApprovalCard Card(string body, string fallbackName)
+    {
+        JsonObject? j = null;
+        try { j = JsonNode.Parse(body) as JsonObject; } catch { }
+        var cwd = j.Str("cwd");
+        var project = !string.IsNullOrEmpty(cwd) ? LastPart(cwd) : null;
+        var title = project != null ? L($"‘{project}’ seni bekliyor", $"‘{project}’ is waiting for you") : L($"{fallbackName} seni bekliyor", $"{fallbackName} is waiting for you");
+        var tool = j.Str("tool_name") ?? "";
+        var input = j.Obj("tool_input");
+        var name = tool.StartsWith("mcp__", StringComparison.Ordinal) ? tool.Split("__").Last() : tool;
+        var action = tool switch
+        {
+            "Edit" or "MultiEdit" or "NotebookEdit" => L("bir dosyayı değiştirmek istiyor", "wants to edit a file"),
+            "Write" => L("bir dosya yazmak istiyor", "wants to write a file"),
+            "" => L("onayını istiyor", "needs your approval"),
+            _ => L($"{name} kullanmak istiyor", $"wants to use {name}"),
+        };
+        string? code = ToolDescriber.CommandString(input);
+        if (code != null) code = code.Replace("\r\n", " ⏎ ").Replace('\n', ' ').Replace('\r', ' ');
+        else if ((input.Str("file_path") ?? input.Str("notebook_path")) is { Length: > 0 } f) code = LastPart(f);
+        else code = input.Str("url") ?? input.Str("pattern") ?? input.Str("query") ?? input.Str("description");
+        if (code != null && code.Length > 200) code = code[..200] + "…";
+        return new ApprovalCard(title, action, string.IsNullOrWhiteSpace(code) ? null : code);
+    }
+
+    /// <summary>Yolun son parçası (Mac ve Windows ayraçlarıyla)</summary>
+    private static string LastPart(string path) =>
+        path.Split('/', '\\').LastOrDefault(x => x.Length > 0) ?? path;
 
     /// <summary>Claude'un önerdiği izin kuralları (permission_suggestions) varsa "Hep izin ver" gösterilir.</summary>
     public static JsonArray? Suggestions(string body)

@@ -171,6 +171,8 @@ internal sealed class RobotView : FrameworkElement
 
     private Rect DrawBubble(DrawingContext dc, RobotModel model, string text, bool alignLeft, bool below, double headY)
     {
+        if (_avatar.Approval is { Card: { } approvalCard } prompt)
+            return DrawApprovalBubble(dc, model, prompt, approvalCard, alignLeft, below, headY);
         var dpi = VisualTreeHelper.GetDpi(this).PixelsPerDip;
         var dark = Dark;
         var fill = dark ? Color.FromRgb(0x2B, 0x2A, 0x33) : Color.FromRgb(0xFB, 0xFA, 0xF8);
@@ -403,6 +405,87 @@ internal sealed class RobotView : FrameworkElement
     private const double ButtonRowH = 22, ButtonGap = 6;
     private static readonly Color Allow = Color.FromRgb(0x23, 0x9B, 0x56);
     private static readonly Color Deny = Color.FromRgb(0xE0, 0x4F, 0x4F);
+    private static readonly Typeface Mono = new(new FontFamily("Cascadia Mono, Consolas"), FontStyles.Normal, FontWeights.Normal, FontStretches.Normal);
+
+    /// <summary>
+    /// Onay balonu (Mac'te ApprovalBubble): "‘shop’ seni bekliyor", "Bash kullanmak istiyor", kod kutusunda komut
+    /// (en fazla iki satır) ve eşit genişlikte büyük düğmeler: İzin ver (AI renginde) · Hep izin ver · Reddet.
+    /// </summary>
+    private Rect DrawApprovalBubble(DrawingContext dc, RobotModel model, ApprovalPrompt approval, ApprovalCard info,
+                                    bool alignLeft, bool below, double headY)
+    {
+        var dpi = VisualTreeHelper.GetDpi(this).PixelsPerDip;
+        var dark = Dark;
+        var fill = dark ? Color.FromRgb(0x2B, 0x2A, 0x33) : Color.FromRgb(0xFB, 0xFA, 0xF8);
+        var primary = dark ? Colors.White : Color.FromRgb(0x1E, 0x1C, 0x26);
+        var color = C(model.Theme.Color);
+        const double padX = 12, padY = 8, titleH = 15, actionH = 14, buttonH = 23, gap = 6;
+        var cardW = W - 2 * M;
+        var innerW = cardW - 2 * padX;
+
+        var title = new FormattedText(info.Title, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, UiSemi, 11.5, B(primary), dpi)
+            { MaxTextWidth = innerW - 12, MaxLineCount = 1, Trimming = TextTrimming.CharacterEllipsis };
+        var action = new FormattedText(info.Action, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, UiSemi, 10.5, B(primary, 0.92), dpi)
+            { MaxTextWidth = innerW - 12, MaxLineCount = 1, Trimming = TextTrimming.CharacterEllipsis };
+        FormattedText? code = null;
+        if (info.Code is { } c)
+            code = new FormattedText(c, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, Mono, 9.5, B(primary), dpi)
+                { MaxTextWidth = innerW - 14, MaxLineCount = 2, Trimming = TextTrimming.CharacterEllipsis };
+        var codeH = code != null ? Math.Ceiling(code.Height) + 10 : 0;
+        var cardH = padY + titleH + actionH + (code != null ? 5 + codeH : 0) + gap + 1 + buttonH + padY;
+
+        var cardX = alignLeft ? M : W - M - cardW;
+        var cardY = below ? headY + Head + Gap + TailH : Math.Max(2, headY - Gap - TailH - cardH);
+        var full = DrawCard(dc, new Rect(cardX, cardY, cardW, cardH), alignLeft, below, fill, color);
+
+        var tx = cardX + padX;
+        var y = cardY + padY;
+        dc.DrawEllipse(B(color), null, new Point(tx + 4, y + titleH / 2), 4, 4);
+        dc.DrawText(title, new Point(tx + 13, y + (titleH - title.Height) / 2));
+        y += titleH;
+        dc.DrawText(action, new Point(tx + 13, y + (actionH - action.Height) / 2));
+        y += actionH;
+        if (code != null)
+        {
+            y += 5;
+            var box = new Rect(tx, y, innerW, codeH);
+            dc.DrawRoundedRectangle(B(dark ? Colors.White : Colors.Black, dark ? 0.07 : 0.05), null, box, 6, 6);
+            dc.DrawText(code, new Point(tx + 7, y + 5));
+            y += codeH;
+        }
+        y += gap + 1;
+
+        // Düğmeler: eşit genişlik; İzin ver AI renginde, diğerleri sade
+        ButtonRects.Clear();
+        var choices = new List<(ApprovalChoice Choice, string Label)>();
+        if (approval.CanAllow) choices.Add((ApprovalChoice.Allow, L("İzin ver", "Allow")));
+        if (approval.CanAllow && approval.HasAlways) choices.Add((ApprovalChoice.Always, L("Hep izin ver", "Always")));
+        choices.Add((ApprovalChoice.Deny, L("Reddet", "Deny")));
+        var bw = (innerW - (choices.Count - 1) * gap) / choices.Count;
+        var scale = _avatar.PixelScale / VisualTreeHelper.GetDpi(this).DpiScaleX;
+        var hover = Mouse.GetPosition(this);
+        var allowFill = C(model.Theme.Color.Mix(Rgb.White, 0.12));
+        var allowText = Luma(allowFill) > 150 ? Color.FromRgb(0x1E, 0x1C, 0x26) : Colors.White;
+        var neutral = dark ? Color.FromArgb(0x24, 0xFF, 0xFF, 0xFF) : Color.FromArgb(0x14, 0, 0, 0);
+        for (var i = 0; i < choices.Count; i++)
+        {
+            var (choice, label) = choices[i];
+            var r = new Rect(tx + i * (bw + gap), y, bw, buttonH);
+            var screenRect = new Rect(r.X * scale, r.Y * scale, r.Width * scale, r.Height * scale);
+            ButtonRects[choice] = screenRect;
+            var over = screenRect.Contains(hover);
+            var isAllow = choice == ApprovalChoice.Allow;
+            var bg = isAllow ? allowFill : neutral;
+            dc.DrawRoundedRectangle(new SolidColorBrush(bg) { Opacity = over ? 0.8 : 1 }, null, r, 7, 7);
+            var text = new FormattedText(label, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, UiSemi, 11,
+                B(isAllow ? allowText : choice == ApprovalChoice.Deny ? primary : color), dpi)
+                { MaxTextWidth = bw - 6, MaxLineCount = 1, Trimming = TextTrimming.CharacterEllipsis };
+            dc.DrawText(text, new Point(r.X + (r.Width - text.Width) / 2, r.Y + (r.Height - text.Height) / 2));
+        }
+        return full;
+    }
+
+    private static double Luma(Color c) => 0.299 * c.R + 0.587 * c.G + 0.114 * c.B;
 
     /// <summary>Düğmelerin pencere içindeki yeri (DIP) — tıklama için</summary>
     public Dictionary<ApprovalChoice, Rect> ButtonRects { get; } = new();
