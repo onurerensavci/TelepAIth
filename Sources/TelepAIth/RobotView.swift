@@ -743,7 +743,7 @@ struct FaceView: View {
                 .frame(width: 70, height: 44)
                 .position(x: 50, y: 52)
             VisorGlass()
-            OutfitView(items: outfit.filter { $0.slot == "face" || $0.slot == "eyes" }, theme: themeColor, time: itemTime)
+            OutfitView(items: outfit.filter { ["neck", "face", "eyes"].contains($0.slot) }, theme: themeColor, time: itemTime)
             // Baş parçası (kışın şapka takılı değilse bere); alındaki sağlık ışığı her zaman üstte görünür:
             // ışığı örten kep ve berede ışığın olduğu yerde delik var
             ZStack {

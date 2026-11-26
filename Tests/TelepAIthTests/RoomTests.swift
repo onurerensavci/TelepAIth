@@ -9,7 +9,7 @@ final class RoomTests: XCTestCase {
     }
 
     func testOutfitsParseAndColors() {
-        XCTAssertEqual(Outfits.all.count, 17)
+        XCTAssertEqual(Outfits.all.count, 30)
         XCTAssertTrue(Outfits.all.allSatisfy { Outfits.slots.contains($0.slot) && !$0.shapes.isEmpty && !$0.name.isEmpty })
         XCTAssertEqual(Set(Outfits.all.map(\.id)).count, Outfits.all.count)
         XCTAssertTrue(Outfits.all.compactMap(\.achievement).allSatisfy { Achievements.find($0) != nil })
@@ -18,11 +18,11 @@ final class RoomTests: XCTestCase {
         XCTAssertEqual(c.a, 128.0 / 255, accuracy: 0.001)
         XCTAssertEqual(Outfits.color("theme-dark", theme: (100.0 / 255, 100.0 / 255, 100.0 / 255)).r, 72.0 / 255, accuracy: 0.001)
         XCTAssertTrue(Outfits.find("beanie")!.shapes.contains { $0.fill?.radial?.count == 3 && ($0.fill?.stops.count ?? 0) >= 2 })
-        XCTAssertTrue(Outfits.find("tophat")!.shapes.contains { $0.fill?.linear?.count == 4 })
+        XCTAssertTrue(Outfits.find("crown")!.shapes.contains { $0.fill?.linear?.count == 4 })
         let sway = Outfits.find("beanie")!.shapes.compactMap(\.anim).first!
         XCTAssertEqual(sway.kind, "sway")
         XCTAssertEqual(sway.at(0.25 / sway.speed).rotate, sway.amount, accuracy: 0.001)
-        let rise = Outfits.find("coffee")!.shapes.compactMap(\.anim).first { $0.kind == "rise" }!
+        let rise = Outfits.find("gramophone")!.shapes.compactMap(\.anim).first { $0.kind == "rise" }!
         XCTAssertEqual(rise.at(0.5 / rise.speed).dy, -rise.amount / 2, accuracy: 0.001)
         XCTAssertEqual(OutfitAnim(kind: "twinkle", amount: 1, speed: 1, offset: 0, pivot: nil).at(0.5).opacity, 0)
         // Her yol okunabiliyor
@@ -63,16 +63,43 @@ final class RoomTests: XCTestCase {
         let news = pr.takeNews()
         XCTAssertTrue(news.achievements.contains { $0.id == "hello" } && news.achievements.contains { $0.id == "lead" })
         XCTAssertTrue(pr.takeNews().achievements.isEmpty)
-        let cap = Outfits.find("cap")!
+        let cap = Outfits.find("beanie")!
         XCTAssertFalse(Outfits.unlocked(cap, ProgressData()))
         var rich = ProgressData()
         rich.turns = 30
         XCTAssertTrue(Outfits.unlocked(cap, rich))
-        XCTAssertTrue(Outfits.unlockHint(Outfits.find("party")!).contains("Büyük gün"))
+        XCTAssertTrue(Outfits.unlockHint(Outfits.find("scarf")!).contains("Erkenci"))
         // Eski kayıt (eksik alanlar) okunur
         let old = try! JSONDecoder().decode(ProgressData.self, from: Data(#"{"turns":5}"#.utf8))
         XCTAssertEqual(old.turns, 5)
         XCTAssertEqual(old.toldLevel, 1)
+    }
+
+    func testOutfitTypesAndNews() {
+        // 6 tip × 5 parça: her yuvadan bir tane, biri gizli ödül
+        XCTAssertEqual(Outfits.types.count, 6)
+        for t in Outfits.types {
+            let items = Outfits.items(of: t.id)
+            XCTAssertEqual(Set(items.map(\.slot)), Set(Outfits.slots), t.id)
+            XCTAssertEqual(items.filter(\.legendary).count, 1, t.id)
+            XCTAssertNil(items.first(where: \.legendary)?.achievement, t.id)   // gizli ödül seviyeyle açılır
+        }
+        var p = ProgressData()
+        XCTAssertEqual(Outfits.displayName(Outfits.find("crown")!, p), "Gizli ödül")
+        XCTAssertFalse(Outfits.typeComplete("coder", p))
+        // Yeni açılanlar: ilk seferde sessizce kaydedilir, sonra yeni açılanlar bir kez söylenir
+        let pr = Progress(defaultsKey: nil)
+        XCTAssertTrue(pr.takeOutfitNews().items.isEmpty)
+        for _ in 0..<30 { pr.turn(source: "claude", seconds: 60, tools: 1, edits: 1, at: Date(), todayTurns: 1) }
+        let news = pr.takeOutfitNews()
+        XCTAssertTrue(news.items.contains { $0.id == "beanie" } && news.items.contains { $0.id == "lanyard" })
+        XCTAssertTrue(pr.takeOutfitNews().items.isEmpty)
+        let lines = Outfits.newsLines(news.items, [Outfits.findType("king")!])
+        XCTAssertTrue(lines.first!.hasPrefix("🎉 Gardıropta açıldı: "))
+        XCTAssertTrue(lines.last!.contains("Kral tipi tamamlandı"))
+        XCTAssertTrue(Outfits.newsLines([Outfits.find("crown")!], []).first!.contains("Gizli ödül açıldı: Taç"))
+        p.turns = 5000; p.edits = 5000; p.ciPassed = 30; p.earlyTurns = 10; p.maxParallel = 3; p.sources = ["claude", "gpt"]
+        XCTAssertTrue(Outfits.typeComplete("coder", p))
     }
 
     func testEffortByProject() {

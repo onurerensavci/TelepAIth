@@ -71,6 +71,7 @@ struct OutfitShape {
     var anim: OutfitAnim? = nil
 }
 
+/// Gardırop parçası; type: hangi tipin (polis, kral…), legendary: tipin parıltılı gizli ödülü.
 struct OutfitItem: Identifiable {
     let id: String
     let slot: String
@@ -79,19 +80,93 @@ struct OutfitItem: Identifiable {
     let level: Int
     let achievement: String?
     let shapes: [OutfitShape]
+    var type = ""
+    var legendary = false
     var name: String { loc(nameTr, nameEn) }
 }
 
+/// Tip: aynı temanın 5 parçası (her yuvadan bir tane, biri gizli ödül); hepsi açılınca o tip olursun.
+struct OutfitType: Identifiable {
+    let id: String
+    let emoji: String
+    let nameTr: String
+    let nameEn: String
+    let descTr: String
+    let descEn: String
+    var name: String { loc(nameTr, nameEn) }
+    var description: String { loc(descTr, descEn) }
+}
+
 enum Outfits {
-    static let slots = ["head", "eyes", "face", "side"]
+    static let slots = ["head", "eyes", "face", "neck", "side"]
 
     static func slotName(_ slot: String) -> String {
         switch slot {
         case "head": return loc("Baş", "Head")
         case "eyes": return loc("Gözlük", "Glasses")
         case "face": return loc("Yüz", "Face")
+        case "neck": return loc("Boyun", "Neck")
         default: return loc("Yanında", "Beside")
         }
+    }
+
+    /// Tipler (kolaydan zora): her birinin 5 parçası var, sonuncusu gizli ödül.
+    static let types: [OutfitType] = [
+        OutfitType(id: "coder", emoji: "💻", nameTr: "Kodcu", nameEn: "Coder",
+                   descTr: "Kulaklığı takar, ördeğiyle hata ayıklar", descEn: "Headphones on, debugging with a duck"),
+        OutfitType(id: "hipster", emoji: "☕", nameTr: "Hipster", nameEn: "Hipster",
+                   descTr: "Bere, bıyık ve plak sesi", descEn: "Beanie, mustache and vinyl crackle"),
+        OutfitType(id: "police", emoji: "🚓", nameTr: "Polis", nameEn: "Police",
+                   descTr: "Kodun düzenini korur", descEn: "Keeps the code in order"),
+        OutfitType(id: "marketing", emoji: "📣", nameTr: "Pazarlamacı", nameEn: "Marketer",
+                   descTr: "Fikir bulur, duyurur, uçurur", descEn: "Finds the idea, shouts it, launches it"),
+        OutfitType(id: "artist", emoji: "🎨", nameTr: "Sanatçı", nameEn: "Artist",
+                   descTr: "Her satırı bir tuval gibi görür", descEn: "Sees every line as a canvas"),
+        OutfitType(id: "king", emoji: "👑", nameTr: "Kral", nameEn: "King",
+                   descTr: "Robotların en yücesi", descEn: "The highest of all robots"),
+    ]
+
+    static func findType(_ id: String?) -> OutfitType? { types.first { $0.id == id } }
+
+    static func items(of type: String) -> [OutfitItem] { all.filter { $0.type == type } }
+
+    /// Tipin 5 parçasının hepsi açık mı?
+    static func typeComplete(_ type: String, _ p: ProgressData) -> Bool {
+        let list = items(of: type)
+        return !list.isEmpty && list.allSatisfy { unlocked($0, p) }
+    }
+
+    static func completedTypes(_ p: ProgressData) -> [OutfitType] { types.filter { typeComplete($0.id, p) } }
+
+    /// Tipin açık parçalarının hepsini giy
+    static func wearType(_ type: String, _ p: ProgressData) {
+        for i in items(of: type) where unlocked(i, p) { Preferences.setOutfit(i.slot, i.id) }
+    }
+
+    /// "Açıldı: Bere, Bıyık", "✨ Gizli ödül açıldı: Taç!", "👑 Kral tipi tamamlandı!" (Windows'ta Outfits.NewsLines, aynı metinler)
+    static func newsLines(_ items: [OutfitItem], _ types: [OutfitType]) -> [String] {
+        var lines: [String] = []
+        let normal = items.filter { !$0.legendary }
+        if !normal.isEmpty {
+            var names = normal.prefix(3).map(\.name).joined(separator: ", ")
+            if normal.count > 3 { names += loc(" ve \(normal.count - 3) parça daha", " and \(normal.count - 3) more") }
+            lines.append("🎉 " + loc("Gardıropta açıldı: ", "Unlocked in the wardrobe: ") + names)
+        }
+        for item in items where item.legendary {
+            lines.append("✨ " + loc("Gizli ödül açıldı: ", "Secret reward unlocked: ") + item.name + "!")
+        }
+        for t in types {
+            lines.append(t.emoji + " " + loc("\(t.name) tipi tamamlandı! Odadan hepsini birden giyebilirsin.",
+                                             "\(t.name) set complete! Wear it all from the room."))
+        }
+        return lines
+    }
+
+    static func takeOffAll() { for s in slots { Preferences.setOutfit(s, nil) } }
+
+    /// Gizli ödülün adı açılana kadar görünmez
+    static func displayName(_ item: OutfitItem, _ p: ProgressData) -> String {
+        item.legendary && !unlocked(item, p) ? loc("Gizli ödül", "Secret reward") : item.name
     }
 
     static let all: [OutfitItem] = parse(OutfitData.json)
@@ -111,7 +186,7 @@ enum Outfits {
             return OutfitItem(id: node["id"] as? String ?? "", slot: node["slot"] as? String ?? "head",
                               nameTr: node["tr"] as? String ?? "", nameEn: node["en"] as? String ?? "",
                               level: (node["level"] as? NSNumber)?.intValue ?? 0, achievement: node["achievement"] as? String,
-                              shapes: shapes)
+                              shapes: shapes, type: node["type"] as? String ?? "", legendary: node["legendary"] as? Bool ?? false)
         }
     }
 
@@ -131,9 +206,9 @@ enum Outfits {
         return (Double((v >> 24) & 0xFF) / 255, Double((v >> 16) & 0xFF) / 255, Double((v >> 8) & 0xFF) / 255, Double(v & 0xFF) / 255)
     }
 
-    /// Takılı ve açık parçalar (çizim sırası: yanında, yüz, gözlük, baş)
+    /// Takılı ve açık parçalar (çizim sırası: yanında, boyun, yüz, gözlük, baş)
     static func worn(_ p: ProgressData) -> [OutfitItem] {
-        ["side", "face", "eyes", "head"].compactMap { find(Preferences.outfit($0)) }.filter { unlocked($0, p) }
+        ["side", "neck", "face", "eyes", "head"].compactMap { find(Preferences.outfit($0)) }.filter { unlocked($0, p) }
     }
 
     /// Parça açık mı (seviyeyle ya da başarımla)?
@@ -225,6 +300,8 @@ struct ProgressData: Codable, Equatable {
     var sources: [String] = []
     var unlocked: [String] = []   // söylenmiş başarımlar
     var toldLevel = 1
+    /// Açıldığı söylenmiş gardırop parçaları (nil: ilk açılış, sessizce doldurulur)
+    var seenItems: [String]?
 
     init() {}
 
@@ -248,6 +325,7 @@ struct ProgressData: Codable, Equatable {
         sources = try c.decodeIfPresent([String].self, forKey: .sources) ?? []
         unlocked = try c.decodeIfPresent([String].self, forKey: .unlocked) ?? []
         toldLevel = try c.decodeIfPresent(Int.self, forKey: .toldLevel) ?? 1
+        seenItems = try c.decodeIfPresent([String].self, forKey: .seenItems)
     }
 }
 
@@ -306,6 +384,23 @@ final class Progress {
         guard working > data.maxParallel else { return }
         data.maxParallel = working
         save()
+    }
+
+    /// Yeni açılan gardırop parçaları ve tamamlanan tipler (bir kez döner). İlk açılışta sessizce kaydeder.
+    func takeOutfitNews() -> (items: [OutfitItem], types: [OutfitType]) {
+        lock.lock(); defer { lock.unlock() }
+        let open = Outfits.all.filter { Outfits.unlocked($0, data) }.map(\.id)
+        guard let seen = data.seenItems else {
+            data.seenItems = open
+            save()
+            return ([], [])
+        }
+        let fresh = Outfits.all.filter { open.contains($0.id) && !seen.contains($0.id) }
+        guard !fresh.isEmpty else { return ([], []) }
+        data.seenItems = seen + fresh.map(\.id)
+        save()
+        let types = Outfits.types.filter { t in fresh.contains { $0.type == t.id } && Outfits.typeComplete(t.id, data) }
+        return (fresh, types)
     }
 
     /// Henüz söylenmemiş yeni başarımlar ve seviye (bir kez döner).

@@ -274,7 +274,9 @@ internal sealed class RobotManager
     {
         if (FocusMode.IsActive && !notice.Important) return;
         if (!Prefs.NotifyWhenFrontmost && quietPid is { } pid && Native.WindowPid(Native.GetForegroundWindow()) == pid) return;
-        Notifier.Notify(notice.Title, notice.Body, notice.Target, kind: notice.Kind);
+        // Sohbetin bildirimi: tıklayınca o sohbet açılır (listeden seçmek gibi)
+        Action? open = notice is { Source: { } src, SessionId: { } sid } ? () => OpenChat(src, sid, notice.Target) : null;
+        Notifier.Notify(notice.Title, notice.Body, notice.Target, open, notice.Kind);
         if (!FocusMode.IsActive) Speech.Say(notice.Title, notice.Kind);
     }
 
@@ -397,6 +399,25 @@ internal sealed class RobotManager
         if (_watcher.OpenChat(row.SessionId)) return;
         // Claude Code: çalıştığı terminal; uygulama sohbeti: uygulamanın penceresi
         if (row.Target is { IsEmpty: false } target)
+        {
+            Activate(target);
+            return;
+        }
+        OpenCurrentApp();
+    }
+
+    /// <summary>Bildirimine tıklanan sohbeti aç (listeden seçmekle aynı yol).</summary>
+    private void OpenChat(string source, string sessionId, AppTarget? fallback)
+    {
+        if (_avatar != null) _avatar.ChatList = null;
+        if (_models.TryGetValue(source, out var m))
+        {
+            m.MarkSeen(sessionId, DateTime.Now);
+            _pinnedSource = source;
+            Show(m);
+        }
+        if (_watcher.OpenChat(sessionId)) return;
+        if (fallback is { IsEmpty: false } target)
         {
             Activate(target);
             return;
@@ -723,26 +744,23 @@ internal sealed class RobotManager
         _window?.Frame(dt, render: !(_avatar?.Paused ?? false));
     }
 
-    /// <summary>Yeni başarım ya da seviye: robot balonda söyler (bildirim atmaz). Odak modunda bekler.</summary>
+    /// <summary>Yeni başarım, seviye ya da gardırop parçası: robot balonda söyler (bildirim atmaz); parça açıldıysa sevinir. Odak modunda bekler.</summary>
     private void AnnounceProgress()
     {
         if (FocusMode.IsActive || _avatar == null) return;
         // Seni bekleyen bir şey varken balonu kapatma: haber sonra söylenir
         if (_avatar.Approval != null || _models.Values.Any(m => m.State is RobotState.Waiting or RobotState.Error)) return;
         var (achievements, level) = Progress.Shared.TakeNews();
+        var (items, types) = Progress.Shared.TakeOutfitNews();
         var lines = achievements.Take(2).Select(a => "🏅 " + L("Yeni başarım: ", "New achievement: ") + a.Title).ToList();
-        if (level is { } lv)
-        {
-            var text = "⭐ " + L($"Seviye {lv}!", $"Level {lv}!");
-            var opened = Outfits.All.Where(i => i.Achievement == null && i.Level == lv).Select(i => i.Name).ToList();
-            if (opened.Count > 0) text += " " + L("Gardıropta açıldı: ", "Unlocked: ") + string.Join(", ", opened);
-            lines.Add(text);
-        }
-        var byAchievement = achievements.Select(a => Outfits.All.FirstOrDefault(i => i.Achievement == a.Id)?.Name).OfType<string>().ToList();
-        if (byAchievement.Count > 0) lines.Add("👕 " + L("Gardıropta açıldı: ", "Unlocked: ") + string.Join(", ", byAchievement));
+        if (level is { } lv) lines.Add("⭐ " + L($"Seviye {lv}!", $"Level {lv}!"));
+        lines.AddRange(Outfits.NewsLines(items, types));
         if (lines.Count == 0) return;
-        _avatar.Current.Apply(new AgentEvent(_avatar.Current.Source, "room", EventKind.Say, text: string.Join("\n", lines)), DateTime.Now);
+        var text = string.Join("\n", lines);
+        if (items.Count == 0) _avatar.Current.Say(text, 8);
+        else _avatar.Current.Celebrate(text);
     }
+
 
     /// <summary>
     /// Sakin çizim: robot boşta ve hiçbir şey olmuyorken (balon, ruh hâli, sohbet, imleç hareketi yok) kafa yavaşça

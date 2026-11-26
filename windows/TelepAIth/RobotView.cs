@@ -715,7 +715,7 @@ internal sealed class RobotView : FrameworkElement
         var hasHat = worn.Any(i => i.Slot == "head");
         // Parça hareketleri: robot dinginken (sakin çizim, "hareketi azalt") durur
         var itemTime = _avatar.Stillness >= 0.999 ? 0.3 : time;
-        DrawOutfit(dc, worn.Where(i => i.Slot is "face" or "eyes"), themeRgb, itemTime);
+        DrawOutfit(dc, worn.Where(i => i.Slot is "neck" or "face" or "eyes"), themeRgb, itemTime);
 
         // Baş parçası (kışın şapka takılı değilse bere); alındaki sağlık ışığı her zaman üstte görünür:
         // ışığı örten kep ve berede ışığın olduğu yerde delik var

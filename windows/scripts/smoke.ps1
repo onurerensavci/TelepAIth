@@ -230,11 +230,11 @@ Dbg "ui?open=room&tab=effort" | Out-Null
 Start-Sleep -Milliseconds 600
 Check ((State).room -eq "effort") "robotun odası açıldı (Emek sekmesi)"
 Dbg "ui?open=close" | Out-Null
-Dbg "outfit?slot=head&id=beanie" | Out-Null
+Dbg "outfit?slot=head&id=headphones" | Out-Null
 Start-Sleep -Milliseconds 1200
 $st = State
-Shot "9-outfit-beanie"
-Check ($st.outfit -like "*beanie*") "gardıroptan takılan bere robotta ($($st.outfit), seviye $($st.level))"
+Shot "9-outfit-headphones"
+Check ($st.outfit -like "*headphones*") "gardıroptan takılan kulaklık robotta ($($st.outfit), seviye $($st.level))"
 Dbg "outfit?slot=head" | Out-Null
 
 # Robottan onay: hook izin ister, robotun balonundaki düğmeye tıklanır, karar hook'un çıktısına yazılır

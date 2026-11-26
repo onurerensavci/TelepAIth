@@ -28,7 +28,9 @@ public sealed class RobotModel
     }
 
     /// <summary>Kind: ses ayarı için olay türü (done, waiting, reminder, error, usage, alert, summary)</summary>
-    public sealed record Notice(string Title, string Body, bool Important = false, AppTarget? Target = null, string Kind = "done");
+    /// <summary>Bildirim; Source + SessionId: tıklayınca açılacak sohbet.</summary>
+    public sealed record Notice(string Title, string Body, bool Important = false, AppTarget? Target = null, string Kind = "done",
+                                string? Source = null, string? SessionId = null);
 
     /// <summary>Kafaya tıklayınca açılan listedeki bir sohbet: ad, durum, "çalışıyor · 3 dk" gibi durum yazısı</summary>
     /// <summary>
@@ -157,7 +159,7 @@ public sealed class RobotModel
     }
 
     /// <summary>Robotun kısa sesi: genel ayar açık ve bu tür olayın sesi açıksa (Ses sekmesi)</summary>
-    private static void Play(string name, string kind)
+    public static void Play(string name, string kind)
     {
         Effects.Kick(Effects.Strength(name));
         if (!Prefs.Sounds || !Prefs.SoundOn(kind) || FocusMode.IsActive) return;
@@ -392,7 +394,18 @@ public sealed class RobotModel
         }
 
         Refresh(now);
+        if (notice != null) notice = notice with { Source = Source, SessionId = e.SessionId };
         return e.NoNotice ? null : notice;
+    }
+
+    /// <summary>Kutlama: sevinçle zıplar, parıltı saçar ve balonda söyler (gardıropta bir şey açıldı…)</summary>
+    public void Celebrate(string text, double seconds = 9)
+    {
+        var now = DateTime.Now;
+        SetMood(Core.Mood.Party, 4, now);
+        CelebrateStart = now;
+        Play("Hero", "summary");
+        Say(text, seconds);
     }
 
     /// <summary>Robotun balonda bir şey söylemesi (güncelleme haberi, uyarı…). Odak modunda da görünür.</summary>
@@ -472,14 +485,14 @@ public sealed class RobotModel
             // Uzun süre onay bekleyen oturum: 2 dakika sonra bir kez daha hatırlat
             if (Prefs.WaitReminders)
             {
-                foreach (var s in _sessions.Values)
+                foreach (var (id, s) in _sessions)
                 {
                     if (s.State != RobotState.Waiting || s.Reminded || s.WaitingSince == null) continue;
                     if ((now - s.WaitingSince.Value).TotalSeconds < 120) continue;
                     s.Reminded = true;
                     var place = s.Project != null ? " · " + s.Project : "";
                     PendingNotices.Add(new Notice(WithEmoji("⏰", Theme.DisplayName + L(" hâlâ seni bekliyor", " is still waiting for you") + place),
-                                                  s.Text ?? L("Cevabını bekliyor", "Waiting for your reply"), true, s.Target, "reminder"));
+                                                  s.Text ?? L("Cevabını bekliyor", "Waiting for your reply"), true, s.Target, "reminder", Source, id));
                     ShowOverride(WithEmoji("⏰", L("Hâlâ onayını bekliyorum!", "Still waiting for your OK!")), 6, now);
                 }
             }

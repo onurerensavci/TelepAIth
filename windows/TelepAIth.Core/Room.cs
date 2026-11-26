@@ -65,22 +65,86 @@ public sealed record OutfitAnim(string Kind, double Amount, double Speed, double
 public sealed record OutfitShape(string? Path, double[]? Ellipse, double[]? Rect, OutfitPaint? Fill, OutfitPaint? Stroke, double Width,
                                  OutfitAnim? Anim = null);
 
-public sealed record OutfitItem(string Id, string Slot, string NameTr, string NameEn, int Level, string? Achievement, IReadOnlyList<OutfitShape> Shapes)
+/// <summary>Gardırop parçası; Type: hangi tipin (polis, kral…), Legendary: tipin parıltılı gizli ödülü.</summary>
+public sealed record OutfitItem(string Id, string Slot, string NameTr, string NameEn, int Level, string? Achievement, IReadOnlyList<OutfitShape> Shapes,
+                                string Type = "", bool Legendary = false)
 {
     public string Name => L(NameTr, NameEn);
 }
 
+/// <summary>Tip: aynı temanın 5 parçası (her yuvadan bir tane, biri gizli ödül); hepsi açılınca o tip olursun.</summary>
+public sealed record OutfitType(string Id, string Emoji, string NameTr, string NameEn, string DescTr, string DescEn)
+{
+    public string Name => L(NameTr, NameEn);
+    public string Description => L(DescTr, DescEn);
+}
+
+
 public static class Outfits
 {
-    public static readonly string[] Slots = { "head", "eyes", "face", "side" };
+    public static readonly string[] Slots = { "head", "eyes", "face", "neck", "side" };
 
     public static string SlotName(string slot) => slot switch
     {
         "head" => L("Baş", "Head"),
         "eyes" => L("Gözlük", "Glasses"),
         "face" => L("Yüz", "Face"),
+        "neck" => L("Boyun", "Neck"),
         _ => L("Yanında", "Beside"),
     };
+
+    /// <summary>Tipler (kolaydan zora): her birinin 5 parçası var, sonuncusu gizli ödül.</summary>
+    public static readonly OutfitType[] Types =
+    {
+        new("coder", "💻", "Kodcu", "Coder", "Kulaklığı takar, ördeğiyle hata ayıklar", "Headphones on, debugging with a duck"),
+        new("hipster", "☕", "Hipster", "Hipster", "Bere, bıyık ve plak sesi", "Beanie, mustache and vinyl crackle"),
+        new("police", "🚓", "Polis", "Police", "Kodun düzenini korur", "Keeps the code in order"),
+        new("marketing", "📣", "Pazarlamacı", "Marketer", "Fikir bulur, duyurur, uçurur", "Finds the idea, shouts it, launches it"),
+        new("artist", "🎨", "Sanatçı", "Artist", "Her satırı bir tuval gibi görür", "Sees every line as a canvas"),
+        new("king", "👑", "Kral", "King", "Robotların en yücesi", "The highest of all robots"),
+    };
+
+    public static OutfitType? FindType(string? id) => Types.FirstOrDefault(t => t.Id == id);
+
+    public static List<OutfitItem> ItemsOf(string type) => All.Where(i => i.Type == type).ToList();
+
+    /// <summary>Tipin 5 parçasının hepsi açık mı?</summary>
+    public static bool TypeComplete(string type, ProgressData p)
+    {
+        var items = ItemsOf(type);
+        return items.Count > 0 && items.All(i => Unlocked(i, p));
+    }
+
+    public static List<OutfitType> CompletedTypes(ProgressData p) => Types.Where(t => TypeComplete(t.Id, p)).ToList();
+
+    /// <summary>Tipin açık parçalarının hepsini giy</summary>
+    public static void WearType(string type, ProgressData p)
+    {
+        foreach (var i in ItemsOf(type).Where(i => Unlocked(i, p))) Prefs.SetOutfit(i.Slot, i.Id);
+    }
+
+    /// <summary>"Açıldı: Bere, Bıyık", "✨ Gizli ödül açıldı: Taç!", "👑 Kral tipi tamamlandı!" (Mac'te Outfits.newsLines, aynı metinler)</summary>
+    public static List<string> NewsLines(List<OutfitItem> items, List<OutfitType> types)
+    {
+        var lines = new List<string>();
+        var normal = items.Where(i => !i.Legendary).ToList();
+        if (normal.Count > 0)
+        {
+            var names = string.Join(", ", normal.Take(3).Select(i => i.Name));
+            if (normal.Count > 3) names += L($" ve {normal.Count - 3} parça daha", $" and {normal.Count - 3} more");
+            lines.Add("🎉 " + L("Gardıropta açıldı: ", "Unlocked in the wardrobe: ") + names);
+        }
+        foreach (var item in items.Where(i => i.Legendary))
+            lines.Add("✨ " + L("Gizli ödül açıldı: ", "Secret reward unlocked: ") + item.Name + "!");
+        foreach (var t in types)
+            lines.Add(t.Emoji + " " + L($"{t.Name} tipi tamamlandı! Odadan hepsini birden giyebilirsin.", $"{t.Name} set complete! Wear it all from the room."));
+        return lines;
+    }
+
+    public static void TakeOffAll()
+    {
+        foreach (var s in Slots) Prefs.SetOutfit(s, null);
+    }
 
     private static IReadOnlyList<OutfitItem>? _all;
     public static IReadOnlyList<OutfitItem> All => _all ??= Parse(OutfitData.Json);
@@ -101,7 +165,8 @@ public static class Outfits
                     OutfitAnim.From(s["anim"])));
             }
             list.Add(new OutfitItem(node.Str("id") ?? "", node.Str("slot") ?? "head", node.Str("tr") ?? "", node.Str("en") ?? "",
-                (int)(node.Num("level") ?? 0), node.Str("achievement"), shapes));
+                (int)(node.Num("level") ?? 0), node.Str("achievement"), shapes, node.Str("type") ?? "",
+                node["legendary"]?.GetValue<bool>() ?? false));
         }
         return list;
     }
@@ -123,9 +188,9 @@ public static class Outfits
             : (new Rgb((byte)(v >> 24), (byte)(v >> 16), (byte)(v >> 8)), (v & 0xFF) / 255.0);
     }
 
-    /// <summary>Takılı ve açık parçalar (çizim sırası: yanında, yüz, gözlük, baş)</summary>
+    /// <summary>Takılı ve açık parçalar (çizim sırası: yanında, boyun, yüz, gözlük, baş)</summary>
     public static List<OutfitItem> Worn(ProgressData p) =>
-        new[] { "side", "face", "eyes", "head" }
+        new[] { "side", "neck", "face", "eyes", "head" }
             .Select(slot => Find(Prefs.Outfit(slot)))
             .Where(i => i != null && Unlocked(i, p))
             .Select(i => i!).ToList();
@@ -139,6 +204,10 @@ public static class Outfits
         item.Achievement is { } a
             ? L("Başarım: ", "Achievement: ") + (Achievements.Find(a)?.Title ?? a)
             : L($"Seviye {item.Level}", $"Level {item.Level}");
+
+    /// <summary>Gizli ödülün adı açılana kadar görünmez</summary>
+    public static string DisplayName(OutfitItem item, ProgressData p) =>
+        item.Legendary && !Unlocked(item, p) ? L("Gizli ödül", "Secret reward") : item.Name;
 }
 
 /// <summary>Ömür boyu sayaçlar: seviye ve başarımlar bunlardan hesaplanır.</summary>
@@ -162,6 +231,8 @@ public sealed class ProgressData
     public List<string> Sources { get; set; } = new();
     public List<string> Unlocked { get; set; } = new();   // söylenmiş başarımlar
     public int ToldLevel { get; set; } = 1;
+    /// <summary>Açıldığı söylenmiş gardırop parçaları (null: ilk açılış, sessizce doldurulur)</summary>
+    public List<string>? SeenItems { get; set; }
 }
 
 /// <summary>Sayaçları tutar ve kaydeder; yeni başarımları/seviyeyi bir kez söylemek için sıraya koyar.</summary>
@@ -228,6 +299,28 @@ public sealed class Progress
     }
 
     /// <summary>Henüz söylenmemiş yeni başarımlar ve seviye (bir kez döner).</summary>
+    /// <summary>Yeni açılan gardırop parçaları ve tamamlanan tipler (bir kez döner). İlk açılışta sessizce kaydeder.</summary>
+    public (List<OutfitItem> Items, List<OutfitType> Types) TakeOutfitNews()
+    {
+        lock (_gate)
+        {
+            var open = Outfits.All.Where(i => Outfits.Unlocked(i, Data)).Select(i => i.Id).ToList();
+            if (Data.SeenItems == null)
+            {
+                Data.SeenItems = open;
+                Save();
+                return (new(), new());
+            }
+            var seen = Data.SeenItems;
+            var fresh = Outfits.All.Where(i => open.Contains(i.Id) && !seen.Contains(i.Id)).ToList();
+            if (fresh.Count == 0) return (new(), new());
+            seen.AddRange(fresh.Select(i => i.Id));
+            Save();
+            var types = Outfits.Types.Where(t => fresh.Any(i => i.Type == t.Id) && Outfits.TypeComplete(t.Id, Data)).ToList();
+            return (fresh, types);
+        }
+    }
+
     public (List<Achievement> Achievements, int? Level) TakeNews()
     {
         lock (_gate)

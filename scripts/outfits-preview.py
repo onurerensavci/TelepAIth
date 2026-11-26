@@ -41,7 +41,7 @@ def eyes(theme):
     return out
 def robot(theme,worn):
     defs=[]
-    body=''.join(shape(s,theme,defs) for it in worn if it['slot'] in ('face','eyes') for s in it['shapes'])
+    body=''.join(shape(s,theme,defs) for slot in ('neck','face','eyes') for it in worn if it['slot']==slot for s in it['shapes'])
     head=''.join(shape(s,theme,defs) for it in worn if it['slot']=='head' for s in it['shapes'])
     side=''.join(shape(s,theme,defs) for it in worn if it['slot']=='side' for s in it['shapes'])
     base=f'''<ellipse cx="50" cy="96" rx="29" ry="3" fill="#000" fill-opacity="0.14"/>
@@ -50,11 +50,12 @@ def robot(theme,worn):
     led='<circle cx="50" cy="22.5" r="5.5" fill="#33D478" fill-opacity="0.3"/><circle cx="50" cy="22.5" r="2.5" fill="#33D478"/>'
     return f'<svg viewBox="-26 -30 152 140" width="230" height="212"><defs><linearGradient id="shell" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FAF7F2"/><stop offset="1" stop-color="#DBD6EB"/></linearGradient>{"".join(defs)}</defs>{side}{base}{body}{head}{led}</svg>'
 cards=''
-src=['claude','gpt']
-for k,it in enumerate(items):
-    theme=THEMES[src[k%2]]
-    cards+=f'<div class="c">{robot(theme,[it])}<div>{it["tr"]}</div></div>'
-combo=[i for i in items if i['id'] in ('cap','sunglasses','cactus')]
-combo2=[i for i in items if i['id'] in ('crown','blush','bowtie','coffee')]
-cards=f'<div class="c big">{robot(THEMES["claude"],combo)}<div>Kep + güneş gözlüğü + kaktüs</div></div><div class="c big">{robot(THEMES["gpt"],combo2)}<div>Taç + pembe yanak + papyon + kahve</div></div>'+cards
-open('/tmp/outfits-preview.html','w').write(f'<html><body style="margin:0;background:#2b2a33;color:#ddd;font:13px -apple-system,Segoe UI,sans-serif;display:flex;flex-wrap:wrap;gap:10px;padding:14px;width:1220px">{cards}<style>.c{{background:linear-gradient(#45425a,#34324a);border-radius:14px;padding:6px 6px 10px;text-align:center}}</style></body></html>')
+types=['coder','hipster','police','marketing','artist','king']
+for k,t in enumerate(types):
+    theme=THEMES['claude' if k%2==0 else 'gpt']
+    group=[i for i in items if i.get('type')==t]
+    cards+=f'<div class="c big">{robot(theme,group)}<div><b>{t}</b> (tam set)</div></div>'
+    for it in group:
+        star='✨ ' if it.get('legendary') else ''
+        cards+=f'<div class="c">{robot(theme,[it])}<div>{star}{it["tr"]}</div></div>'
+open('/tmp/outfits-preview.html','w').write(f'<html><body style="margin:0;background:#2b2a33;color:#ddd;font:13px -apple-system,Segoe UI,sans-serif;display:flex;flex-wrap:wrap;gap:10px;padding:14px;width:1500px">{cards}<style>.c{{background:linear-gradient(#45425a,#34324a);border-radius:14px;padding:6px 6px 10px;text-align:center}}</style></body></html>')

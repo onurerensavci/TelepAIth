@@ -15,7 +15,7 @@ final class RoomModel: ObservableObject {
 
     weak var host: RoomHost?
     @Published var tab: Tab = .wardrobe
-    @Published var slot = "head"
+    @Published var type = "coder"
     @Published var days = 30
     @Published private(set) var progress = ProgressData()
     @Published private(set) var effort = DailyStats.shared.effort(today: Date(), days: 30)
@@ -60,8 +60,14 @@ final class RoomModel: ObservableObject {
         refresh()
     }
 
-    func takeOff(_ slot: String) {
-        Preferences.setOutfit(slot, nil)
+    func takeOffAll() {
+        Outfits.takeOffAll()
+        refresh()
+    }
+
+    /// Tamamlanan tipin bütün parçalarını giy
+    func wearType(_ type: String) {
+        Outfits.wearType(type, progress)
         refresh()
     }
 
@@ -154,6 +160,21 @@ struct RoomSidePanel: View {
                 RoomStat(value: "\(p.streak)", label: loc("gün seri", "day streak"))
                 RoomStat(value: "\(DailyStats.shared.turnsOn(Date()))", label: loc("bugün tur", "turns today"))
                 RoomStat(value: "\(p.activeDays)", label: loc("aktif gün", "active days"))
+            }
+            // Tamamlanan tipler (Polis, Kral…)
+            let types = Outfits.completedTypes(p)
+            if !types.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(loc("Tiplerin", "Your types")).font(.system(size: 11, weight: .semibold)).foregroundColor(.secondary)
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 92), spacing: 6, alignment: .leading)], alignment: .leading, spacing: 6) {
+                        ForEach(types) { t in
+                            Text("\(t.emoji) \(t.name)")
+                                .font(.system(size: 11, weight: .semibold))
+                                .padding(.horizontal, 8).padding(.vertical, 3)
+                                .background(Capsule().fill(model.accent.opacity(0.18)))
+                        }
+                    }
+                }
             }
             // Son açılan başarımlar
             LazyVGrid(columns: Array(repeating: GridItem(.fixed(18), spacing: 5), count: 10), alignment: .leading, spacing: 5) {
@@ -274,45 +295,136 @@ struct WardrobeTab: View {
     var body: some View {
         let p = model.progress
         HStack(alignment: .top, spacing: 20) {
-            VStack(spacing: 4) {
-                ForEach(Outfits.slots, id: \.self) { slot in
-                    let items = Outfits.all.filter { $0.slot == slot }
+            // Tipler: Kodcu, Hipster, Polis, Pazarlamacı, Sanatçı, Kral
+            VStack(alignment: .leading, spacing: 4) {
+                ForEach(Outfits.types) { t in
+                    let items = Outfits.items(of: t.id)
                     let open = items.filter { Outfits.unlocked($0, p) }.count
-                    Button { model.slot = slot } label: {
-                        HStack {
-                            Text(Outfits.slotName(slot)).font(.system(size: 12.5, weight: .medium))
+                    Button { model.type = t.id } label: {
+                        HStack(spacing: 8) {
+                            Text(t.emoji).font(.system(size: 15))
+                            Text(t.name).font(.system(size: 12.5, weight: .medium))
                             Spacer()
-                            Text("\(open)/\(items.count)").font(.system(size: 11)).foregroundColor(.secondary)
+                            if open == items.count {
+                                Image(systemName: "checkmark.seal.fill").font(.system(size: 12)).foregroundColor(model.accent)
+                            } else {
+                                Text("\(open)/\(items.count)").font(.system(size: 11)).foregroundColor(.secondary)
+                            }
                         }
                         .padding(.horizontal, 10)
-                        .frame(height: 30)
+                        .frame(height: 32)
                         .background(RoundedRectangle(cornerRadius: 8)
-                            .fill(model.slot == slot ? model.accent.opacity(0.16) : Color.clear))
+                            .fill(model.type == t.id ? model.accent.opacity(0.16) : Color.clear))
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                 }
+                Divider().padding(.vertical, 6)
+                Button(loc("Hepsini Çıkar", "Take All Off")) { model.takeOffAll() }
+                    .buttonStyle(.link)
+                    .font(.system(size: 11.5))
+                    .padding(.leading, 10)
             }
-            .frame(width: 150)
+            .frame(width: 170)
 
-            VStack(alignment: .leading, spacing: 10) {
-                Text(Outfits.slotName(model.slot)).font(.system(size: 16, weight: .semibold))
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 104, maximum: 130), spacing: 10)], spacing: 10) {
-                    WardrobeCard(title: loc("Hiçbiri", "None"), subtitle: nil, selected: model.worn[model.slot] == nil,
-                                 locked: false, accent: model.accent) {
-                        RoomMiniRobot(theme: model.themeColor, items: [])
-                    }
-                    .onTapGesture { model.takeOff(model.slot) }
-                    ForEach(Outfits.all.filter { $0.slot == model.slot }) { item in
-                        let open = Outfits.unlocked(item, p)
-                        WardrobeCard(title: item.name, subtitle: open ? nil : Outfits.unlockHint(item),
-                                     selected: model.worn[item.slot] == item.id && open, locked: !open, accent: model.accent) {
-                            RoomMiniRobot(theme: model.themeColor, items: [item])
+            if let t = Outfits.findType(model.type) {
+                let items = Outfits.items(of: t.id)
+                let open = items.filter { Outfits.unlocked($0, p) }.count
+                let done = open == items.count
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack(alignment: .center, spacing: 12) {
+                        Text(t.emoji).font(.system(size: 30))
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(t.name).font(.system(size: 18, weight: .bold))
+                            Text(done ? loc("Tamamlandı! \(t.name) tipi artık senin.", "Complete! The \(t.name) set is yours.")
+                                      : t.description + " · " + loc("5 parçayı topla, \(t.name) ol", "collect all 5 to become a \(t.name)"))
+                                .font(.system(size: 11.5)).foregroundColor(.secondary)
                         }
-                        .onTapGesture { model.toggle(item) }
+                        Spacer()
+                        if done {
+                            Button(loc("Hepsini Giy", "Wear All")) { model.wearType(t.id) }
+                                .buttonStyle(.borderedProminent)
+                                .tint(model.accent)
+                        }
+                    }
+                    RoomBar(fraction: Double(open) / Double(Swift.max(1, items.count)), color: model.accent)
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 104, maximum: 130), spacing: 10)], spacing: 10) {
+                        ForEach(items) { item in
+                            let isOpen = Outfits.unlocked(item, p)
+                            let selected = model.worn[item.slot] == item.id && isOpen
+                            Group {
+                                if item.legendary {
+                                    LegendaryCard(item: item, open: isOpen, selected: selected, theme: model.themeColor, accent: model.accent)
+                                } else {
+                                    WardrobeCard(title: item.name, subtitle: isOpen ? Outfits.slotName(item.slot) : Outfits.unlockHint(item),
+                                                 selected: selected, locked: !isOpen, accent: model.accent) {
+                                        RoomMiniRobot(theme: model.themeColor, items: [item])
+                                    }
+                                }
+                            }
+                            .onTapGesture { model.toggle(item) }
+                        }
                     }
                 }
             }
+        }
+    }
+}
+
+/// Gizli ödül kartı: kilitliyken soru işareti ve parıltı, açılınca altın çerçeve ve "Efsanevi"
+struct LegendaryCard: View {
+    let item: OutfitItem
+    let open: Bool
+    let selected: Bool
+    let theme: NSColor
+    let accent: Color
+
+    private static let gold = Color(red: 1, green: 0.82, blue: 0.36)
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: false)) { context in
+            let t = context.date.timeIntervalSinceReferenceDate
+            VStack(spacing: 4) {
+                ZStack {
+                    Circle()
+                        .fill(RadialGradient(colors: [LegendaryCard.gold.opacity(0.45 + 0.2 * sin(t * 2)), .clear],
+                                             center: .center, startRadius: 2, endRadius: 40))
+                        .frame(width: 84, height: 84)
+                    ForEach(0..<4, id: \.self) { i in
+                        Image(systemName: "sparkle")
+                            .font(.system(size: i % 2 == 0 ? 8 : 11, weight: .bold))
+                            .foregroundColor(.white)
+                            .opacity(0.25 + 0.75 * Swift.max(0, sin(t * 2.2 + Double(i) * 1.6)))
+                            .offset(x: [-30, 28, -24, 31][i], y: [-24, -20, 24, 18][i])
+                    }
+                    if open {
+                        RoomMiniRobot(theme: theme, items: [item])
+                    } else {
+                        Text("?")
+                            .font(.system(size: 38, weight: .heavy, design: .rounded))
+                            .foregroundStyle(LinearGradient(colors: [.white, LegendaryCard.gold, Color(red: 0.85, green: 0.55, blue: 0.15)],
+                                                            startPoint: .top, endPoint: .bottom))
+                            .shadow(color: LegendaryCard.gold.opacity(0.8), radius: 6)
+                            .scaleEffect(1 + 0.05 * sin(t * 2.4))
+                            .frame(width: 70, height: 70)
+                    }
+                }
+                .frame(height: 70)
+                Text(open ? item.name : loc("Gizli ödül", "Secret reward"))
+                    .font(.system(size: 11.5, weight: .bold)).lineLimit(1)
+                    .foregroundColor(open ? LegendaryCard.gold : .primary)
+                Text(open ? "✨ " + loc("Efsanevi", "Legendary") : "🔒 " + Outfits.unlockHint(item))
+                    .font(.system(size: 9.5)).foregroundColor(.secondary).lineLimit(1)
+            }
+            .padding(8)
+            .frame(maxWidth: .infinity)
+            .background(RoundedRectangle(cornerRadius: 12).fill(LinearGradient(
+                colors: [Color(red: 0.36, green: 0.24, blue: 0.5).opacity(0.35), Color(red: 0.55, green: 0.38, blue: 0.1).opacity(0.3)],
+                startPoint: .topLeading, endPoint: .bottomTrailing)))
+            .overlay(RoundedRectangle(cornerRadius: 12).stroke(AngularGradient(
+                colors: [LegendaryCard.gold, .white, LegendaryCard.gold, Color(red: 0.95, green: 0.55, blue: 0.2), LegendaryCard.gold],
+                center: .center, angle: .degrees(t.truncatingRemainder(dividingBy: 4) * 90)), lineWidth: selected ? 3 : 1.6))
+            .contentShape(Rectangle())
         }
     }
 }

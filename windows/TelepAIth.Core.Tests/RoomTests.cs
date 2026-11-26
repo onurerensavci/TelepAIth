@@ -4,7 +4,7 @@ public static partial class Tests
 {
     public static void OutfitsParseAndColors()
     {
-        A.Eq(17, Outfits.All.Count);
+        A.Eq(30, Outfits.All.Count);
         A.True(Outfits.All.All(i => Outfits.Slots.Contains(i.Slot) && i.Shapes.Count > 0 && i.Name.Length > 0));
         A.True(Outfits.All.Select(i => i.Id).Distinct().Count() == Outfits.All.Count);
         // Başarımla açılan parçaların başarımı var
@@ -15,12 +15,12 @@ public static partial class Tests
         A.True(Outfits.Color("theme-dark", new Rgb(100, 100, 100)).Color == new Rgb(72, 72, 72));
         // Işık geçişleri (3B görünüm) okunuyor
         A.True(Outfits.Find("beanie")!.Shapes.Any(sh => sh.Fill?.Radial is { Length: 3 } && sh.Fill.Stops.Count >= 2));
-        A.True(Outfits.Find("tophat")!.Shapes.Any(sh => sh.Fill?.Linear is { Length: 4 }));
+        A.True(Outfits.Find("crown")!.Shapes.Any(sh => sh.Fill?.Linear is { Length: 4 }));
         // Hareketler: ponpon sallanır, buhar yükselip söner
         var sway = Outfits.Find("beanie")!.Shapes.First(sh => sh.Anim != null).Anim!;
         A.Eq("sway", sway.Kind);
         A.True(Math.Abs(sway.At(0.25 / sway.Speed).Rotate - sway.Amount) < 0.001);
-        var rise = Outfits.Find("coffee")!.Shapes.First(sh => sh.Anim?.Kind == "rise").Anim!;
+        var rise = Outfits.Find("gramophone")!.Shapes.First(sh => sh.Anim?.Kind == "rise").Anim!;
         A.True(Math.Abs(rise.At(0.5 / rise.Speed).Dy + rise.Amount / 2) < 0.001 && Math.Abs(rise.At(0.5 / rise.Speed).Opacity - 1) < 0.001);
         var twinkle = new OutfitAnim("twinkle", 1, 1, 0, null);
         A.True(twinkle.At(0.1).Opacity > 0.99 && twinkle.At(0.5).Opacity == 0);
@@ -66,10 +66,41 @@ public static partial class Tests
         A.Eq(4, new Progress(file).Snapshot().Turns);
         File.Delete(file);
         // Parça açılması
-        var cap = Outfits.Find("cap")!;
+        var cap = Outfits.Find("beanie")!;
         A.True(!Outfits.Unlocked(cap, new ProgressData()));
         A.True(Outfits.Unlocked(cap, new ProgressData { Turns = 30 }));   // 300 XP = seviye 3
-        A.True(Outfits.UnlockHint(Outfits.Find("party")!).Contains("Büyük gün"));
+        A.True(Outfits.UnlockHint(Outfits.Find("scarf")!).Contains("Erkenci"));
+    }
+
+    public static void OutfitTypesAndNews()
+    {
+        // 6 tip × 5 parça: her yuvadan bir tane, biri gizli ödül
+        A.Eq(6, Outfits.Types.Length);
+        foreach (var t in Outfits.Types)
+        {
+            var items = Outfits.ItemsOf(t.Id);
+            A.True(items.Select(i => i.Slot).OrderBy(x => x).SequenceEqual(Outfits.Slots.OrderBy(x => x)), t.Id);
+            A.Eq(1, items.Count(i => i.Legendary));
+            A.True(items.First(i => i.Legendary).Achievement == null, t.Id);   // gizli ödül seviyeyle açılır
+        }
+        var p = new ProgressData();
+        A.Eq("Gizli ödül", Outfits.DisplayName(Outfits.Find("crown")!, p));
+        A.True(!Outfits.TypeComplete("coder", p));
+        // Yeni açılanlar: ilk seferde sessizce kaydedilir, sonra yeni açılanlar bir kez söylenir
+        var file = Path.Combine(Path.GetTempPath(), "tp-progress-" + Guid.NewGuid() + ".json");
+        var pr = new Progress(file);
+        A.True(pr.TakeOutfitNews().Items.Count == 0);
+        for (var i = 0; i < 30; i++) pr.Turn("claude", 60, 1, 1, DateTime.Now, 1);
+        var news = pr.TakeOutfitNews();
+        A.True(news.Items.Any(i => i.Id == "beanie") && news.Items.Any(i => i.Id == "lanyard"));
+        A.True(pr.TakeOutfitNews().Items.Count == 0);
+        File.Delete(file);
+        var lines = Outfits.NewsLines(news.Items, new List<OutfitType> { Outfits.FindType("king")! });
+        A.True(lines[0].StartsWith("🎉 Gardıropta açıldı: "));
+        A.True(lines[^1].Contains("Kral tipi tamamlandı"));
+        A.True(Outfits.NewsLines(new List<OutfitItem> { Outfits.Find("crown")! }, new()).First().Contains("Gizli ödül açıldı: Taç"));
+        p = new ProgressData { Turns = 5000, Edits = 5000, CiPassed = 30, EarlyTurns = 10, MaxParallel = 3, Sources = new() { "claude", "gpt" } };
+        A.True(Outfits.TypeComplete("coder", p));
     }
 
     public static void EffortByProject()

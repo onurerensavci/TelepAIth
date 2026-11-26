@@ -33,6 +33,9 @@ final class RobotModel: ObservableObject {
         var target: AppTarget?
         /// Hangi ses ayarına bağlı: done, waiting, reminder, error, usage, alert, summary
         var kind = "done"
+        /// Bildirime tıklayınca açılacak sohbet (hangi AI, hangi oturum)
+        var source: String? = nil
+        var sessionID: String? = nil
     }
 
     /// Kafaya tıklayınca açılan listedeki bir sohbet: ad, durum, "çalışıyor · 3 dk" gibi durum yazısı
@@ -175,7 +178,7 @@ final class RobotModel: ObservableObject {
         moodUntil = now.addingTimeInterval(seconds)
     }
 
-    private static func play(_ name: String, _ kind: String) {
+    static func play(_ name: String, _ kind: String) {
         Effects.kick(Effects.strength(name))
         guard Preferences.sounds, Preferences.soundOn(kind), !FocusMode.isActive else { return }
         NSSound(named: NSSound.Name(name))?.play()
@@ -367,7 +370,20 @@ final class RobotModel: ObservableObject {
         }
 
         refresh(now: now)
+        if notice != nil {
+            notice?.source = source
+            notice?.sessionID = e.sessionID
+        }
         return e.noNotice ? nil : notice
+    }
+
+    /// Kutlama: sevinçle zıplar, parıltı saçar ve balonda söyler (gardıropta bir şey açıldı…)
+    func celebrate(_ text: String, for seconds: TimeInterval = 9) {
+        let now = Date()
+        setMood(.party, for: 4, now: now)
+        celebrateStart = now
+        RobotModel.play("Hero", "summary")
+        say(text, for: seconds)
     }
 
     /// Robotun balonda bir şey söylemesi (güncelleme haberi, uyarı…)
@@ -440,7 +456,7 @@ final class RobotModel: ObservableObject {
                     let place = s.project.map { " · \($0)" } ?? ""
                     pendingNotices.append(Notice(title: withEmoji("⏰", theme.displayName + loc(" hâlâ seni bekliyor", " is still waiting for you") + place),
                                                  body: s.text ?? loc("Cevabını bekliyor", "Waiting for your reply"),
-                                                 important: true, target: s.target, kind: "reminder"))
+                                                 important: true, target: s.target, kind: "reminder", source: source, sessionID: id))
                     showOverride(withEmoji("⏰", loc("Hâlâ onayını bekliyorum!", "Still waiting for your OK!")), for: 6, now: now)
                 }
             }

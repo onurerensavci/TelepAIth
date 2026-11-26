@@ -29,6 +29,8 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     var onStatusChange: (() -> Void)?
     /// Bildirime tıklanınca: gidilecek yer
     var onClick: ((AppTarget) -> Void)?
+    /// Bir sohbetin bildirimi: o sohbeti aç (kaynak, oturum, yedek hedef)
+    var onOpenChat: ((String, String, AppTarget) -> Void)?
 
     private var canUseCenter: Bool {
         Bundle.main.bundleURL.pathExtension == "app" && Bundle.main.bundleIdentifier != nil
@@ -94,7 +96,8 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     }
 
     /// kind: Ses sekmesindeki tür (done, waiting…); nil ise sadece "Sessize al" bakılır
-    func notify(title: String, body: String, target: AppTarget? = nil, force: Bool = false, kind: String? = nil) {
+    func notify(title: String, body: String, target: AppTarget? = nil, force: Bool = false, kind: String? = nil,
+                source: String? = nil, sessionID: String? = nil) {
         guard force || Preferences.notificationsEnabled else { return }
         guard canUseCenter, status != .denied else {
             fallback(title: title, body: body)
@@ -113,6 +116,7 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         var info: [String: Any] = [:]
         if let pid = target?.pid { info["pid"] = Int(pid) }
         if let id = target?.bundleID { info["bundle"] = id }
+        if let source = source, let sessionID = sessionID { info["source"] = source; info["session"] = sessionID }
         content.userInfo = info
         let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
         UNUserNotificationCenter.current().add(request) { [weak self] error in
@@ -154,8 +158,13 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
                                 withCompletionHandler completionHandler: @escaping () -> Void) {
         let info = response.notification.request.content.userInfo
         let target = AppTarget(pid: (info["pid"] as? Int).map { Int32($0) }, bundleID: info["bundle"] as? String)
+        let source = info["source"] as? String, session = info["session"] as? String
         DispatchQueue.main.async { [weak self] in
-            if !target.isEmpty { self?.onClick?(target) }
+            if let source = source, let session = session, let open = self?.onOpenChat {
+                open(source, session, target)
+            } else if !target.isEmpty {
+                self?.onClick?(target)
+            }
         }
         completionHandler()
     }

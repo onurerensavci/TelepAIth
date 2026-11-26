@@ -7,6 +7,8 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
+using System.Windows.Media.Effects;
 using TelepAIth.Core;
 using static TelepAIth.Core.Text;
 
@@ -22,7 +24,7 @@ internal static class RoomWindow
     private static RobotManager? _manager;
     private static Action<bool>? _setUsageLine;
     private static string _tab = "wardrobe";
-    private static string _slot = "head";
+    private static string _type = "coder";
     private static int _days = 30;
 
     public static bool IsOpen => _window != null;
@@ -151,6 +153,21 @@ internal static class RoomWindow
         Stat(DailyStats.Shared.TurnsOn(DateTime.Now).ToString(CultureInfo.InvariantCulture), L("bugün tur", "turns today"));
         Stat(p.ActiveDays.ToString(CultureInfo.InvariantCulture), L("aktif gün", "active days"));
         panel.Children.Add(stats);
+        // Tamamlanan tipler (Polis, Kral…)
+        var types = Outfits.CompletedTypes(p);
+        if (types.Count > 0)
+        {
+            panel.Children.Add(T(L("Tiplerin", "Your types"), 11, FontWeights.SemiBold, muted: true).Also(t => t.Margin = new Thickness(0, 0, 0, 6)));
+            var typeRow = new WrapPanel { Margin = new Thickness(0, 0, 0, 12) };
+            foreach (var t in types)
+                typeRow.Children.Add(new Border
+                {
+                    CornerRadius = new CornerRadius(10), Padding = new Thickness(8, 3, 8, 3), Margin = new Thickness(0, 0, 6, 6),
+                    Background = new SolidColorBrush(Color.FromArgb(0x30, Accent.R, Accent.G, Accent.B)),
+                    Child = T($"{t.Emoji} {t.Name}", 11, FontWeights.SemiBold),
+                });
+            panel.Children.Add(typeRow);
+        }
         var badges = new WrapPanel();
         foreach (var a in Achievements.All.Where(a => a.Done(p)).TakeLast(20))
             badges.Children.Add(new Ellipse(18, TierColor(a.Tier)) { Margin = new Thickness(0, 0, 5, 5), ToolTip = a.Title + " · " + a.Description });
@@ -195,54 +212,151 @@ internal static class RoomWindow
     private static UIElement WardrobePage(ProgressData p)
     {
         var grid = new Grid();
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(170) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(180) });
         grid.ColumnDefinitions.Add(new ColumnDefinition());
-        var slots = new StackPanel { Margin = new Thickness(0, 0, 20, 0) };
-        foreach (var slot in Outfits.Slots)
+        // Tipler: Kodcu, Hipster, Polis, Pazarlamacı, Sanatçı, Kral
+        var list = new StackPanel { Margin = new Thickness(0, 0, 20, 0) };
+        foreach (var t in Outfits.Types)
         {
-            var items = Outfits.All.Where(i => i.Slot == slot).ToList();
+            var items = Outfits.ItemsOf(t.Id);
             var open = items.Count(i => Outfits.Unlocked(i, p));
             var row = new DockPanel { LastChildFill = true };
-            var count = T($"{open}/{items.Count}", 11, muted: true);
+            var count = open == items.Count ? T("✔", 12, FontWeights.Bold, color: Accent) : T($"{open}/{items.Count}", 11, muted: true);
+            count.VerticalAlignment = VerticalAlignment.Center;
             DockPanel.SetDock(count, Dock.Right);
             row.Children.Add(count);
-            row.Children.Add(T(Outfits.SlotName(slot), 13, FontWeights.Medium));
+            row.Children.Add(T($"{t.Emoji}  {t.Name}", 13, FontWeights.Medium));
             var b = new Border
             {
                 Child = row, Padding = new Thickness(10, 7, 10, 7), CornerRadius = new CornerRadius(8), Cursor = Cursors.Hand,
-                Background = _slot == slot ? new SolidColorBrush(Color.FromArgb(0x30, Accent.R, Accent.G, Accent.B)) : Brushes.Transparent,
+                Background = _type == t.Id ? new SolidColorBrush(Color.FromArgb(0x30, Accent.R, Accent.G, Accent.B)) : Brushes.Transparent,
                 Margin = new Thickness(0, 0, 0, 4),
             };
-            var s = slot;
-            b.MouseLeftButtonUp += (_, _) => { _slot = s; Rebuild(); };
-            slots.Children.Add(b);
+            var id = t.Id;
+            b.MouseLeftButtonUp += (_, _) => { _type = id; Rebuild(); };
+            list.Children.Add(b);
         }
-        grid.Children.Add(slots);
+        var off = T(L("Hepsini çıkar", "Take all off"), 11.5, color: Accent);
+        off.Cursor = Cursors.Hand;
+        off.Margin = new Thickness(10, 10, 0, 0);
+        off.MouseLeftButtonUp += (_, _) => { Outfits.TakeOffAll(); Rebuild(); };
+        list.Children.Add(off);
+        grid.Children.Add(list);
 
         var right = new StackPanel();
         Grid.SetColumn(right, 1);
-        right.Children.Add(T(Outfits.SlotName(_slot), 16, FontWeights.SemiBold).Also(t => t.Margin = new Thickness(0, 0, 0, 10)));
-        var cards = new WrapPanel();
-        var worn = Prefs.Outfit(_slot);
-        cards.Children.Add(OutfitCard(L("Hiçbiri", "None"), null, worn == null, false, Array.Empty<OutfitItem>(), () =>
+        var type = Outfits.FindType(_type) ?? Outfits.Types[0];
+        var typeItems = Outfits.ItemsOf(type.Id);
+        var openCount = typeItems.Count(i => Outfits.Unlocked(i, p));
+        var done = openCount == typeItems.Count;
+        var header = new DockPanel { LastChildFill = true, Margin = new Thickness(0, 0, 0, 10) };
+        if (done)
         {
-            Prefs.SetOutfit(_slot, null);
-            Rebuild();
-        }));
-        foreach (var item in Outfits.All.Where(i => i.Slot == _slot))
+            var wear = Ui.Button(L("Hepsini giy", "Wear all"), () => { Outfits.WearType(type.Id, p); Rebuild(); }, true);
+            wear.VerticalAlignment = VerticalAlignment.Center;
+            DockPanel.SetDock(wear, Dock.Right);
+            header.Children.Add(wear);
+        }
+        var emoji = T(type.Emoji, 28).Also(t => { t.Margin = new Thickness(0, 0, 12, 0); t.VerticalAlignment = VerticalAlignment.Center; });
+        DockPanel.SetDock(emoji, Dock.Left);
+        header.Children.Add(emoji);
+        var titles = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+        titles.Children.Add(T(type.Name, 18, FontWeights.Bold));
+        titles.Children.Add(T(done ? L($"Tamamlandı! {type.Name} tipi artık senin.", $"Complete! The {type.Name} set is yours.")
+                                   : type.Description + " · " + L($"5 parçayı topla, {type.Name} ol", $"collect all 5 to become a {type.Name}"), 11.5, muted: true));
+        header.Children.Add(titles);
+        right.Children.Add(header);
+        right.Children.Add(Bar(openCount / (double)Math.Max(1, typeItems.Count), Accent, 360).Also(b => b.Margin = new Thickness(0, 0, 0, 14)));
+        var cards = new WrapPanel();
+        foreach (var item in typeItems)
         {
             var open = Outfits.Unlocked(item, p);
             var it = item;
-            cards.Children.Add(OutfitCard(item.Name, open ? null : Outfits.UnlockHint(item), open && worn == item.Id, !open, new[] { item }, () =>
+            var selected = open && Prefs.Outfit(item.Slot) == item.Id;
+            void Toggle()
             {
                 if (!open) return;
                 Prefs.SetOutfit(it.Slot, Prefs.Outfit(it.Slot) == it.Id ? null : it.Id);
                 Rebuild();
-            }));
+            }
+            cards.Children.Add(item.Legendary
+                ? LegendaryCard(it, open, selected, Toggle)
+                : OutfitCard(item.Name, open ? Outfits.SlotName(item.Slot) : Outfits.UnlockHint(item), selected, !open, new[] { item }, Toggle));
         }
         right.Children.Add(cards);
         grid.Children.Add(right);
         return grid;
+    }
+
+    private static readonly Color Gold = Color.FromRgb(0xFF, 0xD1, 0x5C);
+
+    /// <summary>Gizli ödül kartı: kilitliyken soru işareti ve parıltı, açılınca altın çerçeve ve "Efsanevi" (Mac'te LegendaryCard)</summary>
+    private static Border LegendaryCard(OutfitItem item, bool open, bool selected, Action click)
+    {
+        var s = new StackPanel { Width = 104 };
+        var stage = new Grid { Width = 104, Height = 76 };
+        var halo = new System.Windows.Shapes.Ellipse
+        {
+            Width = 84, Height = 84,
+            Fill = new RadialGradientBrush(Color.FromArgb(0x99, Gold.R, Gold.G, Gold.B), Color.FromArgb(0, Gold.R, Gold.G, Gold.B)),
+        };
+        halo.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation(0.5, 1, TimeSpan.FromSeconds(1.4)) { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever });
+        stage.Children.Add(halo);
+        double[] sx = { -30, 28, -24, 31 }, sy = { -24, -20, 24, 18 };
+        for (var i = 0; i < 4; i++)
+        {
+            var sp = new TextBlock
+            {
+                Text = "✦", FontSize = i % 2 == 0 ? 9 : 12, Foreground = Brushes.White, HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center, RenderTransform = new TranslateTransform(sx[i], sy[i]),
+            };
+            sp.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation(0.15, 1, TimeSpan.FromSeconds(0.9))
+            {
+                AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever, BeginTime = TimeSpan.FromSeconds(i * 0.45),
+            });
+            stage.Children.Add(sp);
+        }
+        if (open)
+            stage.Children.Add(new RobotPreview(ThemeRgb, new[] { item }, 0.62, simple: true) { Width = 104, Height = 76 });
+        else
+        {
+            var q = new TextBlock
+            {
+                Text = "?", FontSize = 40, FontWeight = FontWeights.Black, HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center, RenderTransformOrigin = new Point(0.5, 0.5),
+                Foreground = new LinearGradientBrush(new GradientStopCollection
+                {
+                    new GradientStop(Colors.White, 0), new GradientStop(Gold, 0.5), new GradientStop(Color.FromRgb(0xD9, 0x8C, 0x26), 1),
+                }, 90),
+                Effect = new DropShadowEffect { Color = Gold, BlurRadius = 14, ShadowDepth = 0, Opacity = 0.9 },
+            };
+            var pulse = new ScaleTransform(1, 1);
+            q.RenderTransform = pulse;
+            var anim = new DoubleAnimation(1, 1.08, TimeSpan.FromSeconds(1.2)) { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever };
+            pulse.BeginAnimation(ScaleTransform.ScaleXProperty, anim);
+            pulse.BeginAnimation(ScaleTransform.ScaleYProperty, anim);
+            stage.Children.Add(q);
+        }
+        s.Children.Add(stage);
+        s.Children.Add(T(open ? item.Name : L("Gizli ödül", "Secret reward"), 11.5, FontWeights.Bold, color: open ? Gold : null)
+            .Also(t => { t.TextAlignment = TextAlignment.Center; t.TextTrimming = TextTrimming.CharacterEllipsis; t.TextWrapping = TextWrapping.NoWrap; }));
+        s.Children.Add(T(open ? "✨ " + L("Efsanevi", "Legendary") : "🔒 " + Outfits.UnlockHint(item), 9.5, muted: true)
+            .Also(t => { t.TextAlignment = TextAlignment.Center; t.TextTrimming = TextTrimming.CharacterEllipsis; t.TextWrapping = TextWrapping.NoWrap; }));
+        var border = new LinearGradientBrush(new GradientStopCollection
+        {
+            new GradientStop(Gold, 0), new GradientStop(Colors.White, 0.25), new GradientStop(Gold, 0.5), new GradientStop(Color.FromRgb(0xF2, 0x8C, 0x33), 0.75), new GradientStop(Gold, 1),
+        }, new Point(0, 0), new Point(1, 1));
+        var spin = new RotateTransform(0, 0.5, 0.5);
+        border.RelativeTransform = spin;
+        spin.BeginAnimation(RotateTransform.AngleProperty, new DoubleAnimation(0, 360, TimeSpan.FromSeconds(4)) { RepeatBehavior = RepeatBehavior.Forever });
+        var card = new Border
+        {
+            CornerRadius = new CornerRadius(12), Padding = new Thickness(10), Margin = new Thickness(0, 0, 10, 10), Child = s,
+            BorderThickness = new Thickness(selected ? 3 : 1.8), BorderBrush = border, Cursor = open ? Cursors.Hand : Cursors.Arrow,
+            Background = new LinearGradientBrush(Color.FromArgb(0x59, 0x5C, 0x3D, 0x80), Color.FromArgb(0x4D, 0x8C, 0x61, 0x1A), 45),
+        };
+        card.MouseLeftButtonUp += (_, _) => click();
+        return card;
     }
 
     private static Border OutfitCard(string title, string? hint, bool selected, bool locked, IReadOnlyList<OutfitItem> items, Action click)

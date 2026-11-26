@@ -130,6 +130,7 @@ final class RobotManager {
 
         frontmostChanged(NSWorkspace.shared.frontmostApplication)
         Notifier.shared.onClick = { target in RobotManager.activate(target) }
+        Notifier.shared.onOpenChat = { [weak self] source, session, target in self?.openChat(source: source, sessionID: session, target: target) }
 
         watcher.onEvent = { [weak self] event in self?.handle(event) }
         // Claude/ChatGPT (yeniden) açıldı: robot uyansın ve söylesin
@@ -255,7 +256,8 @@ final class RobotManager {
            NSWorkspace.shared.frontmostApplication?.processIdentifier == pid {
             return
         }
-        Notifier.shared.notify(title: notice.title, body: notice.body, target: notice.target, kind: notice.kind)
+        Notifier.shared.notify(title: notice.title, body: notice.body, target: notice.target, kind: notice.kind,
+                               source: notice.source, sessionID: notice.sessionID)
         if !FocusMode.isActive { Speech.say(notice.title, kind: notice.kind) }
     }
 
@@ -482,16 +484,21 @@ final class RobotManager {
 
     /// Listeden bir sohbet seçildi: o AI'a geç ve sohbeti aç
     private func openChat(_ row: RobotModel.ChatRow) {
+        openChat(source: row.source, sessionID: row.sessionID, target: row.target)
+    }
+
+    /// Sohbeti aç: listeden seçildi ya da bildirimine tıklandı
+    private func openChat(source: String, sessionID: String, target: AppTarget?) {
         avatar?.setChatList(nil)
-        models[row.source]?.markSeen(row.sessionID)   // bakıldı: okunmamış noktası söner
-        if let m = models[row.source] {
-            pinnedSource = row.source
+        models[source]?.markSeen(sessionID)   // bakıldı: okunmamış noktası söner
+        if let m = models[source] {
+            pinnedSource = source
             show(m)
         }
         // Masaüstü uygulamasındaki sohbet (açık, önceden açılmış ya da arkadaki): uygulamayı öne getir, yan menüde o sohbete bas
-        if watcher.openChat(row.sessionID) { return }
+        if watcher.openChat(sessionID) { return }
         // Claude Code: çalıştığı terminal; uygulama sohbeti: uygulamanın penceresi
-        if let target = row.target, !target.isEmpty {
+        if let target = target, !target.isEmpty {
             RobotManager.activate(target)
             return
         }
@@ -664,24 +671,25 @@ final class RobotManager {
         if visible { window?.tick(dt: dt) }
     }
 
-    /// Yeni başarım ya da seviye: robot balonda söyler (bildirim atmaz). Odak modunda bekler.
+    /// Yeni başarım, seviye ya da gardırop parçası: robot balonda söyler (bildirim atmaz); parça açıldıysa sevinir. Odak modunda bekler.
     private func announceProgress() {
         guard !FocusMode.isActive, let avatar = avatar else { return }
         // Seni bekleyen bir şey varken balonu kapatma: haber sonra söylenir
         if avatar.approval != nil || models.values.contains(where: { $0.state == .waiting || $0.state == .error }) { return }
         let news = Progress.shared.takeNews()
+        let outfit = Progress.shared.takeOutfitNews()
         var lines: [String] = news.achievements.prefix(2).map { "🏅 " + loc("Yeni başarım: ", "New achievement: ") + $0.title }
-        if let level = news.level {
-            var text = "⭐ " + loc("Seviye \(level)!", "Level \(level)!")
-            let opened = Outfits.all.filter { $0.achievement == nil && $0.level == level }.map(\.name)
-            if !opened.isEmpty { text += " " + loc("Gardıropta açıldı: ", "Unlocked: ") + opened.joined(separator: ", ") }
-            lines.append(text)
-        }
-        let opened = news.achievements.compactMap { a in Outfits.all.first { $0.achievement == a.id }?.name }
-        if !opened.isEmpty { lines.append("👕 " + loc("Gardıropta açıldı: ", "Unlocked: ") + opened.joined(separator: ", ")) }
+        if let level = news.level { lines.append("⭐ " + loc("Seviye \(level)!", "Level \(level)!")) }
+        lines += Outfits.newsLines(outfit.items, outfit.types)
         guard !lines.isEmpty else { return }
-        _ = avatar.current.apply(AgentEvent(source: avatar.current.source, sessionID: "room", kind: .say, text: lines.joined(separator: "\n")), now: Date())
+        let text = lines.joined(separator: "\n")
+        if outfit.items.isEmpty {
+            avatar.current.say(text, for: 8)
+        } else {
+            avatar.current.celebrate(text)
+        }
     }
+
 
     /// Sakin çizim: robot boşta ve hiçbir şey olmuyorken (balon, ruh hâli, sohbet, imleç hareketi yok) kafa yavaşça
     /// durur ve yeniden çizilmez; sadece göz kırpma anlarında birkaç kare çizilir. (Windows'ta UpdateCalm, aynı kural)
