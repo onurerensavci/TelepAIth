@@ -461,12 +461,12 @@ internal static class RoomWindow
         var page = new StackPanel();
         var head = new DockPanel { Margin = new Thickness(0, 0, 0, 12) };
         var toggle = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Top };
-        foreach (var d in new[] { 7, 30 })
+        foreach (var d in new[] { 7, 30, 0 })   // 0: tüm zamanlar
         {
             var days = d;
             var b = new Border
             {
-                Child = T(L($"{d} gün", $"{d} days"), 11.5, _days == d ? FontWeights.SemiBold : FontWeights.Normal),
+                Child = T(d == 0 ? L("Tüm zamanlar", "All time") : L($"{d} gün", $"{d} days"), 11.5, _days == d ? FontWeights.SemiBold : FontWeights.Normal),
                 Padding = new Thickness(10, 4, 10, 4), CornerRadius = new CornerRadius(6), Cursor = Cursors.Hand,
                 Background = _days == d ? new SolidColorBrush(Color.FromArgb(0x30, 0x80, 0x80, 0x80)) : Brushes.Transparent,
             };
@@ -747,7 +747,7 @@ internal static class RoomWindow
                     dc.DrawRoundedRectangle(new SolidColorBrush(Color.FromRgb(c.R, c.G, c.B)), null, new Rect(x, y - bh, barW, Math.Max(0, bh)), 2, 2);
                     y -= bh;
                 }
-                var every = days.Count > 7 ? 7 : 1;
+                var every = days.Count <= 7 ? 1 : days.Count <= 35 ? 7 : (int)Math.Ceiling(days.Count / 6.0);
                 if (i % every == 0 || i == days.Count - 1)
                 {
                     var date = DateTime.ParseExact(days[i].Day, "yyyy-MM-dd", CultureInfo.InvariantCulture);

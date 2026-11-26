@@ -690,7 +690,8 @@ public sealed class DailyStats
     }
 
     /// <summary>Kaç gün saklanır (Emek sekmesi son 30 günü gösterir)</summary>
-    public const int KeepDays = 90;
+    /// <summary>Emek'te "Tüm zamanlar" için günler uzun süre saklanır (gün başına birkaç sayı)</summary>
+    public const int KeepDays = 3650;
 
     private readonly string? _file;
     private readonly Dictionary<string, Dictionary<string, Day>> _days = new();
@@ -751,11 +752,19 @@ public sealed class DailyStats
         lock (_gate) return _days.TryGetValue(DayKey(date), out var m) ? m.Values.Sum(d => d.Turns) : 0;
     }
 
-    /// <summary>Emek: son `days` gün (bugün dahil), günlük AI saniyeleri ve projeler.</summary>
+    /// <summary>Emek: son `days` gün (bugün dahil), günlük AI saniyeleri ve projeler. days 0: tüm zamanlar (ilk kayıtlı günden bugüne).</summary>
     public Effort Effort(DateTime today, int days)
     {
         lock (_gate)
         {
+            if (days <= 0)
+            {
+                var first = _days.Keys.Where(k => DateTime.TryParseExact(k, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture,
+                        System.Globalization.DateTimeStyles.None, out _))
+                    .OrderBy(k => k, StringComparer.Ordinal).FirstOrDefault();
+                days = first == null ? 1
+                    : Math.Max(1, (int)(today.Date - DateTime.ParseExact(first, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)).TotalDays + 1);
+            }
             var list = new List<EffortDay>();
             var bySource = new Dictionary<string, double>();
             var projects = new Dictionary<string, (double Seconds, int Turns)>();

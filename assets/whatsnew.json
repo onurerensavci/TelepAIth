@@ -2,10 +2,12 @@
  {
   "version": "0.23.2",
   "tr": [
-   "Sağ tık menüsünde her satırın solunda bir emoji var"
+   "Sağ tık menüsünde her satırın solunda bir emoji var",
+   "Emek'te yeni seçenek: Tüm zamanlar"
   ],
   "en": [
-   "Every row of the right-click menu has an emoji"
+   "Every row of the right-click menu has an emoji",
+   "New option in Effort: All time"
   ]
  },
  {

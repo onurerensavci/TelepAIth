@@ -15,7 +15,8 @@ final class DailyStats {
         var projects: [String: [Double]]? = nil
     }
 
-    static let keepDays = 90
+    /// Emek'te "Tüm zamanlar" için günler uzun süre saklanır (gün başına birkaç sayı)
+    static let keepDays = 3650
 
     private let key = "dailyStats"
     private let shownKey = "dailySummaryShown"
@@ -58,7 +59,18 @@ final class DailyStats {
     }
 
     /// Emek: son `count` gün (bugün dahil), günlük AI saniyeleri ve projeler.
-    func effort(today: Date, days count: Int) -> Effort {
+    func effort(today: Date, days requested: Int) -> Effort {
+        // 0: tüm zamanlar (ilk kayıtlı günden bugüne)
+        var count = requested
+        if count <= 0 {
+            let f = DateFormatter()
+            f.locale = Locale(identifier: "en_US_POSIX")
+            f.dateFormat = "yyyy-MM-dd"
+            let first = days.keys.sorted().compactMap { f.date(from: $0) }.first
+            let span = first.map { Calendar.current.dateComponents([.day], from: Calendar.current.startOfDay(for: $0),
+                                                                    to: Calendar.current.startOfDay(for: today)).day ?? 0 } ?? 0
+            count = Swift.max(1, span + 1)
+        }
         var list: [EffortDay] = []
         var bySource: [String: Double] = [:]
         var projects: [String: (seconds: Double, turns: Int)] = [:]

@@ -123,6 +123,11 @@ public static partial class Tests
         A.True(e.Headline(30).Contains("2 sa"), e.Headline(30));
         A.True(e.TopLine!.Contains("shop"));
         A.Eq(5400.0, e.BySource["claude"]);
+        // Tüm zamanlar: ilk kayıtlı günden (40 gün önce) bugüne
+        var all = st.Effort(today, 0);
+        A.Eq(41, all.Days.Count);
+        A.Eq(3, all.Projects.Count);
+        A.True(all.Headline(0).StartsWith("Şimdiye kadar"), all.Headline(0));
         File.Delete(file);
     }
 }

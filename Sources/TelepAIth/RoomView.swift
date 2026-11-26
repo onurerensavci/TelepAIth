@@ -704,9 +704,10 @@ struct EffortTab: View {
                 Picker("", selection: Binding(get: { model.days }, set: { model.setDays($0) })) {
                     Text(loc("7 gün", "7 days")).tag(7)
                     Text(loc("30 gün", "30 days")).tag(30)
+                    Text(loc("Tüm zamanlar", "All time")).tag(0)
                 }
                 .pickerStyle(.segmented)
-                .frame(width: 150)
+                .frame(width: 260)
             }
             Chart(bars) { b in
                 BarMark(x: .value("day", b.day), y: .value("hours", b.hours))
@@ -716,7 +717,7 @@ struct EffortTab: View {
             .chartForegroundStyleScale(domain: sources.map { Themes.shared.theme(for: $0).displayName },
                                        range: sources.map { Color(nsColor: Themes.shared.theme(for: $0).color) })
             .chartXAxis {
-                AxisMarks(values: e.days.enumerated().filter { $0.offset % (model.days > 7 ? 7 : 1) == 0 || $0.offset == e.days.count - 1 }.map(\.element.day)) { v in
+                AxisMarks(values: e.days.enumerated().filter { $0.offset % EffortTab.labelEvery(e.days.count) == 0 || $0.offset == e.days.count - 1 }.map(\.element.day)) { v in
                     AxisValueLabel { Text(EffortTab.shortDay(v.as(String.self) ?? "")) }
                 }
             }
@@ -772,6 +773,9 @@ struct EffortTab: View {
             }
         }
     }
+
+    /// Gün etiketleri arası: 7 günde her gün, 30 günde haftada bir, tüm zamanlarda ~6 etiket
+    static func labelEvery(_ count: Int) -> Int { count <= 7 ? 1 : count <= 35 ? 7 : Int((Double(count) / 6).rounded(.up)) }
 
     /// "2026-11-26" → "26 Kas"
     static func shortDay(_ key: String) -> String {

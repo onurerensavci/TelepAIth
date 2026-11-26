@@ -454,9 +454,12 @@ public sealed record Effort(IReadOnlyList<EffortDay> Days, IReadOnlyList<EffortP
                             IReadOnlyDictionary<string, double> BySource, double TotalSeconds, int TotalTurns, int TotalEdits)
 {
     /// <summary>"Son 30 günde AI'ların 48 sa çalıştı."</summary>
-    public string Headline(int days) => TotalSeconds < 60
-        ? L($"Son {days} günde henüz iş yok.", $"No work in the last {days} days yet.")
-        : L($"Son {days} günde AI'ların {ShortDuration(TotalSeconds)} çalıştı.", $"Your AIs worked {ShortDuration(TotalSeconds)} in the last {days} days.");
+    public string Headline(int days) => days <= 0
+        ? (TotalSeconds < 60 ? L("Henüz iş yok.", "No work yet.")
+                             : L($"Şimdiye kadar AI'ların {ShortDuration(TotalSeconds)} çalıştı.", $"Your AIs have worked {ShortDuration(TotalSeconds)} so far."))
+        : TotalSeconds < 60
+            ? L($"Son {days} günde henüz iş yok.", $"No work in the last {days} days yet.")
+            : L($"Son {days} günde AI'ların {ShortDuration(TotalSeconds)} çalıştı.", $"Your AIs worked {ShortDuration(TotalSeconds)} in the last {days} days.");
 
     public string? TopLine => Projects.FirstOrDefault() is { } top && TotalSeconds >= 60
         ? L($"En büyük pay {top.Name} projesinin: %{Math.Round(top.Share * 100)}.", $"{top.Name} took the biggest share: {Math.Round(top.Share * 100)}%.")

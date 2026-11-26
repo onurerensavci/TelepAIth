@@ -558,7 +558,11 @@ struct Effort {
 
     /// "Son 30 günde AI'ların 48 sa çalıştı."
     func headline(_ days: Int) -> String {
-        totalSeconds < 60
+        if days <= 0 {
+            return totalSeconds < 60 ? loc("Henüz iş yok.", "No work yet.")
+                : loc("Şimdiye kadar AI'ların \(shortDuration(totalSeconds)) çalıştı.", "Your AIs have worked \(shortDuration(totalSeconds)) so far.")
+        }
+        return totalSeconds < 60
             ? loc("Son \(days) günde henüz iş yok.", "No work in the last \(days) days yet.")
             : loc("Son \(days) günde AI'ların \(shortDuration(totalSeconds)) çalıştı.",
                   "Your AIs worked \(shortDuration(totalSeconds)) in the last \(days) days.")
