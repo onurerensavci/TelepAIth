@@ -39,92 +39,168 @@ def item(id,slot,tr,en,shapes,level=None,ach=None):
     if ach: d["achievement"]=ach
     d["shapes"]=shapes; items.append(d)
 
+# --- BAŞ: kafanın şekline oturan parçalar; ışık için küçük delik (r 3.4) ve ince halka ---
+import math, re
+def circ(cx,cy,r):
+    k=0.5523*r
+    return (f" M {cx+r},{cy} C {cx+r},{cy+k} {cx+k},{cy+r} {cx},{cy+r} C {cx-k},{cy+r} {cx-r},{cy+k} {cx-r},{cy}"
+            f" C {cx-r},{cy-k} {cx-k},{cy-r} {cx},{cy-r} C {cx+k},{cy-r} {cx+r},{cy-k} {cx+r},{cy} Z")
+SMALLHOLE=circ(50,22.5,3.4)
+def grommet(): return [E(50,22.5,3.9,3.9,stroke=lin(46,18.5,54,26.5,(0,"#FFFFFF"),(0.5,"#C9C4D8"),(1,"#7E7896")),w=1.1)]
+def _rp(x,y,a,cx,cy):
+    r=math.radians(a); dx,dy=x-cx,y-cy
+    return round(cx+dx*math.cos(r)-dy*math.sin(r),2), round(cy+dx*math.sin(r)+dy*math.cos(r),2)
+def rotd(d,a,cx,cy):
+    out=[];nums=[]
+    for tok in re.findall(r"[MLCQZ]|-?\d+(?:\.\d+)?",d):
+        if tok.isalpha():
+            out.append(tok)
+        else:
+            nums.append(float(tok))
+            if len(nums)==2:
+                x,y=_rp(nums[0],nums[1],a,cx,cy); out.append(f"{x},{y}"); nums=[]
+    return " ".join(out)
+def rotshape(s,a,cx,cy):
+    s=dict(s)
+    if "d" in s: s["d"]=rotd(s["d"],a,cx,cy)
+    if "ellipse" in s:
+        e=s["ellipse"]; x,y=_rp(e[0],e[1],a,cx,cy); s["ellipse"]=[x,y,e[2],e[3]]
+    for key in ("fill","stroke"):
+        v=s.get(key)
+        if isinstance(v,dict):
+            v=dict(v)
+            if "lin" in v:
+                x1,y1=_rp(v["lin"][0],v["lin"][1],a,cx,cy); x2,y2=_rp(v["lin"][2],v["lin"][3],a,cx,cy); v["lin"]=[x1,y1,x2,y2]
+            if "rad" in v:
+                x,y=_rp(v["rad"][0],v["rad"][1],a,cx,cy); v["rad"]=[x,y,v["rad"][2]]
+            s[key]=v
+    if "anim" in s and "p" in s["anim"]:
+        an=dict(s["anim"]); x,y=_rp(an["p"][0],an["p"][1],a,cx,cy); an["p"]=[x,y]; s["anim"]=an
+    return s
+DARK_A="#00000026"
+
+# Bere: kafayı saran örgü kubbe, katlanmış örgü kenar, kabarık ponpon
+cuff="M 12,16 L 88,16 C 92.5,16 95.5,19.5 95.5,23 C 95.5,27 92.5,30 88,30 C 70,31.6 30,31.6 12,30 C 7.5,30 4.5,27 4.5,23 C 4.5,19.5 7.5,16 12,16 Z"
+ribs=" ".join(f"M {x},18.6 L {x},28.4" for x in [9,13.5,18,22.5,27,31.5,36,40.5,59.5,64,68.5,73,77.5,82,86.5,91])
+pom=[(50,-10,8.5)]
 item("beanie","head","Bere","Beanie",[
-  E(50,26,37,3.4,fill=SHADOW),
-  P("M 13,22 C 13,5 30,-3 50,-3 C 70,-3 87,5 87,22 Z",fill=THEME(36,0,52)),
-  P("M 30,5 C 29,10 29,15 29,18 M 40,0 C 40,6 40,13 40,18 M 50,-1 L 50,16 M 60,0 C 60,6 60,13 60,18 M 70,5 C 71,10 71,15 71,18",stroke="#00000022",w=2.2),
-  P("M 30,5 C 29,10 29,15 29,18 M 40,0 C 40,6 40,13 40,18 M 60,0 C 60,6 60,13 60,18 M 70,5 C 71,10 71,15 71,18",stroke="#FFFFFF22",w=0.8),
-  P("M 22,6 C 28,1 38,-1 46,-1",stroke="#FFFFFF55",w=2.5),
-  P("M 15,14 L 85,14 C 89,14 91,17 91,20.5 C 91,24 89,27 85,27 L 15,27 C 11,27 9,24 9,20.5 C 9,17 11,14 15,14 Z"+HOLE,fill=CREAM),
-  P("M 14,16.5 L 86,16.5",stroke="#FFFFFFAA",w=1.2),
-  P("M 18,20 L 18,25 M 24,20 L 24,25 M 30,20 L 30,25 M 36,20 L 36,25 M 64,20 L 64,25 M 70,20 L 70,25 M 76,20 L 76,25 M 82,20 L 82,25",stroke="#B9B0CC88",w=1.4),
-  *eyelet(),
-  A(E(50,-3,7,7,fill=rad(47,-6,9,(0,"#FFFFFF"),(0.6,"#F1ECF6"),(1,"#C9C0DA"))),"sway",7,0.9,p=[50,4]),
-  A(E(47.5,-5.5,2,1.5,fill="#FFFFFFCC"),"sway",7,0.9,p=[50,4]),
+  E(50,30.5,41,3,fill=SHADOW),
+  P("M 8,22 C 8,3 27,-8 50,-8 C 73,-8 92,3 92,22 Z",fill=rad(34,-4,64,(0,"theme-light"),(0.5,"theme"),(1,"theme-dark"))),
+  P("M 50,-6 L 50,17 M 39,-5 C 37,3 36.5,10 36.5,17 M 28.5,-2 C 25.5,5 24.5,11 24.5,17 M 19.5,4 C 16.5,9 15.5,13 15.5,17 M 61,-5 C 63,3 63.5,10 63.5,17 M 71.5,-2 C 74.5,5 75.5,11 75.5,17 M 80.5,4 C 83.5,9 84.5,13 84.5,17",stroke=DARK_A,w=2.6),
+  P("M 51.3,-5 L 51.3,16 M 40.3,-4 C 38.4,3 37.9,10 37.9,16 M 29.8,-1 C 26.9,5 25.9,11 25.9,16 M 62.3,-4 C 64.3,3 64.8,10 64.8,16 M 72.8,-1 C 75.8,5 76.8,11 76.8,16",stroke="#FFFFFF24",w=0.9),
+  P("M 18,6 C 25,-2 36,-6 46,-6.5",stroke="#FFFFFF66",w=2.6),
+  P(cuff+SMALLHOLE,fill=lin(0,16,0,30,(0,"theme-light"),(0.5,"theme"),(1,"theme-dark"))),
+  P(ribs,stroke="#00000024",w=1.7),
+  P("M 11,17.4 L 89,17.4",stroke="#FFFFFF66",w=1.1),
+  P("M 9,16.8 C 30,14.6 70,14.6 91,16.8",stroke="#00000026",w=1.2),
+  *grommet(),
+  *[A(E(x,y,r,r,fill=rad(x-r*0.35,y-r*0.4,r*1.25,(0,"#FFFFFF"),(0.6,"#F3EEF8"),(1,"#CFC6E0"))),"sway",7,0.9,p=[50,0]) for x,y,r in pom],
+  A(E(50,-10,8.5,8.5,stroke="#FFFFFF66",w=1.4),"sway",7,0.9,p=[50,0]),
+  A(P("M 45,-6 L 46,-7 M 53,-5.5 L 54.2,-6.4 M 49.5,-15 L 50.6,-15.8 M 55,-11 L 56.2,-11.6 M 44.5,-11.5 L 45.5,-12.5",stroke="#B9AFCF",w=1),"sway",7,0.9,p=[50,0]),
+  A(E(46.6,-13.6,2.4,1.7,fill="#FFFFFFEE"),"sway",7,0.9,p=[50,0]),
 ],level=1)
 
+# Kep: yana dönük siperlik, dikiş çizgileri, tepede düğme; ışık önden küçük delikten
 item("cap","head","Kep","Cap",[
-  E(50,29,36,3,fill=SHADOW),
-  P("M 58,21 C 76,18 96,19 104,25 C 98,30.5 76,31 58,28.5 Z",fill=lin(58,19,104,30,(0,"theme-dark"),(0.5,"theme"),(1,"theme-dark"))),
-  P("M 62,22.5 C 78,20.5 94,21 100,24.5",stroke="#FFFFFF44",w=1.4),
-  P("M 13,28.5 C 13,7 30,-1 50,-1 C 70,-1 87,7 87,28.5 Z"+HOLE,fill=THEME(36,4,55)),
-  P("M 50,1 L 50,16.5 M 30,4 C 25,11 24,20 24.5,28 M 70,4 C 75,11 76,20 75.5,28",stroke="#00000020",w=1.2),
-  P("M 21,10 C 27,3 37,0 45,0",stroke="#FFFFFF60",w=2.6),
-  *eyelet(),
-  E(50,0.5,3.6,2.4,fill=rad(49,-0.5,4,(0,"theme-light"),(1,"theme-dark"))),
+  E(50,30.5,40,2.8,fill=SHADOW),
+  P("M 62,23 C 78,19.5 97,20 106,25.5 C 101,30.5 80,31.5 62,29.5 Z",fill=lin(62,20,106,31,(0,"theme"),(0.6,"theme-dark"),(1,"theme-dark"))),
+  P("M 64,24.3 C 79,21.4 95,21.8 103,25.3",stroke="#FFFFFF4D",w=1.3),
+  P("M 8,29.5 C 8,6 27,-4 50,-4 C 73,-4 92,6 92,29.5 C 70,31.6 30,31.6 8,29.5 Z"+SMALLHOLE,fill=rad(35,1,64,(0,"theme-light"),(0.5,"theme"),(1,"theme-dark"))),
+  P("M 50,-3.4 L 50,18.3 M 50,-3.4 C 37,0 29,12 27.3,30.4 M 50,-3.4 C 63,0 71,12 72.7,30.4",stroke="#00000026",w=1.3),
+  P("M 51.1,-2.4 L 51.1,18.3 M 48.6,-2 C 36.5,1.5 29.6,12.5 28.5,30.5",stroke="#FFFFFF22",w=0.8),
+  P("M 17,13 C 23,4 33,-0.5 43,-1.8",stroke="#FFFFFF66",w=2.6),
+  P("M 8.4,29.4 C 30,31.6 70,31.6 91.6,29.4",stroke="theme-dark",w=1.8),
+  *grommet(),
+  E(50,-4,4.2,2.6,fill=rad(49,-5,4.6,(0,"theme-light"),(1,"theme-dark"))),
 ],level=3)
 
+# Kulaklık: yastıklı kafa bandı, büyük yuvarlak kulaklıklar, AI renginde kapaklar
+def cup(x,flip):
+    sx=-1 if flip else 1
+    return [
+      R(x,31,18,38,9,fill=lin(x,31,x+18,69,(0,"#8C88AA"),(1,"#3C3954"))),
+      R(x+2.5,35,13,30,6.5,fill=rad(x+6,40,18,(0,"theme-light"),(0.55,"theme"),(1,"theme-dark"))),
+      E(x+9,50,3.4,6.5,fill="#FFFFFF1F"),
+      R(x+(15 if not flip else -2),36,5,28,2.5,fill="#2A283A"),
+    ]
 item("headphones","head","Kulaklık","Headphones",[
-  P("M 3,44 C 3,-2 97,-2 97,44",stroke=lin(0,0,100,0,(0,"#55516E"),(0.5,"#9894B4"),(1,"#4A4766")),w=6),
-  P("M 8,34 C 10,6 90,6 92,34",stroke="#FFFFFF40",w=1.3),
-  R(-6,33,16,32,7,fill=lin(-6,33,10,65,(0,"#7E7A9C"),(1,"#3E3B56"))),
-  R(90,33,16,32,7,fill=lin(90,33,106,65,(0,"#7E7A9C"),(1,"#3E3B56"))),
-  R(-3,36,5,10,2.5,fill="#FFFFFF33"),
-  R(93,36,5,10,2.5,fill="#FFFFFF33"),
-  R(7,37,5,24,2.5,fill=lin(7,37,12,61,(0,"theme-light"),(1,"theme-dark"))),
-  R(88,37,5,24,2.5,fill=lin(88,37,93,61,(0,"theme-light"),(1,"theme-dark"))),
+  P("M 3,40 C 3,-6 97,-6 97,40",stroke=lin(0,-2,0,40,(0,"#4A475E"),(1,"#2A283C")),w=8),
+  P("M 3,40 C 3,-6 97,-6 97,40",stroke=lin(0,0,100,0,(0,"#6E6A88"),(0.5,"#B4B0CE"),(1,"#5A5674")),w=3.4),
+  P("M 14,14 C 26,1 74,1 86,14",stroke="#FFFFFF40",w=1.1),
+  R(-1,24,8,10,2.5,fill=lin(-1,24,7,34,(0,"#C9C4DA"),(1,"#6E6A88"))),
+  R(93,24,8,10,2.5,fill=lin(93,24,101,34,(0,"#C9C4DA"),(1,"#6E6A88"))),
+  *cup(-9,False),
+  *cup(91,True),
 ],level=5)
 
-item("tophat","head","Silindir şapka","Top hat",[
-  E(50,15.5,30,3.2,fill=SHADOW),
-  R(33,-24,34,38,4,fill=lin(33,0,67,0,(0,"#4A4858"),(0.3,"#2A2935"),(0.7,"#1A1922"),(1,"#33313F"))),
-  E(50,-24,17,3.2,fill=rad(46,-25,16,(0,"#55536A"),(1,"#2A2935"))),
-  R(33,2,34,7,0,fill=lin(33,0,67,0,(0,"theme-light"),(0.4,"theme"),(1,"theme-dark"))),
-  P("M 38,-20 L 38,1",stroke="#FFFFFF2A",w=3),
-  E(50,13.5,30,4,fill=rad(42,12,30,(0,"#4A4858"),(1,"#14131B"))),
-  P("M 24,12.5 C 36,10.5 64,10.5 76,12.5",stroke="#FFFFFF30",w=1),
-],level=10)
+# Silindir şapka: hafif yatık, kenarları kıvrık, AI renginde kurdele
+tophat=[
+  E(50,16,31,2.8,fill=SHADOW),
+  P("M 35.5,12 L 33.5,-21 C 33.5,-23.5 35,-25 37.5,-25 L 62.5,-25 C 65,-25 66.5,-23.5 66.5,-21 L 64.5,12 Z",
+    fill=lin(33.5,0,66.5,0,(0,"#4E4C5E"),(0.28,"#2B2A36"),(0.7,"#17161F"),(1,"#363444"))),
+  E(50,-25,16.5,3.3,fill=rad(45,-26,17,(0,"#5E5C72"),(1,"#2A2935"))),
+  P("M 35,3.5 L 65,3.5 L 64.6,11 L 35.4,11 Z",fill=lin(35,0,65,0,(0,"theme-light"),(0.45,"theme"),(1,"theme-dark"))),
+  P("M 35.2,4.6 L 64.8,4.6",stroke="#FFFFFF55",w=0.9),
+  P("M 39,-20 L 39.6,2",stroke="#FFFFFF2E",w=3),
+  P("M 17,12.5 C 16,9 19,9.2 24,10.6 C 33,9.4 67,9.4 76,10.6 C 81,9.2 84,9 83,12.5 C 82,17 70,18 50,18 C 30,18 18,17 17,12.5 Z",
+    fill=rad(42,11,34,(0,"#56546A"),(0.6,"#24232F"),(1,"#121119"))),
+  P("M 22,12 C 34,10.4 66,10.4 78,12",stroke="#FFFFFF33",w=1),
+]
+item("tophat","head","Silindir şapka","Top hat",[rotshape(s,-6,50,13) for s in tophat],level=10)
 
-item("crown","head","Taç","Crown",[
-  E(50,16.5,22,2.5,fill=SHADOW),
-  P("M 28,16 L 25,-2 L 38,7 L 50,-9 L 62,7 L 75,-2 L 72,16 Z",fill=GOLD(30,-9,70,16),stroke="#A8701A",w=1),
-  P("M 30,13 L 28.5,2 L 37,8.5",stroke="#FFFFFF77",w=1.2),
-  R(27,10,46,6.5,2,fill=lin(0,10,0,16.5,(0,"#FFE27A"),(1,"#C98D1F")),stroke="#A8701A",sw=0.8),
-  E(25,-2,2.8,2.8,fill=rad(24,-3,3,(0,"#FFF6C8"),(1,"#D99A22"))),
-  E(50,-9,3,3,fill=rad(49,-10,3.2,(0,"#FFF6C8"),(1,"#D99A22"))),
-  E(75,-2,2.8,2.8,fill=rad(74,-3,3,(0,"#FFF6C8"),(1,"#D99A22"))),
-  E(50,13.2,3,2.6,fill=rad(49,12.2,3.4,(0,"#FF9AA0"),(0.5,"#E5484D"),(1,"#9E1D2A"))),
-  E(38,13.2,2.2,2,fill=rad(37.4,12.5,2.6,(0,"#A8D4FF"),(0.5,"#3E9BFF"),(1,"#1F5FB8"))),
-  E(62,13.2,2.2,2,fill=rad(61.4,12.5,2.6,(0,"#A8D4FF"),(0.5,"#3E9BFF"),(1,"#1F5FB8"))),
-  E(49.2,12.3,0.9,0.7,fill="#FFFFFFDD"),
-  A(P("M 64,-4 L 65,-1 L 68,0 L 65,1 L 64,4 L 63,1 L 60,0 L 63,-1 Z",fill="#FFFFFF"),"twinkle",1,0.35,p=[64,0]),
-  A(P("M 33,3 L 33.7,5 L 35.7,5.7 L 33.7,6.4 L 33,8.4 L 32.3,6.4 L 30.3,5.7 L 32.3,5 Z",fill="#FFFFFF"),"twinkle",1,0.35,p=[33,5.7],o=0.5),
-],level=20)
+# Taç: içi kadife, uçlarında inci, kenarında inci dizisi ve mücevherler
+crown=[
+  E(50,17,23,2.5,fill=SHADOW),
+  P("M 30,12 C 30,1 39,-3 50,-3 C 61,-3 70,1 70,12 Z",fill=rad(44,-1,24,(0,"#E2475E"),(0.6,"#A81E36"),(1,"#5E0F1E"))),
+  P("M 28,11 L 26,-1 L 37,6 L 43.5,-4 L 50,-10 L 56.5,-4 L 63,6 L 74,-1 L 72,11 Z",fill=GOLD(28,-10,72,11),stroke="#9A6516",w=0.9),
+  P("M 29.5,9 L 28.2,1.6 L 36.4,7.6 M 44.6,-2.8 L 50,-7.8",stroke="#FFFFFF80",w=1.1),
+  R(27,10,46,7.5,2.5,fill=lin(0,10,0,17.5,(0,"#FFE786"),(0.5,"#E9B53A"),(1,"#B47A1C")),stroke="#9A6516",sw=0.8),
+  *[E(x,10.3,1.15,1.15,fill=rad(x-0.4,9.9,1.5,(0,"#FFFFFF"),(1,"#CFC6DA"))) for x in [31,35,39,43,57,61,65,69]],
+  E(50,13.8,3.4,2.8,fill=rad(49,12.8,3.8,(0,"#FFA0A8"),(0.5,"#E5484D"),(1,"#8E1424"))),
+  E(39,13.8,2.3,2.1,fill=rad(38.4,13.1,2.7,(0,"#A8D4FF"),(0.5,"#3E9BFF"),(1,"#1A55A8"))),
+  E(61,13.8,2.3,2.1,fill=rad(60.4,13.1,2.7,(0,"#A8D4FF"),(0.5,"#3E9BFF"),(1,"#1A55A8"))),
+  E(31.5,13.8,1.6,1.6,fill=rad(31,13.3,2,(0,"#B8FFD8"),(0.5,"#2FBF71"),(1,"#14713E"))),
+  E(68.5,13.8,1.6,1.6,fill=rad(68,13.3,2,(0,"#B8FFD8"),(0.5,"#2FBF71"),(1,"#14713E"))),
+  E(49,12.9,1,0.8,fill="#FFFFFFDD"),
+  *[E(x,y,r,r,fill=rad(x-r*0.35,y-r*0.4,r*1.3,(0,"#FFFFFF"),(0.6,"#F2EEF6"),(1,"#BDB4CC"))) for x,y,r in [(26,-1.5,2.4),(50,-10.6,2.7),(74,-1.5,2.4),(37,5.6,1.6),(63,5.6,1.6),(43.5,-4.4,1.5),(56.5,-4.4,1.5)]],
+  A(P("M 65,-6 L 66,-3 L 69,-2 L 66,-1 L 65,2 L 64,-1 L 61,-2 L 64,-3 Z",fill="#FFFFFF"),"twinkle",1,0.35,p=[65,-2]),
+  A(P("M 33,0 L 33.7,2 L 35.7,2.7 L 33.7,3.4 L 33,5.4 L 32.3,3.4 L 30.3,2.7 L 32.3,2 Z",fill="#FFFFFF"),"twinkle",1,0.35,p=[33,2.7],o=0.5),
+]
+item("crown","head","Taç","Crown",crown,level=20)
 
-item("party","head","Parti şapkası","Party hat",[
-  E(50,17,16,2.4,fill=SHADOW),
-  P("M 35,16.5 L 65,16.5 L 51,-22 Z",fill=lin(35,0,65,0,(0,"#A48BFF"),(0.45,"#7C5CFF"),(1,"#4E2FC9"))),
-  P("M 38.5,7 L 62.5,10 L 60.5,4.5 L 41,2 Z M 44,-6 L 57,-4 L 55,-9 L 46.5,-10 Z",fill="#FFFFFF2E"),
-  E(45,11,2.3,2.3,fill=rad(44.3,10.3,2.6,(0,"#FFF3B0"),(1,"#F2B90F"))),
-  E(56,2,2,2,fill=rad(55.4,1.4,2.3,(0,"#FFC4D6"),(1,"#E5487A"))),
-  E(49,-12,1.7,1.7,fill=rad(48.5,-12.5,2,(0,"#B8FFE6"),(1,"#25B784"))),
-  P("M 39,13 L 46,-6",stroke="#FFFFFF55",w=1.6),
-  A(E(51,-22,5,5,fill=rad(49.5,-23.5,6,(0,"#FFF6C2"),(0.6,"#FFD34E"),(1,"#D99A10"))),"bob",1.2,1.6),
-  P("M 34.5,16.5 L 65.5,16.5",stroke="#4A2CC0",w=2.2),
-],ach="bigday")
+# Parti şapkası: yana yatık koni, puantiyeler, tabanda fırfır, tepede püskül
+party=[
+  E(50,17.5,17,2.4,fill=SHADOW),
+  P("M 37,16.5 L 65,16.5 L 51,-21 Z",fill=lin(37,0,65,0,(0,"#B19BFF"),(0.45,"#7C5CFF"),(1,"#4A2BC4"))),
+  P("M 41,12 L 47,-8",stroke="#FFFFFF55",w=1.8),
+  *[E(x,y,r,r,fill=rad(x-r*0.3,y-r*0.3,r*1.3,(0,c1),(1,c2))) for x,y,r,c1,c2 in
+    [(45.5,10.5,2.4,"#FFF3B0","#F2B90F"),(56.5,8.5,2.1,"#FFC4D6","#E5487A"),(51,1,2,"#B8FFE6","#25B784"),(47.5,-6,1.6,"#C8E4FF","#3E8BE6"),(55,-3,1.3,"#FFF3B0","#F2B90F")]],
+  *[E(x,16.8,2.3,2.3,fill=rad(x-0.6,16.1,2.8,(0,"#FFFFFF"),(1,"theme-light"))) for x in [38,42.5,47,51.5,56,60.5,65]],
+  A(E(51,-22.5,5,5,fill=rad(49.3,-24.5,6.3,(0,"#FFF6C2"),(0.6,"#FFD34E"),(1,"#D99A10"))),"bob",1.2,1.6),
+  A(E(51,-22.5,5,5,stroke="#FFFFFF55",w=1.2),"bob",1.2,1.6),
+  A(E(49.4,-24.3,1.6,1.1,fill="#FFFFFFDD"),"bob",1.2,1.6),
+]
+item("party","head","Parti şapkası","Party hat",[rotshape(s,14,51,16.5) for s in party],ach="bigday")
 
-item("flower","head","Çiçek","Flower",[A(sh,"sway",6,0.7,p=[73,18]) for sh in [
-  P("M 73,18 C 77,11 81,7 84,3",stroke=lin(73,18,84,3,(0,"#2F8A4A"),(1,"#5BD07E")),w=2.2),
-  P("M 79,11 C 74,9.5 72,6 73,3.5 C 77,3.5 79.5,7 79,11 Z",fill=lin(72,4,80,11,(0,"#7BE29B"),(1,"#2F8A4A"))),
-  *[E(85+dx,2+dy,3.8,3.8,fill=rad(85+dx-1,2+dy-1,4.5,(0,"#FFE0EA"),(0.6,"#FF8FB1"),(1,"#E0507F"))) for dx,dy in [(0,-4.6),(4.4,-1.4),(2.7,3.8),(-2.7,3.8),(-4.4,-1.4)]],
-  E(85,2,2.8,2.8,fill=rad(84.2,1.2,3.2,(0,"#FFF6C2"),(1,"#F2B00F"))),
-  E(84.2,1,0.9,0.7,fill="#FFFFFFCC"),
+# Çiçek: başın sağ üstünde papatya toka
+petals=[]
+for i in range(9):
+    a=math.radians(i*40-90)
+    x=82+6.3*math.cos(a); y=9+6.3*math.sin(a)
+    petals.append(E(round(x,2),round(y,2),3.4,3.4,fill=rad(round(x-1,2),round(y-1,2),3.6,(0,"#FFFFFF"),(0.7,"#F6F2FA"),(1,"#CFC6DE"))))
+item("flower","head","Çiçek","Flower",[A(sh,"sway",5,0.7,p=[80,16]) for sh in [
+  P("M 74,17 C 72,13 72.5,10 75,8 C 77,11 76.5,14.5 74,17 Z",fill=lin(72,8,77,17,(0,"#8BE6A6"),(1,"#2F8A4A"))),
+  *petals,
+  E(82,9,4,4,fill=rad(80.8,7.8,4.8,(0,"#FFF6C2"),(0.6,"#FFC93C"),(1,"#D9940F"))),
+  E(80.9,7.8,1.3,0.9,fill="#FFFFFFCC"),
 ]],ach="streak7")
 
+# Hale: parlayan altın halka, çevresinde ışık ve küçük yıldızlar
 item("halo","head","Hale","Halo",[
-  A(E(50,-1,23,5,stroke="#FFE08A40",w=7),"bob",1.5,0.6),
-  A(E(50,-1,23,5,stroke=lin(27,0,73,0,(0,"#FFF6C8"),(0.5,"#FFD54A"),(1,"#E0A526")),w=3),"bob",1.5,0.6),
-  A(P("M 33,-4.5 C 40,-6 50,-6.3 58,-5.6",stroke="#FFFFFFCC",w=1),"bob",1.5,0.6),
+  A(E(50,-4,24,5.4,stroke="#FFE08A33",w=9),"bob",1.4,0.6),
+  A(E(50,-4,24,5.4,stroke=lin(26,0,74,0,(0,"#FFF6C8"),(0.5,"#FFD54A"),(1,"#D9981E")),w=3.4),"bob",1.4,0.6),
+  A(P("M 31,-7.6 C 39,-9.4 51,-9.7 61,-9",stroke="#FFFFFFCC",w=1.1),"bob",1.4,0.6),
+  A(P("M 77,-8 L 77.7,-6 L 79.7,-5.3 L 77.7,-4.6 L 77,-2.6 L 76.3,-4.6 L 74.3,-5.3 L 76.3,-6 Z",fill="#FFF6C8"),"twinkle",1,0.3,p=[77,-5.3]),
 ],ach="hundred")
 
 LENS=lin(0,41,0,62,(0,"#4A4A66"),(0.5,"#16161F"),(1,"#050508"))
