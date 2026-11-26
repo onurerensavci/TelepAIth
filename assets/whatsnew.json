@@ -1,5 +1,14 @@
 [
  {
+  "version": "0.23.4",
+  "tr": [
+   "Sağ tık menüsünde Her zaman üstte ana menüde, Son olaylar Diğer'in içinde"
+  ],
+  "en": [
+   "Always on top is in the main right-click menu, Recent events moved under More"
+  ]
+ },
+ {
   "version": "0.23.3",
   "tr": [
    "Sağ tık menüsünde Kilitle, Sessize al ve Odak modu en üstte"

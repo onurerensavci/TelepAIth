@@ -243,8 +243,14 @@ internal sealed class AppController : ISettingsHost
                 Manager.FocusChanged();
                 Changed();
             }, FocusMode.ManualActive, Icon: "\uE708"),
+            new(L("Her zaman üstte", "Always on top"), () =>
+            {
+                var on = !Prefs.AlwaysOnTop;
+                Manager.SetAlwaysOnTop(on);
+                Manager.Current?.Say(on ? WithEmoji("📌", L("Her zaman en üstteyim.", "I'll stay on top of everything."))
+                                        : WithEmoji("🪟", L("Artık diğer pencerelerin arkasında kalabilirim.", "Other windows can cover me now.")), 4);
+            }, Prefs.AlwaysOnTop, Icon: "\uE718"),
             null,
-            new(L("Son olaylar", "Recent events"), () => { if (current != null) Manager.ShowHistory(current.Source); }, Icon: "\uE81C"),
             new(L("Robotun odası", "Robot's room"), OpenRoom, Icon: "\uE80F"),
             new(L("Bugünün özeti", "Today's summary"), Manager.ShowSummary, Icon: "\uE787"),
             null,
@@ -255,13 +261,7 @@ internal sealed class AppController : ISettingsHost
                 CheckUpdates, Enabled: !Updater.Shared.IsBusy, Icon: "\uE895"));
         entries.Add(new MenuEntry(L("Diğer", "More"), Icon: "\uE712", Children: new List<MenuEntry?>
         {
-            new(L("Her zaman üstte", "Always on top"), () =>
-            {
-                var on = !Prefs.AlwaysOnTop;
-                Manager.SetAlwaysOnTop(on);
-                Manager.Current?.Say(on ? WithEmoji("📌", L("Her zaman en üstteyim.", "I'll stay on top of everything."))
-                                        : WithEmoji("🪟", L("Artık diğer pencerelerin arkasında kalabilirim.", "Other windows can cover me now.")), 4);
-            }, Prefs.AlwaysOnTop, Icon: "\uE718"),
+            new(L("Son olaylar", "Recent events"), () => { if (current != null) Manager.ShowHistory(current.Source); }, Icon: "\uE81C"),
             new(L("Teşhis", "Diagnostics"), OpenDiagnostics, Icon: "\uE9D9"),
             new(L("Hata bildir", "Report a problem"), ReportBug, Icon: "\uEBE8"),
             null,
