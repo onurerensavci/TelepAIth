@@ -1,5 +1,14 @@
 [
  {
+  "version": "0.23.2",
+  "tr": [
+   "Sağ tık menüsünde her satırın solunda bir emoji var"
+  ],
+  "en": [
+   "Every row of the right-click menu has an emoji"
+  ]
+ },
+ {
   "version": "0.23.1",
   "tr": [
    "Gardırop sadeleşti: tipler kalktı, Baş, Gözlük, Yüz, Boyun ve Yanında'dan istediğini giy",
