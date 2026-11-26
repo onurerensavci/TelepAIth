@@ -159,5 +159,18 @@ public static partial class Tests
             new SidebarItem("UGC video akışı", "", "https://claude.ai/chat/u1", new RectD(20, 96, 120, 16)),
         });
         A.Eq("UGC video akışı", rows[0].Row.Title);
+        // Sohbetin içindeki yazılar (mesaj, mesaj düğmesi, kenar çubuğu düğmesi) sohbet sayılmaz: sadece bağlantısı olan satırlar
+        var junk = SidebarChats.Parse(new[]
+        {
+            new SidebarItem("", "running", null, new RectD(300, 200, 8, 8)),
+            new SidebarItem("You said: /Volumes/LaCie/spark", "", null, new RectD(320, 196, 300, 20)),
+            new SidebarItem("", "running", null, new RectD(300, 260, 8, 8)),
+            new SidebarItem("Show message actions for Claude", "", null, new RectD(320, 256, 30, 20)),
+            new SidebarItem("", "running", null, new RectD(10, 10, 8, 8)),
+            new SidebarItem("Sidebar", "", null, new RectD(30, 6, 30, 20)),
+        });
+        A.Eq(0, junk.Count);
+        A.Eq("", SidebarChats.StripStatus("You said: merhaba"));
+        A.Eq("Copywriting fikirleri", SidebarChats.StripStatus("Copywriting fikirleri"));
     }
 }

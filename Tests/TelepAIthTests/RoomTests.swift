@@ -126,4 +126,17 @@ final class RoomTests: XCTestCase {
         XCTAssertEqual(menuTitle("Bring robot to this desktop"), "Bring Robot to This Desktop")
         Language.set(.tr)
     }
+
+    func testSidebarIgnoresConversationJunk() {
+        // Sohbetin içindeki yazılar (mesaj, mesaj düğmesi, kenar çubuğu düğmesi) sohbet sayılmaz: sadece bağlantısı olan satırlar
+        let junk = SidebarChats.parse([
+            SidebarItem(name: "", help: "running", url: nil, rect: CGRect(x: 300, y: 200, width: 8, height: 8)),
+            SidebarItem(name: "You said: /Volumes/LaCie/spark", help: "", url: nil, rect: CGRect(x: 320, y: 196, width: 300, height: 20)),
+            SidebarItem(name: "", help: "running", url: nil, rect: CGRect(x: 10, y: 10, width: 8, height: 8)),
+            SidebarItem(name: "Sidebar", help: "", url: nil, rect: CGRect(x: 30, y: 6, width: 30, height: 20)),
+        ])
+        XCTAssertTrue(junk.isEmpty)
+        XCTAssertEqual(SidebarChats.stripStatus("You said: merhaba"), "")
+        XCTAssertEqual(SidebarChats.stripStatus("Copywriting fikirleri"), "Copywriting fikirleri")
+    }
 }

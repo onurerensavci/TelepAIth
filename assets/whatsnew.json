@@ -1,5 +1,14 @@
 [
  {
+  "version": "0.23.5",
+  "tr": [
+   "Sohbetler listesi temizlendi: sohbetin içindeki mesajlar ve düğmeler artık sohbet gibi görünmüyor"
+  ],
+  "en": [
+   "Cleaner chat list: messages and buttons inside a chat no longer show up as chats"
+  ]
+ },
+ {
   "version": "0.23.4",
   "tr": [
    "Sağ tık menüsünde Her zaman üstte ana menüde, Son olaylar Diğer'in içinde"

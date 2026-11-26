@@ -500,13 +500,22 @@ public sealed class SidebarChats
         "options", "chat options", "open menu", "menu", "rename", "delete", "archive", "share", "new chat",
         "yıldızlı", "sabitlendi", "sabitlenmiş", "seçenekler", "daha fazla seçenek", "sohbet seçenekleri", "yeni sohbet",
         "artifact içerir", "yeniden adlandır", "sil", "arşivle", "paylaş",
+        "sidebar", "kenar çubuğu", "copy", "retry", "edit", "kopyala", "yeniden dene", "düzenle",
     };
 
     public static bool IsNoise(string text)
     {
         var l = text.Trim().ToLowerInvariant().TrimEnd('.', '…', ' ');
-        return NoiseLabels.Contains(l) || l.StartsWith("includes ", StringComparison.Ordinal);
+        return NoiseLabels.Contains(l) || NoisePrefixes.Any(p => l.StartsWith(p, StringComparison.Ordinal)) || l.Contains('\n');
     }
+
+    /// <summary>Sohbetin içinden gelen yazılar (mesajlar, mesaj düğmeleri, kenar çubuğu düğmesi) sohbet adı değildir</summary>
+    private static readonly string[] NoisePrefixes =
+    {
+        "includes ", "you said:", "claude said:", "chatgpt said:", "show message actions", "message actions for",
+        "open sidebar", "close sidebar", "toggle sidebar", "collapse sidebar", "expand sidebar",
+        "scroll to bottom", "skip to content", "şunu dedin:",
+    };
 
     public static string StripStatus(string name)
     {
@@ -554,7 +563,7 @@ public sealed class SidebarChats
                 foreach (var o in items)
                 {
                     if (o == item || StatusOf(o.Name) != null && StripStatus(o.Name).Length < 2) continue;
-                    if (o.Url == null && StripStatus(o.Name).Length < 2) continue;
+                    if (o.Url == null || StripStatus(o.Name).Length < 2) continue;   // sadece sohbet bağlantıları
                     var oc = o.Rect.Y + o.Rect.Height / 2;
                     if (Math.Abs(oc - cy) > Math.Max(o.Rect.Height / 2, 12)) continue;
                     // Bağlantısı olan, sonra satıra en yakın olan
@@ -569,7 +578,8 @@ public sealed class SidebarChats
                     current |= r.Current;
                 }
             }
-            if (title.Length < 2) continue;
+            // Sohbet satırı bir bağlantıdır: adresi olmayan (sohbetin içindeki mesaj, düğme…) satır sayılmaz
+            if (title.Length < 2 || url == null) continue;
             var key = KeyOf(url, title);
             if (rows.TryGetValue(key, out var old) && old.Row.State.Priority() >= st.Value.Priority()) continue;
             rows[key] = (new Row(key, title, url, st.Value), current);

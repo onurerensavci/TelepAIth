@@ -84,12 +84,18 @@ final class SidebarChats {
         "options", "chat options", "open menu", "menu", "rename", "delete", "archive", "share", "new chat",
         "yıldızlı", "sabitlendi", "sabitlenmiş", "seçenekler", "daha fazla seçenek", "sohbet seçenekleri", "yeni sohbet",
         "artifact içerir", "yeniden adlandır", "sil", "arşivle", "paylaş",
+        "sidebar", "kenar çubuğu", "copy", "retry", "edit", "kopyala", "yeniden dene", "düzenle",
     ]
 
     static func isNoise(_ text: String) -> Bool {
         let l = normalized(text)
-        return noiseLabels.contains(l) || l.hasPrefix("includes ")
+        return noiseLabels.contains(l) || noisePrefixes.contains { l.hasPrefix($0) } || l.contains("\n")
     }
+
+    /// Sohbetin içinden gelen yazılar (mesajlar, mesaj düğmeleri, kenar çubuğu düğmesi) sohbet adı değildir
+    private static let noisePrefixes = ["includes ", "you said:", "claude said:", "chatgpt said:", "show message actions", "message actions for",
+                                        "open sidebar", "close sidebar", "toggle sidebar", "collapse sidebar", "expand sidebar",
+                                        "scroll to bottom", "skip to content", "şunu dedin:"]
 
     /// Addaki durum ekini at: "Tarif, running" → "Tarif"
     static func stripStatus(_ name: String) -> String {
@@ -137,7 +143,7 @@ final class SidebarChats {
                 for o in items where o != item {
                     let oTitle = stripStatus(o.name)
                     if statusOf(o.name) != nil && oTitle.count < 2 { continue }
-                    if o.url == nil && oTitle.count < 2 { continue }
+                    if o.url == nil || oTitle.count < 2 { continue }   // sadece sohbet bağlantıları
                     if abs(o.rect.midY - cy) > Swift.max(o.rect.height / 2, 12) { continue }
                     if let r = row {
                         let better = (o.url != nil && r.url == nil)
@@ -153,7 +159,8 @@ final class SidebarChats {
                     current = current || r.current
                 }
             }
-            guard title.count >= 2 else { continue }
+            // Sohbet satırı bir bağlantıdır: adresi olmayan (sohbetin içindeki mesaj, düğme…) satır sayılmaz
+            guard title.count >= 2, url != nil else { continue }
             let k = key(url: url, title: title)
             if let old = rows[k], old.row.state.priority >= st.priority { continue }
             if rows[k] == nil { order.append(k) }
