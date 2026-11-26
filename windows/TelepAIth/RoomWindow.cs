@@ -619,7 +619,7 @@ internal static class RoomWindow
                 if (i % every == 0 || i == days.Count - 1)
                 {
                     var date = DateTime.ParseExact(days[i].Day, "yyyy-MM-dd", CultureInfo.InvariantCulture);
-                    var culture = Lang.Current == Language.Tr ? new CultureInfo("tr-TR") : new CultureInfo("en-US");
+                    var culture = Lang.Current == TelepAIth.Core.Language.Tr ? new CultureInfo("tr-TR") : new CultureInfo("en-US");
                     var label = new FormattedText(date.ToString("d MMM", culture), culture, FlowDirection.LeftToRight, ui, 10, new SolidColorBrush(sub), dpi);
                     dc.DrawText(label, new Point(Math.Min(w - label.Width, x + barW / 2 - label.Width / 2), h - bottom + 4));
                 }
