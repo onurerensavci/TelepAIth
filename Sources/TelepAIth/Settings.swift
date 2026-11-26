@@ -75,6 +75,7 @@ struct SettingsView: View {
             notifications.tabItem { Label(loc("Bildirimler", "Notifications"), systemImage: "bell") }
             focus.tabItem { Label(loc("Odak ve özet", "Focus & summary"), systemImage: "moon") }
             connections.tabItem { Label(loc("Bağlantılar", "Connections"), systemImage: "link") }
+            sound.tabItem { Label(loc("Ses", "Sound"), systemImage: "speaker.wave.2") }
         }
         .padding(16)
         .frame(width: 560, height: 470)
@@ -139,7 +140,35 @@ struct SettingsView: View {
                        isOn: model.toggle({ Preferences.emojiEnabled }, { Preferences.emojiEnabled = $0 }))
                 Toggle(loc("Boştayken ara sıra laf atsın", "Idle chatter"),
                        isOn: model.toggle({ Preferences.idleChatter }, { Preferences.idleChatter = $0 }))
-                Toggle(loc("Kısa sesler", "Short sounds"),
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    // MARK: Ses
+
+    private var sound: some View {
+        Form {
+            Section {
+                Toggle(loc("Sessize al (hiçbir şey ses çıkarmaz, bildirimler sessiz gelir)", "Mute (nothing makes a sound, notifications arrive silently)"),
+                       isOn: model.toggle({ Preferences.muted }, { Preferences.muted = $0 }))
+            }
+            Section(loc("Neye ses çıksın", "What makes a sound")) {
+                ForEach(Preferences.soundKinds) { k in
+                    Toggle(isOn: model.toggle({ Preferences.sound(k.id) }, { Preferences.setSound(k.id, $0) })) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(k.title)
+                            Text(k.detail).font(.caption).foregroundColor(.secondary)
+                        }
+                    }
+                }
+                Text(Preferences.muted
+                     ? loc("Sessize alındığı için şu an hiçbiri çalmaz.", "Muted, so none of these play right now.")
+                     : loc("Kapattıkların bildirim olarak yine gelir, sadece sessiz gelir.", "The ones you turn off still notify, just silently."))
+                    .font(.callout).foregroundColor(.secondary)
+            }
+            Section(loc("Ses türleri", "Kinds of sound")) {
+                Toggle(loc("Robotun kısa sesleri (bitince, beklerken, hata verince)", "Robot's short sounds (done, waiting, errors)"),
                        isOn: model.toggle({ Preferences.sounds }, { Preferences.sounds = $0 }))
                 Toggle(loc("Önemli anları sesli söylesin", "Say important moments out loud"),
                        isOn: model.toggle({ Preferences.speak }, { value in

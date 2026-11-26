@@ -124,6 +124,31 @@ enum Preferences {
         set { defaults.set(newValue, forKey: "muted") }
     }
 
+    /// Ses sekmesi: bu tür (done, waiting, reminder, error, usage, alert, summary) ses çıkarsın mı (bildirim sesi, kısa ses, sesli söyleme)
+    static func sound(_ kind: String) -> Bool { defaults.object(forKey: "sound." + kind) as? Bool ?? true }
+    static func setSound(_ kind: String, _ on: Bool) { defaults.set(on, forKey: "sound." + kind) }
+    /// Sessize alınmadıysa ve bu türün sesi açıksa
+    static func soundOn(_ kind: String) -> Bool { !muted && sound(kind) }
+
+    /// Ses sekmesindeki türler: kimlik, başlık, açıklama
+    struct SoundKind: Identifiable {
+        let id: String
+        let title: String
+        let detail: String
+    }
+
+    static var soundKinds: [SoundKind] {
+        [
+            SoundKind(id: "done", title: loc("İş bitince", "When a task finishes"), detail: loc("Bir sohbet işini bitirdiğinde", "A chat finished its work")),
+            SoundKind(id: "waiting", title: loc("Seni bekleyince", "When it needs you"), detail: loc("Onay ya da cevap beklerken", "Waiting for an approval or an answer")),
+            SoundKind(id: "reminder", title: loc("Hatırlatma", "Reminders"), detail: loc("Bir süredir hâlâ seni bekliyorsa", "Still waiting for you after a while")),
+            SoundKind(id: "error", title: loc("Hata verince", "On errors"), detail: loc("Bir sohbet hata verdiğinde", "A chat hit an error")),
+            SoundKind(id: "usage", title: loc("Kullanım sınırı", "Usage limits"), detail: loc("%80, %95 ve limit yenilenince", "At 80%, 95% and when the limit resets")),
+            SoundKind(id: "alert", title: loc("Akıllı uyarılar", "Smart alerts"), detail: loc("Takıldı, aynı dosya, CI sonucu, commit hatırlatması", "Stuck, same file, CI result, commit reminder")),
+            SoundKind(id: "summary", title: loc("Günün özeti ve diğerleri", "Daily summary and others"), detail: loc("Günün özeti, güncelleme, kutlamalar", "Daily summary, updates, celebrations")),
+        ]
+    }
+
     /// Bitti, bekliyor, hata gibi anlarda kısa sesler.
     static var sounds: Bool {
         get { defaults.object(forKey: "sounds") as? Bool ?? false }

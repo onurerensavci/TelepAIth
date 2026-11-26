@@ -32,22 +32,23 @@ internal static class Notifier
         };
     }
 
-    public static void Notify(string title, string body, AppTarget? target = null, Action? onClick = null)
+    /// <param name="kind">Ses sekmesindeki tür (done, waiting…); null ise sadece "Sessize al" bakılır</param>
+    public static void Notify(string title, string body, AppTarget? target = null, Action? onClick = null, string? kind = null)
     {
         if (!Prefs.NotificationsEnabled || Icon == null) return;
         var dispatcher = System.Windows.Application.Current?.Dispatcher;
         if (dispatcher != null && !dispatcher.CheckAccess())
         {
-            dispatcher.BeginInvoke(() => Notify(title, body, target, onClick));
+            dispatcher.BeginInvoke(() => Notify(title, body, target, onClick, kind));
             return;
         }
         _lastTarget = target;
         _lastAction = onClick;
         try
         {
-            if (Prefs.Muted)
+            if (kind == null ? Prefs.Muted : !Prefs.SoundOn(kind))
             {
-                // Sessize alındı: bildirimi Windows'un sessiz seçeneğiyle göster; olmazsa hiç gösterme (robot balonda söyler)
+                // Sessize alındı ya da bu türün sesi kapalı: bildirimi Windows'un sessiz seçeneğiyle göster; olmazsa hiç gösterme (robot balonda söyler)
                 SilentBalloon(Clip(title, 60), Clip(string.IsNullOrWhiteSpace(body) ? " " : body, 250));
                 return;
             }
@@ -129,9 +130,9 @@ internal static class Speech
     private static dynamic? _voice;
     private static Language? _voiceLang;
 
-    public static void Say(string text)
+    public static void Say(string text, string? kind = null)
     {
-        if (!Prefs.Speak || Prefs.Muted || FocusMode.IsActive) return;
+        if (!Prefs.Speak || (kind == null ? Prefs.Muted : !Prefs.SoundOn(kind)) || FocusMode.IsActive) return;
         var clean = new string(text.Where(c => !char.IsSurrogate(c) && c != '️').ToArray()).Trim();
         if (clean.Length == 0) return;
         Task.Run(() =>
@@ -376,7 +377,7 @@ internal sealed class Updater
             Raise();
             if (!userInitiated && isNew)
                 Notifier.Notify("⬆️ " + L($"TelepAIth {version} hazır", $"TelepAIth {version} is ready"),
-                    L("Robota tıkla, güncelleyeyim.", "Click the robot to update."));
+                    L("Robota tıkla, güncelleyeyim.", "Click the robot to update."), kind: "summary");
             return null;
         }
         catch (Exception ex)

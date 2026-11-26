@@ -108,6 +108,21 @@ public static class Text
         return string.Join(' ', words);
     }
 
+    /// <summary>
+    /// Ses sekmesindeki olay türleri (Mac'te SoundKinds, aynı liste): her biri bildirim sesini, robotun kısa sesini
+    /// ve sesli okumayı birlikte açar/kapatır.
+    /// </summary>
+    public static readonly (string Id, Func<string> Title, Func<string> Detail)[] SoundKinds =
+    {
+        ("done", () => L("İş bitince", "When a task finishes"), () => L("Bir sohbet işini bitirdiğinde", "A chat finished its work")),
+        ("waiting", () => L("Seni bekleyince", "When it needs you"), () => L("Onay ya da cevap beklerken", "Waiting for an approval or an answer")),
+        ("reminder", () => L("Hatırlatma", "Reminders"), () => L("Bir süredir hâlâ seni bekliyorsa", "Still waiting for you after a while")),
+        ("error", () => L("Hata verince", "On errors"), () => L("Bir sohbet hata verdiğinde", "A chat hit an error")),
+        ("usage", () => L("Kullanım sınırı", "Usage limits"), () => L("%80, %95 ve limit yenilenince", "At 80%, 95% and when the limit resets")),
+        ("alert", () => L("Akıllı uyarılar", "Smart alerts"), () => L("Takıldı, aynı dosya, CI sonucu, commit hatırlatması", "Stuck, same file, CI result, commit reminder")),
+        ("summary", () => L("Günün özeti ve diğerleri", "Daily summary and others"), () => L("Günün özeti, güncelleme, kutlamalar", "Daily summary, updates, celebrations")),
+    };
+
     public static string ShortDuration(double seconds)
     {
         var total = Math.Max(0, (int)seconds);
@@ -257,6 +272,11 @@ public static class Prefs
     public static bool Sounds { get => GetBool("sounds", false); set => Set("sounds", value); }
     /// <summary>Sessize al (robota sağ tık): bildirim sesi, kısa sesler ve sesli söyleme susar; bildirimler sessiz gelir</summary>
     public static bool Muted { get => GetBool("muted", false); set => Set("muted", value); }
+    /// <summary>Bu tür olayda ses çıksın mı (bildirim sesi, robotun kısa sesi, sesli okuma); bkz. SoundKinds</summary>
+    public static bool Sound(string kind) => GetBool("sound." + kind, true);
+    public static void SetSound(string kind, bool on) => Set("sound." + kind, on);
+    /// <summary>Ses açık mı: sessize alınmamış ve bu tür açık</summary>
+    public static bool SoundOn(string kind) => !Muted && Sound(kind);
     public static bool WatchApps { get => GetBool("watchApps", true); set => Set("watchApps", value); }
     public static bool AlwaysOnTop { get => GetBool("alwaysOnTop", true); set => Set("alwaysOnTop", value); }
     public static bool RobotLocked { get => GetBool("robotLocked", false); set => Set("robotLocked", value); }

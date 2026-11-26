@@ -129,7 +129,7 @@ final class Updater {
             promptInstall()
         } else if isNew {
             Notifier.shared.notify(title: withEmoji("⬆️", loc("\(AppInfo.name) \(version) hazır", "\(AppInfo.name) \(version) is ready")),
-                                   body: loc("Menü çubuğundaki ikondan güncelleyebilirsin.", "Update it from the menu bar icon."))
+                                   body: loc("Menü çubuğundaki ikondan güncelleyebilirsin.", "Update it from the menu bar icon."), kind: "summary")
         }
     }
 

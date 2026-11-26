@@ -93,7 +93,8 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         }
     }
 
-    func notify(title: String, body: String, target: AppTarget? = nil, force: Bool = false) {
+    /// kind: Ses sekmesindeki tür (done, waiting…); nil ise sadece "Sessize al" bakılır
+    func notify(title: String, body: String, target: AppTarget? = nil, force: Bool = false, kind: String? = nil) {
         guard force || Preferences.notificationsEnabled else { return }
         guard canUseCenter, status != .denied else {
             fallback(title: title, body: body)
@@ -104,7 +105,8 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         content.body = body
         // Ses en fazla 10 sn'de bir: art arda gelen bildirimler sessiz düşer ("din din din" olmasın)
         let now = Date()
-        if !Preferences.muted && now.timeIntervalSince(lastSoundAt) >= 10 {
+        let soundOK = kind.map { Preferences.soundOn($0) } ?? !Preferences.muted
+        if soundOK && now.timeIntervalSince(lastSoundAt) >= 10 {
             content.sound = .default
             lastSoundAt = now
         }

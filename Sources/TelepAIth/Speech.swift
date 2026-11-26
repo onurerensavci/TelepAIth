@@ -4,8 +4,8 @@ import AVFoundation
 enum Speech {
     private static let synthesizer = AVSpeechSynthesizer()
 
-    static func say(_ text: String) {
-        guard Preferences.speak, !Preferences.muted else { return }
+    static func say(_ text: String, kind: String? = nil) {
+        guard Preferences.speak, kind.map({ Preferences.soundOn($0) }) ?? !Preferences.muted else { return }
         // Emojileri ve fazla boşlukları at
         let clean = text.unicodeScalars
             .filter { !($0.properties.isEmojiPresentation || $0.properties.generalCategory == .otherSymbol) }

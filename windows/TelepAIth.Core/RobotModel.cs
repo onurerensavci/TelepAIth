@@ -27,7 +27,8 @@ public sealed class RobotModel
         public DateTime SeenAt = DateTime.MinValue;
     }
 
-    public sealed record Notice(string Title, string Body, bool Important = false, AppTarget? Target = null);
+    /// <summary>Kind: ses ayarı için olay türü (done, waiting, reminder, error, usage, alert, summary)</summary>
+    public sealed record Notice(string Title, string Body, bool Important = false, AppTarget? Target = null, string Kind = "done");
 
     /// <summary>Kafaya tıklayınca açılan listedeki bir sohbet: ad, durum, "çalışıyor · 3 dk" gibi durum yazısı</summary>
     /// <summary>
@@ -155,9 +156,10 @@ public sealed class RobotModel
         _moodUntil = now.AddSeconds(seconds);
     }
 
-    private static void Play(string name)
+    /// <summary>Robotun kısa sesi: genel ayar açık ve bu tür olayın sesi açıksa (Ses sekmesi)</summary>
+    private static void Play(string name, string kind)
     {
-        if (!Prefs.Sounds || Prefs.Muted || FocusMode.IsActive) return;
+        if (!Prefs.Sounds || !Prefs.SoundOn(kind) || FocusMode.IsActive) return;
         PlaySound?.Invoke(name);
     }
 
@@ -206,7 +208,7 @@ public sealed class RobotModel
                 }
                 if (e.ForceNotify)
                     notice = new Notice(Theme.DisplayName + L(" kota", " quota"), text,
-                                        e.State == RobotState.Error || (e.QuotaLeft ?? 100) <= 10);
+                                        e.State == RobotState.Error || (e.QuotaLeft ?? 100) <= 10, null, "usage");
                 break;
             }
             case EventKind.Heartbeat:
@@ -228,7 +230,7 @@ public sealed class RobotModel
                 ShowOverride(text, 8, now);
                 if (e.UsageLeft is { } left) UsageLeft = left;
                 var target = _sessions.TryGetValue(e.SessionId, out var ins) ? ins.Target : null;
-                notice = new Notice(Theme.DisplayName, text, e.Important, target);
+                notice = new Notice(Theme.DisplayName, text, e.Important, target, e.SessionId == "usage" ? "usage" : "alert");
                 break;
             }
 
@@ -252,7 +254,7 @@ public sealed class RobotModel
                         {
                             SetMood(Core.Mood.Dizzy, 6, now);
                             ShowOverride(WithEmoji("😵‍💫", L($"Üst üste {s.ErrorRun} hata", $"{s.ErrorRun} errors in a row")), 5, now);
-                            Play("Basso");
+                            Play("Basso", "error");
                         }
                     }
                     else
@@ -265,7 +267,7 @@ public sealed class RobotModel
                 if (e.Text != null && !(e.State == RobotState.Error && run >= 3))
                 {
                     ShowOverride(WithEmoji(e.Emoji, e.Text), 4, now);
-                    if (e.Mood == Core.Mood.Party) Play("Hero");
+                    if (e.Mood == Core.Mood.Party) Play("Hero", "summary");
                 }
                 break;
             }
@@ -347,14 +349,14 @@ public sealed class RobotModel
                         s.TurnStart = null;
                         CelebrateStart = now;
                         // Gurur/parti anında alkış (normal bitişte el hareketi yok: zıplama ve parıltı yeter)
-                        Play("Glass");
+                        Play("Glass", "done");
                         Remember(WithEmoji(s.Emoji, text), now);
                         // Anlatıcının "bitti"si bildirim atmaz (izleyici ya da hook zaten haber veriyor)
                         if (e.SessionId != "mcp" && (e.ForceNotify || duration >= Prefs.LongTurnSeconds))
                         {
                             var body = (s.Project ?? L("Görev", "Task")) + " — " + FormatDuration(duration);
                             if (!string.IsNullOrEmpty(e.LastMessage)) body += "\n" + Clip(e.LastMessage, 140);
-                            notice = new Notice(WithEmoji(s.Emoji, Theme.DisplayName + L(" bitirdi", " is done")), body, false, s.Target);
+                            notice = new Notice(WithEmoji(s.Emoji, Theme.DisplayName + L(" bitirdi", " is done")), body, false, s.Target, "done");
                         }
                         break;
                     }
@@ -366,17 +368,17 @@ public sealed class RobotModel
                             s.LastWaitNotice = now;
                             DailyStats.Shared.RecordWait(Source, now);
                             Progress.Shared.Wait();
-                            Play("Ping");
+                            Play("Ping", "waiting");
                             notice = new Notice(WithEmoji(s.Emoji, Theme.DisplayName + L(" seni bekliyor", " needs you") + place),
-                                                s.Text ?? L("Cevabını bekliyor", "Waiting for your reply"), true, s.Target);
+                                                s.Text ?? L("Cevabını bekliyor", "Waiting for your reply"), true, s.Target, "waiting");
                         }
                         break;
                     }
                     case EventKind.Failure:
                         ErrorStart = now;
-                        Play("Basso");
+                        Play("Basso", "error");
                         notice = new Notice(WithEmoji(s.Emoji, Theme.DisplayName + L(" hata verdi", " hit an error") + place),
-                                            s.Text ?? "", true, s.Target);
+                                            s.Text ?? "", true, s.Target, "error");
                         break;
                     case EventKind.Interrupt:
                         s.TurnStart = null;
@@ -476,7 +478,7 @@ public sealed class RobotModel
                     s.Reminded = true;
                     var place = s.Project != null ? " · " + s.Project : "";
                     PendingNotices.Add(new Notice(WithEmoji("⏰", Theme.DisplayName + L(" hâlâ seni bekliyor", " is still waiting for you") + place),
-                                                  s.Text ?? L("Cevabını bekliyor", "Waiting for your reply"), true, s.Target));
+                                                  s.Text ?? L("Cevabını bekliyor", "Waiting for your reply"), true, s.Target, "reminder"));
                     ShowOverride(WithEmoji("⏰", L("Hâlâ onayını bekliyorum!", "Still waiting for your OK!")), 6, now);
                 }
             }

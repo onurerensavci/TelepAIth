@@ -377,6 +377,7 @@ internal static class SettingsWindow
         ("", () => L("Bildirimler", "Notifications")),
         ("", () => L("Odak ve özet", "Focus & summary")),
         ("", () => L("Bağlantılar", "Connections")),
+        ("\uE767", () => L("Ses", "Sound")),
     };
 
     private static void Rebuild(ISettingsHost host)
@@ -422,6 +423,7 @@ internal static class SettingsWindow
                 1 => Notifications(host),
                 2 => Focus(host),
                 3 => Connections(host),
+                4 => Sound(host),
                 _ => General(host),
             };
         }
@@ -459,12 +461,6 @@ internal static class SettingsWindow
             Ui.Section(L("Davranış", "Behaviour")),
             Ui.SwitchCard(L("Eyleme göre emojiler", "Emojis for each action"), null, Prefs.EmojiEnabled, v => Prefs.EmojiEnabled = v, ""),
             Ui.SwitchCard(L("Boştayken laf atsın", "Idle chatter"), L("Arada bir küçük şeyler söyler", "Says little things now and then"), Prefs.IdleChatter, v => Prefs.IdleChatter = v, ""),
-            Ui.SwitchCard(L("Kısa sesler", "Short sounds"), null, Prefs.Sounds, v => Prefs.Sounds = v, ""),
-            Ui.SwitchCard(L("Sesli söylesin", "Speak out loud"), L("Önemli anları Windows'un sesiyle okur", "Reads important moments with the Windows voice"), Prefs.Speak, v =>
-            {
-                Prefs.Speak = v;
-                if (v) Speech.Say(L("Merhaba, ben TelepAIth.", "Hi, I'm TelepAIth."));
-            }, ""),
             Ui.SwitchCard(L("Windows açılınca başlasın", "Start with Windows"), null, Installer.AutostartEnabled, v => Installer.SetAutostart(v), ""));
     }
 
@@ -487,6 +483,38 @@ internal static class SettingsWindow
                 new[] { 0.0, 10, 20, 60, 180 }.OrderBy(v => Math.Abs(v - Prefs.LongTurnSeconds)).First(), v => Prefs.LongTurnSeconds = v, ""),
             Ui.Para(L("Bildirime ya da robotun balonuna tıklayınca o işin penceresine (Claude, ChatGPT ya da terminal) gidersin.",
                 "Click a notification or the robot's bubble to jump to that task's window (Claude, ChatGPT or the terminal)."), true, 12));
+    }
+
+    private static readonly Dictionary<string, string> SoundGlyphs = new()
+    {
+        ["done"] = "\uE73E", ["waiting"] = "\uE8BD", ["reminder"] = "\uE823", ["error"] = "\uE7BA",
+        ["usage"] = "\uE9D2", ["alert"] = "\uE7E8", ["summary"] = "\uE787",
+    };
+
+    /// <summary>Ses: neye ses çıksın (bildirim sesi, kısa ses, sesli söyleme), sessize al.</summary>
+    private static UIElement Sound(ISettingsHost host)
+    {
+        var items = new List<UIElement>
+        {
+            Ui.PageTitle(L("Ses", "Sound")),
+            Ui.SwitchCard(L("Sessize al", "Mute"), L("Hiçbir şey ses çıkarmaz; bildirimler sessiz gelir", "Nothing makes a sound; notifications arrive silently"),
+                Prefs.Muted, v => { Prefs.Muted = v; host.Changed(); Application.Current.Dispatcher.BeginInvoke(() => Refresh(host)); }, "\uE74F"),
+            Ui.Section(L("Neye ses çıksın", "What makes a sound")),
+        };
+        foreach (var (id, title, detail) in TelepAIth.Core.Text.SoundKinds)
+            items.Add(Ui.SwitchCard(title(), detail(), Prefs.Sound(id), v => Prefs.SetSound(id, v), SoundGlyphs.GetValueOrDefault(id, "\uE767")));
+        items.Add(Ui.Para(Prefs.Muted
+            ? L("Sessize alındığı için şu an hiçbiri çalmaz.", "Muted, so none of these play right now.")
+            : L("Kapattıkların bildirim olarak yine gelir, sadece sessiz gelir.", "The ones you turn off still notify, just silently."), true, 12));
+        items.Add(Ui.Section(L("Ses türleri", "Kinds of sound")));
+        items.Add(Ui.SwitchCard(L("Robotun kısa sesleri", "Robot's short sounds"), L("Bitince, beklerken ya da hata verince kısa bir ses", "A short sound when done, waiting or on errors"),
+            Prefs.Sounds, v => Prefs.Sounds = v, "\uE767"));
+        items.Add(Ui.SwitchCard(L("Sesli söylesin", "Speak out loud"), L("Önemli anları Windows'un sesiyle okur", "Reads important moments with the Windows voice"), Prefs.Speak, v =>
+        {
+            Prefs.Speak = v;
+            if (v) Speech.Say(L("Merhaba, ben TelepAIth.", "Hi, I'm TelepAIth."));
+        }, "\uE995"));
+        return Ui.Page(items.ToArray());
     }
 
     public static void SendTest() =>

@@ -31,6 +31,8 @@ final class RobotModel: ObservableObject {
         /// Odak modunda da gösterilsin mi (seni bekliyor, hata, kota bitti)
         var important = false
         var target: AppTarget?
+        /// Hangi ses ayarına bağlı: done, waiting, reminder, error, usage, alert, summary
+        var kind = "done"
     }
 
     /// Kafaya tıklayınca açılan listedeki bir sohbet: ad, durum, "çalışıyor · 3 dk" gibi durum yazısı
@@ -173,8 +175,8 @@ final class RobotModel: ObservableObject {
         moodUntil = now.addingTimeInterval(seconds)
     }
 
-    private static func play(_ name: String) {
-        guard Preferences.sounds, !Preferences.muted, !FocusMode.isActive else { return }
+    private static func play(_ name: String, _ kind: String) {
+        guard Preferences.sounds, Preferences.soundOn(kind), !FocusMode.isActive else { return }
         NSSound(named: NSSound.Name(name))?.play()
     }
 
@@ -215,7 +217,7 @@ final class RobotModel: ObservableObject {
             }
             if e.forceNotify {
                 notice = Notice(title: theme.displayName + loc(" kota", " quota"), body: text,
-                                important: e.state == .error || (e.quotaLeft ?? 100) <= 10)
+                                important: e.state == .error || (e.quotaLeft ?? 100) <= 10, kind: "usage")
             }
 
         case .heartbeat:
@@ -231,7 +233,8 @@ final class RobotModel: ObservableObject {
             let text = withEmoji(e.emoji, e.text ?? "")
             showOverride(text, for: 8, now: now)
             if let left = e.usageLeft { usageLeft = left }
-            notice = Notice(title: theme.displayName, body: text, important: e.important, target: sessions[e.sessionID]?.target)
+            notice = Notice(title: theme.displayName, body: text, important: e.important, target: sessions[e.sessionID]?.target,
+                            kind: e.sessionID == "usage" ? "usage" : "alert")
 
         case .toolDone:
             if var s = sessions[e.sessionID] {
@@ -248,7 +251,7 @@ final class RobotModel: ObservableObject {
                     if s.errorRun >= 3 {
                         setMood(.dizzy, for: 6, now: now)
                         showOverride(withEmoji("😵‍💫", loc("Üst üste \(s.errorRun) hata", "\(s.errorRun) errors in a row")), for: 5, now: now)
-                        RobotModel.play("Basso")
+                        RobotModel.play("Basso", "error")
                     }
                 } else {
                     s.errorRun = 0
@@ -258,7 +261,7 @@ final class RobotModel: ObservableObject {
             }
             if let t = e.text, !(e.state == .error && (sessions[e.sessionID]?.errorRun ?? 0) >= 3) {
                 showOverride(withEmoji(e.emoji, t), for: 4, now: now)
-                if e.mood == .party { RobotModel.play("Hero") }
+                if e.mood == .party { RobotModel.play("Hero", "summary") }
             }
 
         case .sessionEnd:
@@ -327,7 +330,7 @@ final class RobotModel: ObservableObject {
                 s.turnStart = nil
                 celebrateStart = now
                 // Gurur/parti anında alkış (normal bitişte el hareketi yok: zıplama ve parıltı yeter)
-                RobotModel.play("Glass")
+                RobotModel.play("Glass", "done")
                 remember(withEmoji(s.emoji, text), now: now)
                 // Anlatıcının "bitti"si bildirim atmaz (izleyici ya da hook zaten haber veriyor)
                 if e.sessionID != "mcp" && (e.forceNotify || duration >= Preferences.longTurnSeconds) {
@@ -342,16 +345,16 @@ final class RobotModel: ObservableObject {
                     s.lastWaitNotice = now
                     DailyStats.shared.recordWait(source: source, at: now)
                     Progress.shared.wait()
-                    RobotModel.play("Ping")
+                    RobotModel.play("Ping", "waiting")
                     notice = Notice(title: withEmoji(s.emoji, theme.displayName + loc(" seni bekliyor", " needs you") + place),
                                     body: s.text ?? loc("Cevabını bekliyor", "Waiting for your reply"),
-                                    important: true, target: s.target)
+                                    important: true, target: s.target, kind: "waiting")
                 }
             case .failure:
                 errorStart = now
-                RobotModel.play("Basso")
+                RobotModel.play("Basso", "error")
                 notice = Notice(title: withEmoji(s.emoji, theme.displayName + loc(" hata verdi", " hit an error") + place),
-                                body: s.text ?? "", important: true, target: s.target)
+                                body: s.text ?? "", important: true, target: s.target, kind: "error")
             case .interrupt:
                 s.turnStart = nil
             default:
@@ -436,7 +439,7 @@ final class RobotModel: ObservableObject {
                     let place = s.project.map { " · \($0)" } ?? ""
                     pendingNotices.append(Notice(title: withEmoji("⏰", theme.displayName + loc(" hâlâ seni bekliyor", " is still waiting for you") + place),
                                                  body: s.text ?? loc("Cevabını bekliyor", "Waiting for your reply"),
-                                                 important: true, target: s.target))
+                                                 important: true, target: s.target, kind: "reminder"))
                     showOverride(withEmoji("⏰", loc("Hâlâ onayını bekliyorum!", "Still waiting for your OK!")), for: 6, now: now)
                 }
             }

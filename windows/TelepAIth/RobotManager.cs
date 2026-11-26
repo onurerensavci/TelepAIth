@@ -274,8 +274,8 @@ internal sealed class RobotManager
     {
         if (FocusMode.IsActive && !notice.Important) return;
         if (!Prefs.NotifyWhenFrontmost && quietPid is { } pid && Native.WindowPid(Native.GetForegroundWindow()) == pid) return;
-        Notifier.Notify(notice.Title, notice.Body, notice.Target);
-        if (!FocusMode.IsActive) Speech.Say(notice.Title);
+        Notifier.Notify(notice.Title, notice.Body, notice.Target, kind: notice.Kind);
+        if (!FocusMode.IsActive) Speech.Say(notice.Title, notice.Kind);
     }
 
     /// <summary>Bir uygulamayı öne getirir (süreç kimliğiyle ya da süreç adıyla).</summary>
@@ -427,7 +427,7 @@ internal sealed class RobotManager
         _lastUpdateAnnounce = Now;
         var text = L($"Güncelleme var: {version}! Bana tıkla, kurayım.", $"Update available: {version}! Click me to install.");
         _avatar?.Current.Say(WithEmoji("⬆️", text), 10);
-        Speech.Say(text);
+        Speech.Say(text, "summary");
     }
 
     // MARK: Ayarlar
@@ -532,7 +532,7 @@ internal sealed class RobotManager
         if (TodaySummaryText() is not { } text) return;
         DailyStats.Shared.ShownToday = true;
         _avatar?.Current.Say(WithEmoji("📊", L("Günün özeti:\n", "Your day:\n") + text), 14);
-        Notifier.Notify(WithEmoji("📊", L("TelepAIth · günün özeti", "TelepAIth · your day")), text);
+        Notifier.Notify(WithEmoji("📊", L("TelepAIth · günün özeti", "TelepAIth · your day")), text, kind: "summary");
     }
 
     // MARK: Hangi AI gösterilsin?

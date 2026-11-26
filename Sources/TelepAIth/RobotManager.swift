@@ -255,8 +255,8 @@ final class RobotManager {
            NSWorkspace.shared.frontmostApplication?.processIdentifier == pid {
             return
         }
-        Notifier.shared.notify(title: notice.title, body: notice.body, target: notice.target)
-        if !FocusMode.isActive { Speech.say(notice.title) }
+        Notifier.shared.notify(title: notice.title, body: notice.body, target: notice.target, kind: notice.kind)
+        if !FocusMode.isActive { Speech.say(notice.title, kind: notice.kind) }
     }
 
     /// Bir uygulamayı öne getirir (süreç kimliğiyle ya da bundle id ile; kapalıysa açar).
@@ -349,7 +349,7 @@ final class RobotManager {
               let text = todaySummaryText() else { return }
         DailyStats.shared.shownToday = true
         avatar?.current.say(withEmoji("📊", loc("Günün özeti:\n", "Your day:\n") + text), for: 14)
-        Notifier.shared.notify(title: withEmoji("📊", loc("TelepAIth · günün özeti", "TelepAIth · your day")), body: text)
+        Notifier.shared.notify(title: withEmoji("📊", loc("TelepAIth · günün özeti", "TelepAIth · your day")), body: text, kind: "summary")
     }
 
     var isLocked: Bool { Preferences.robotLocked }
@@ -425,7 +425,7 @@ final class RobotManager {
         lastUpdateAnnounce = CACurrentMediaTime()
         let text = loc("Güncelleme var: \(version)! Bana tıkla, kurayım.", "Update available: \(version)! Click me to install.")
         avatar?.current.say(withEmoji("⬆️", text), for: 10)
-        Speech.say(text)
+        Speech.say(text, kind: "summary")
     }
 
     /// Robota çift tıklayınca o an gösterdiği AI'ın uygulamasını öne getir (açık değilse aç).
