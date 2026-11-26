@@ -799,7 +799,7 @@ internal sealed class RobotManager
         var (items, types) = Progress.Shared.TakeOutfitNews();
         var lines = achievements.Take(2).Select(a => "🏅 " + L("Yeni başarım: ", "New achievement: ") + a.Title).ToList();
         if (level is { } lv) lines.Add("⭐ " + L($"Seviye {lv}!", $"Level {lv}!"));
-        lines.AddRange(Outfits.NewsLines(items, types));
+        lines.AddRange(Outfits.NewsLines(items, new()));
         if (lines.Count == 0) return;
         var text = string.Join("\n", lines);
         if (items.Count == 0) _avatar.Current.Say(text, 8);

@@ -1,5 +1,14 @@
 [
  {
+  "version": "0.23.1",
+  "tr": [
+   "Gardırop sadeleşti: tipler kalktı, Baş, Gözlük, Yüz, Boyun ve Yanında'dan istediğini giy"
+  ],
+  "en": [
+   "Simpler wardrobe: no more sets, wear anything from Head, Eyes, Face, Neck and Side"
+  ]
+ },
+ {
   "version": "0.23.0",
   "tr": [
    "Efektler artık robotun odasında: sağ tık → Robotun Odası → Efektler",

@@ -703,10 +703,10 @@ internal static class OnboardingWindow
             Ui.Para(L("Sen çalıştıkça robot seviye atlar ve gardıropta yeni parçalar açılır. Robota sağ tıkla → Robotun Odası.",
                 "As you work, the robot levels up and new pieces open in the wardrobe. Right-click the robot → Robot's Room.")),
             row,
-            Ui.Card(L("6 tip, 30 parça", "6 sets, 30 pieces"), L("Kodcu, Hipster, Polis, Pazarlamacı, Sanatçı, Kral: 5 parçayı topla, o tip ol.",
-                "Coder, Hipster, Police, Marketer, Artist, King: collect all 5 to become one."), null, "\uE7BF"),
-            Ui.Card(L("Gizli ödüller ✨", "Secret rewards ✨"), L("Her tipin son parçası parıltılı bir sürpriz; belli bir seviyede açılır.",
-                "Each set's last piece is a shiny surprise that opens at a certain level."), null, "\uE734"),
+            Ui.Card(L("30 parça", "30 pieces"), L("Baş, gözlük, yüz, boyun ve yanına: her yuvadan istediğini giy, kendi kombinini yap.",
+                "Head, eyes, face, neck and side: wear anything per slot and make your own combo."), null, "\uE7BF"),
+            Ui.Card(L("Gizli ödüller ✨", "Secret rewards ✨"), L("Bazı parçalar parıltılı bir sürpriz; belli bir seviyede açılır.",
+                "Some pieces are shiny surprises that open at a certain level."), null, "\uE734"),
             Ui.Card(L("Efektler", "Effects"), L("Mevsime göre kar, güneş, yaprak; sohbette aşk geçerse kalpler, kutlamada konfeti. Odadan değiştirebilirsin.",
                 "Snow, sun or leaves by season; hearts when love comes up in a chat, confetti for celebrations. Change it in the room."), null, "\uE790"));
     }

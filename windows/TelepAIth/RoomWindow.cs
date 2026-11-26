@@ -24,9 +24,7 @@ internal static class RoomWindow
     private static RobotManager? _manager;
     private static Action<bool>? _setUsageLine;
     private static string _tab = "wardrobe";
-    private static string _type = "coder";
-    /// <summary>Gardırop görünümü: tiplere göre ya da parçalara göre (Baş, Gözlük…; istediğin kombini yap)</summary>
-    private static bool _bySlot;
+    /// <summary>Gardıropta seçili yuva (Baş, Gözlük…)</summary>
     private static string _slot = "head";
     private static int _days = 30;
 
@@ -157,21 +155,6 @@ internal static class RoomWindow
         Stat(DailyStats.Shared.TurnsOn(DateTime.Now).ToString(CultureInfo.InvariantCulture), L("bugün tur", "turns today"));
         Stat(p.ActiveDays.ToString(CultureInfo.InvariantCulture), L("aktif gün", "active days"));
         panel.Children.Add(stats);
-        // Tamamlanan tipler (Polis, Kral…)
-        var types = Outfits.CompletedTypes(p);
-        if (types.Count > 0)
-        {
-            panel.Children.Add(T(L("Tiplerin", "Your types"), 11, FontWeights.SemiBold, muted: true).Also(t => t.Margin = new Thickness(0, 0, 0, 6)));
-            var typeRow = new WrapPanel { Margin = new Thickness(0, 0, 0, 12) };
-            foreach (var t in types)
-                typeRow.Children.Add(new Border
-                {
-                    CornerRadius = new CornerRadius(10), Padding = new Thickness(8, 3, 8, 3), Margin = new Thickness(0, 0, 6, 6),
-                    Background = new SolidColorBrush(Color.FromArgb(0x30, Accent.R, Accent.G, Accent.B)),
-                    Child = T($"{t.Emoji} {t.Name}", 11, FontWeights.SemiBold),
-                });
-            panel.Children.Add(typeRow);
-        }
         var badges = new WrapPanel();
         foreach (var a in Achievements.All.Where(a => a.Done(p)).TakeLast(20))
             badges.Children.Add(new Ellipse(18, TierColor(a.Tier)) { Margin = new Thickness(0, 0, 5, 5), ToolTip = a.Title + " · " + a.Description });
@@ -219,61 +202,25 @@ internal static class RoomWindow
         var grid = new Grid();
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(180) });
         grid.ColumnDefinitions.Add(new ColumnDefinition());
-        // Tiplere göre (Polis, Kral…) ya da parçalara göre (Baş, Gözlük…): her yuvadan istediğini seç, kendi kombinini yap
+        // Yuvalar (Baş, Gözlük…): her yuvadan istediğini seç, kendi kombinini yap
         var list = new StackPanel { Margin = new Thickness(0, 0, 20, 0) };
-        var seg = new UniformGrid { Columns = 2, Margin = new Thickness(0, 0, 0, 10) };
-        foreach (var (bySlot, label) in new[] { (false, L("Tipler", "Sets")), (true, L("Parçalar", "Pieces")) })
+        foreach (var slot in Outfits.Slots)
         {
-            var on = _bySlot == bySlot;
-            var b = new Border
-            {
-                Child = T(label, 12, on ? FontWeights.SemiBold : FontWeights.Normal, color: on ? Colors.White : null).Also(t => t.HorizontalAlignment = HorizontalAlignment.Center),
-                Padding = new Thickness(6, 5, 6, 5), CornerRadius = new CornerRadius(7), Cursor = Cursors.Hand, Margin = new Thickness(0, 0, 4, 0),
-                Background = on ? new SolidColorBrush(Accent) : new SolidColorBrush(Color.FromArgb(0x20, 0x80, 0x80, 0x80)),
-            };
-            var v = bySlot;
-            b.MouseLeftButtonUp += (_, _) => { _bySlot = v; Rebuild(); };
-            seg.Children.Add(b);
-        }
-        list.Children.Add(seg);
-        if (_bySlot)
-            foreach (var slot in Outfits.Slots)
-            {
-                var items = Outfits.All.Where(i => i.Slot == slot).ToList();
-                var open = items.Count(i => Outfits.Unlocked(i, p));
-                var row = new DockPanel { LastChildFill = true };
-                var count = T($"{open}/{items.Count}", 11, muted: true);
-                DockPanel.SetDock(count, Dock.Right);
-                row.Children.Add(count);
-                row.Children.Add(T(Outfits.SlotName(slot), 13, FontWeights.Medium));
-                var b = new Border
-                {
-                    Child = row, Padding = new Thickness(10, 7, 10, 7), CornerRadius = new CornerRadius(8), Cursor = Cursors.Hand,
-                    Background = _slot == slot ? new SolidColorBrush(Color.FromArgb(0x30, Accent.R, Accent.G, Accent.B)) : Brushes.Transparent,
-                    Margin = new Thickness(0, 0, 0, 4),
-                };
-                var sl = slot;
-                b.MouseLeftButtonUp += (_, _) => { _slot = sl; Rebuild(); };
-                list.Children.Add(b);
-            }
-        else foreach (var t in Outfits.Types)
-        {
-            var items = Outfits.ItemsOf(t.Id);
+            var items = Outfits.All.Where(i => i.Slot == slot).ToList();
             var open = items.Count(i => Outfits.Unlocked(i, p));
             var row = new DockPanel { LastChildFill = true };
-            var count = open == items.Count ? T("✔", 12, FontWeights.Bold, color: Accent) : T($"{open}/{items.Count}", 11, muted: true);
-            count.VerticalAlignment = VerticalAlignment.Center;
+            var count = T($"{open}/{items.Count}", 11, muted: true);
             DockPanel.SetDock(count, Dock.Right);
             row.Children.Add(count);
-            row.Children.Add(T($"{t.Emoji}  {t.Name}", 13, FontWeights.Medium));
+            row.Children.Add(T(Outfits.SlotName(slot), 13, FontWeights.Medium));
             var b = new Border
             {
                 Child = row, Padding = new Thickness(10, 7, 10, 7), CornerRadius = new CornerRadius(8), Cursor = Cursors.Hand,
-                Background = _type == t.Id ? new SolidColorBrush(Color.FromArgb(0x30, Accent.R, Accent.G, Accent.B)) : Brushes.Transparent,
+                Background = _slot == slot ? new SolidColorBrush(Color.FromArgb(0x30, Accent.R, Accent.G, Accent.B)) : Brushes.Transparent,
                 Margin = new Thickness(0, 0, 0, 4),
             };
-            var id = t.Id;
-            b.MouseLeftButtonUp += (_, _) => { _type = id; Rebuild(); };
+            var sl = slot;
+            b.MouseLeftButtonUp += (_, _) => { _slot = sl; Rebuild(); };
             list.Children.Add(b);
         }
         var off = T(L("Hepsini çıkar", "Take all off"), 11.5, color: Accent);
@@ -300,47 +247,16 @@ internal static class RoomWindow
                 ? LegendaryCard(item, open, selected, Toggle)
                 : OutfitCard(item.Name, open ? subtitle : Outfits.UnlockHint(item), selected, !open, new[] { item }, Toggle);
         }
-        if (_bySlot)
-        {
-            // Parçalara göre: bir yuvanın bütün parçaları (her tipten), en başta "Hiçbiri"
-            right.Children.Add(T(Outfits.SlotName(_slot), 18, FontWeights.Bold));
-            right.Children.Add(T(L("Her yuvadan istediğini seç, kendi kombinini yap.", "Pick anything for each slot and make your own combo."), 11.5, muted: true)
-                .Also(t => t.Margin = new Thickness(0, 2, 0, 12)));
-            var slotCards = new WrapPanel();
-            slotCards.Children.Add(OutfitCard(L("Hiçbiri", "None"), null, Prefs.Outfit(_slot) == null, false, Array.Empty<OutfitItem>(), () =>
-            {
-                Prefs.SetOutfit(_slot, null);
-                Rebuild();
-            }));
-            foreach (var item in Outfits.All.Where(i => i.Slot == _slot))
-                slotCards.Children.Add(Card(item, Outfits.FindType(item.Type) is { } ty ? $"{ty.Emoji} {ty.Name}" : ""));
-            right.Children.Add(slotCards);
-            return grid;
-        }
-        var type = Outfits.FindType(_type) ?? Outfits.Types[0];
-        var typeItems = Outfits.ItemsOf(type.Id);
-        var openCount = typeItems.Count(i => Outfits.Unlocked(i, p));
-        var done = openCount == typeItems.Count;
-        var header = new DockPanel { LastChildFill = true, Margin = new Thickness(0, 0, 0, 10) };
-        if (done)
-        {
-            var wear = Ui.Button(L("Hepsini giy", "Wear all"), () => { Outfits.WearType(type.Id, p); Rebuild(); }, true);
-            wear.VerticalAlignment = VerticalAlignment.Center;
-            DockPanel.SetDock(wear, Dock.Right);
-            header.Children.Add(wear);
-        }
-        var emoji = T(type.Emoji, 28).Also(t => { t.Margin = new Thickness(0, 0, 12, 0); t.VerticalAlignment = VerticalAlignment.Center; });
-        DockPanel.SetDock(emoji, Dock.Left);
-        header.Children.Add(emoji);
-        var titles = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
-        titles.Children.Add(T(type.Name, 18, FontWeights.Bold));
-        titles.Children.Add(T(done ? L($"Tamamlandı! {type.Name} tipi artık senin.", $"Complete! The {type.Name} set is yours.")
-                                   : type.Description + " · " + L($"5 parçayı topla, {type.Name} ol", $"collect all 5 to become a {type.Name}"), 11.5, muted: true));
-        header.Children.Add(titles);
-        right.Children.Add(header);
-        right.Children.Add(Bar(openCount / (double)Math.Max(1, typeItems.Count), Accent, 360).Also(b => b.Margin = new Thickness(0, 0, 0, 14)));
+        right.Children.Add(T(Outfits.SlotName(_slot), 18, FontWeights.Bold));
+        right.Children.Add(T(L("Her yuvadan istediğini seç, kendi kombinini yap.", "Pick anything for each slot and make your own combo."), 11.5, muted: true)
+            .Also(t => t.Margin = new Thickness(0, 2, 0, 12)));
         var cards = new WrapPanel();
-        foreach (var item in typeItems) cards.Children.Add(Card(item, Outfits.SlotName(item.Slot)));
+        cards.Children.Add(OutfitCard(L("Hiçbiri", "None"), null, Prefs.Outfit(_slot) == null, false, Array.Empty<OutfitItem>(), () =>
+        {
+            Prefs.SetOutfit(_slot, null);
+            Rebuild();
+        }));
+        foreach (var item in Outfits.All.Where(i => i.Slot == _slot)) cards.Children.Add(Card(item, " "));
         right.Children.Add(cards);
         return grid;
     }

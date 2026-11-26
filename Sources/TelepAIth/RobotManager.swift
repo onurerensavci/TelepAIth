@@ -723,7 +723,7 @@ final class RobotManager {
         let outfit = Progress.shared.takeOutfitNews()
         var lines: [String] = news.achievements.prefix(2).map { "🏅 " + loc("Yeni başarım: ", "New achievement: ") + $0.title }
         if let level = news.level { lines.append("⭐ " + loc("Seviye \(level)!", "Level \(level)!")) }
-        lines += Outfits.newsLines(outfit.items, outfit.types)
+        lines += Outfits.newsLines(outfit.items, [])
         guard !lines.isEmpty else { return }
         let text = lines.joined(separator: "\n")
         if outfit.items.isEmpty {

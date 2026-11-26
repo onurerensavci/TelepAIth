@@ -15,9 +15,7 @@ final class RoomModel: ObservableObject {
 
     weak var host: RoomHost?
     @Published var tab: Tab = .wardrobe
-    @Published var type = "coder"
-    /// Gardırop görünümü: tiplere göre (Polis, Kral…) ya da parçalara göre (Baş, Gözlük…; istediğin kombini yap)
-    @Published var bySlot = false
+    /// Gardıropta seçili yuva (Baş, Gözlük…)
     @Published var slot = "head"
     /// Seçili efekt: "auto", "off" ya da bir efekt
     @Published var effect = RoomModel.currentEffect
@@ -85,11 +83,6 @@ final class RoomModel: ObservableObject {
         refresh()
     }
 
-    /// Tamamlanan tipin bütün parçalarını giy
-    func wearType(_ type: String) {
-        Outfits.wearType(type, progress)
-        refresh()
-    }
 
     var wornItems: [OutfitItem] { Outfits.worn(progress) }
     var themeColor: NSColor { Themes.shared.theme(for: source).color }
@@ -181,21 +174,6 @@ struct RoomSidePanel: View {
                 RoomStat(value: "\(p.streak)", label: loc("gün seri", "day streak"))
                 RoomStat(value: "\(DailyStats.shared.turnsOn(Date()))", label: loc("bugün tur", "turns today"))
                 RoomStat(value: "\(p.activeDays)", label: loc("aktif gün", "active days"))
-            }
-            // Tamamlanan tipler (Polis, Kral…)
-            let types = Outfits.completedTypes(p)
-            if !types.isEmpty {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(loc("Tiplerin", "Your types")).font(.system(size: 11, weight: .semibold)).foregroundColor(.secondary)
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 92), spacing: 6, alignment: .leading)], alignment: .leading, spacing: 6) {
-                        ForEach(types) { t in
-                            Text("\(t.emoji) \(t.name)")
-                                .font(.system(size: 11, weight: .semibold))
-                                .padding(.horizontal, 8).padding(.vertical, 3)
-                                .background(Capsule().fill(model.accent.opacity(0.18)))
-                        }
-                    }
-                }
             }
             // Son açılan başarımlar
             LazyVGrid(columns: Array(repeating: GridItem(.fixed(18), spacing: 5), count: 10), alignment: .leading, spacing: 5) {
@@ -318,28 +296,12 @@ struct WardrobeTab: View {
         let p = model.progress
         HStack(alignment: .top, spacing: 20) {
             VStack(alignment: .leading, spacing: 4) {
-                // Tiplere göre (Polis, Kral…) ya da parçalara göre (Baş, Gözlük…): her yuvadan istediğini seç, kendi kombinini yap
-                Picker("", selection: $model.bySlot) {
-                    Text(loc("Tipler", "Sets")).tag(false)
-                    Text(loc("Parçalar", "Pieces")).tag(true)
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .padding(.bottom, 6)
-                if model.bySlot {
-                    ForEach(Outfits.slots, id: \.self) { slot in
-                        let items = Outfits.all.filter { $0.slot == slot }
-                        let open = items.filter { Outfits.unlocked($0, p) }.count
-                        listRow(selected: model.slot == slot, title: Outfits.slotName(slot), emoji: nil,
-                                trailing: "\(open)/\(items.count)", done: false) { model.slot = slot }
-                    }
-                } else {
-                    ForEach(Outfits.types) { t in
-                        let items = Outfits.items(of: t.id)
-                        let open = items.filter { Outfits.unlocked($0, p) }.count
-                        listRow(selected: model.type == t.id, title: t.name, emoji: t.emoji,
-                                trailing: "\(open)/\(items.count)", done: open == items.count) { model.type = t.id }
-                    }
+                // Yuvalar (Baş, Gözlük…): her yuvadan istediğini seç, kendi kombinini yap
+                ForEach(Outfits.slots, id: \.self) { slot in
+                    let items = Outfits.all.filter { $0.slot == slot }
+                    let open = items.filter { Outfits.unlocked($0, p) }.count
+                    listRow(selected: model.slot == slot, title: Outfits.slotName(slot), emoji: nil,
+                            trailing: "\(open)/\(items.count)", done: false) { model.slot = slot }
                 }
                 Divider().padding(.vertical, 6)
                 Button(loc("Hepsini Çıkar", "Take All Off")) { model.takeOffAll() }
@@ -349,11 +311,7 @@ struct WardrobeTab: View {
             }
             .frame(width: 170)
 
-            if model.bySlot {
-                slotPage(p)
-            } else if let t = Outfits.findType(model.type) {
-                typePage(t, p)
-            }
+            slotPage(p)
         }
     }
 
@@ -410,37 +368,8 @@ struct WardrobeTab: View {
                 }
                 .onTapGesture { model.takeOff(model.slot) }
                 ForEach(Outfits.all.filter { $0.slot == model.slot }) { item in
-                    let type = Outfits.findType(item.type)
-                    card(item, p, subtitle: type.map { "\($0.emoji) \($0.name)" } ?? "")
+                    card(item, p, subtitle: " ")
                 }
-            }
-        }
-    }
-
-    /// Tiplere göre: tipin 5 parçası, tamamlanınca "Hepsini Giy"
-    private func typePage(_ t: OutfitType, _ p: ProgressData) -> some View {
-        let items = Outfits.items(of: t.id)
-        let open = items.filter { Outfits.unlocked($0, p) }.count
-        let done = open == items.count
-        return VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .center, spacing: 12) {
-                Text(t.emoji).font(.system(size: 30))
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(t.name).font(.system(size: 18, weight: .bold))
-                    Text(done ? loc("Tamamlandı! \(t.name) tipi artık senin.", "Complete! The \(t.name) set is yours.")
-                              : t.description + " · " + loc("5 parçayı topla, \(t.name) ol", "collect all 5 to become a \(t.name)"))
-                        .font(.system(size: 11.5)).foregroundColor(.secondary)
-                }
-                Spacer()
-                if done {
-                    Button(loc("Hepsini Giy", "Wear All")) { model.wearType(t.id) }
-                        .buttonStyle(.borderedProminent)
-                        .tint(model.accent)
-                }
-            }
-            RoomBar(fraction: Double(open) / Double(Swift.max(1, items.count)), color: model.accent)
-            LazyVGrid(columns: grid, spacing: 10) {
-                ForEach(items) { item in card(item, p, subtitle: Outfits.slotName(item.slot)) }
             }
         }
     }

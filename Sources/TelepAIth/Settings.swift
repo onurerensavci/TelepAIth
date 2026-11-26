@@ -532,10 +532,10 @@ struct OnboardingView: View {
             }
             .frame(maxWidth: .infinity)
             VStack(alignment: .leading, spacing: 7) {
-                tip("tshirt", loc("6 tip, 30 parça: Kodcu, Hipster, Polis, Pazarlamacı, Sanatçı, Kral. İstersen tipi topla, istersen kendi kombinini yap.",
-                                  "6 sets, 30 pieces: Coder, Hipster, Police, Marketer, Artist, King. Collect a set or make your own combo."))
-                tip("sparkles", loc("Her tipin son parçası parıltılı bir gizli ödül; belli bir seviyede açılır.",
-                                    "Each set's last piece is a shiny secret reward that opens at a certain level."))
+                tip("tshirt", loc("30 parça: baş, gözlük, yüz, boyun ve yanına. Her yuvadan istediğini giy, kendi kombinini yap.",
+                                  "30 pieces for the head, eyes, face, neck and side. Wear anything per slot and make your own combo."))
+                tip("sparkles", loc("Bazı parçalar parıltılı gizli ödül; belli bir seviyede açılır.",
+                                    "Some pieces are shiny secret rewards that open at a certain level."))
                 tip("snowflake", loc("Efektler: mevsime göre kar, güneş, yaprak; sohbette aşk geçerse kalpler, kutlamada konfeti.",
                                      "Effects: snow, sun or leaves by season; hearts when love comes up in a chat, confetti for celebrations."))
             }
