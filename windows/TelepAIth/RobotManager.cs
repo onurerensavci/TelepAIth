@@ -369,13 +369,7 @@ internal sealed class RobotManager
         switch (_avatar.Health)
         {
             case Health.Update:
-                // Önce balonda kısaca ne geldiğini söyle, sonra kurulumu sor
-                if (Updater.Shared.Available is { } rel)
-                {
-                    _avatar.Current.Say(WhatsNew.Bubble(rel.Version, WhatsNew.Summary(rel.Version, rel.Notes, 3)), 14);
-                    Application.Current.Dispatcher.InvokeAsync(() => Updater.Shared.PromptInstall(), DispatcherPriority.Background);
-                }
-                else Updater.Shared.PromptInstall();
+                ShowUpdate();
                 break;
             case Health.Broken:
                 _avatar.Current.Say(WithEmoji("🔴", _avatar.HealthText), 8);
@@ -458,6 +452,15 @@ internal sealed class RobotManager
         if (_avatar.Health == health && _avatar.HealthText == text) return;
         _avatar.SetHealth(health, text);
         if (health == Health.Update && !wasUpdate) AnnounceUpdate(text);
+    }
+
+    /// <summary>Güncelleme: önce balonda kısaca ne geldiğini söyle, sonra kurulumu sor (robota ya da menüye tıklayınca)</summary>
+    public void ShowUpdate()
+    {
+        if (Updater.Shared.Available is not { } rel) return;
+        _avatar?.Unpeek();
+        _avatar?.Current.Say(WhatsNew.Bubble(rel.Version, WhatsNew.Summary(rel.Version, rel.Notes, 3)), 14);
+        Application.Current.Dispatcher.InvokeAsync(() => Updater.Shared.PromptInstall(), DispatcherPriority.Background);
     }
 
     /// <summary>Otomatik efektte mevsim değişti: robot söyler ("🍂 Sonbahar geldi!"); ilk açılışta sessizce kaydeder</summary>

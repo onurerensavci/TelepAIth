@@ -2,10 +2,12 @@
  {
   "version": "0.23.1",
   "tr": [
-   "Gardırop sadeleşti: tipler kalktı, Baş, Gözlük, Yüz, Boyun ve Yanında'dan istediğini giy"
+   "Gardırop sadeleşti: tipler kalktı, Baş, Gözlük, Yüz, Boyun ve Yanında'dan istediğini giy",
+   "Sağ tık menüsü kısaldı; güncelleme de orada (Güncelle / Güncellemeleri Denetle)"
   ],
   "en": [
-   "Simpler wardrobe: no more sets, wear anything from Head, Eyes, Face, Neck and Side"
+   "Simpler wardrobe: no more sets, wear anything from Head, Eyes, Face, Neck and Side",
+   "A shorter right-click menu, now with updates (Update / Check for Updates)"
   ]
  },
  {

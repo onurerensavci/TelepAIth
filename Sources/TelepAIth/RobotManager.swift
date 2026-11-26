@@ -95,6 +95,9 @@ final class RobotManager {
         window.onOpenRoom = { [weak self] in self?.onOpenRoom?() }
         window.onShowSummary = { [weak self] in self?.showSummary() }
         window.onReportBug = { [weak self] in self?.onReportBug?() }
+        window.updateVersion = { Updater.shared.available?.version }
+        window.onUpdate = { [weak self] in self?.showUpdate() }
+        window.onCheckUpdates = { Updater.shared.check(userInitiated: true) }
         window.onLockChanged = { [weak self] locked in
             guard let self = self else { return }
             if locked { self.dockPID = nil } else { self.frontmostChanged(NSWorkspace.shared.frontmostApplication) }
@@ -434,6 +437,14 @@ final class RobotManager {
         }
     }
 
+    /// Güncelleme: önce balonda kısaca ne geldiğini söyle, sonra kurulumu sor (robota ya da menüye tıklayınca)
+    func showUpdate() {
+        guard let release = Updater.shared.available else { return }
+        avatar?.unpeek()
+        avatar?.current.say(WhatsNew.bubble(release.version, WhatsNew.summary(release.version, notes: release.notes, max: 3)), for: 14)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { Updater.shared.promptInstall() }
+    }
+
     /// Otomatik efektte mevsim değişti: robot söyler ("🍂 Sonbahar geldi!"); ilk açılışta sessizce kaydeder
     private func checkSeason() {
         guard Effects.isAuto, !FocusMode.isActive, let avatar = avatar else { return }
@@ -496,13 +507,7 @@ final class RobotManager {
         guard let avatar = avatar else { return }
         switch avatar.health {
         case .update:
-            // Önce balonda kısaca ne geldiğini söyle, sonra kurulumu sor
-            if let release = Updater.shared.available {
-                avatar.current.say(WhatsNew.bubble(release.version, WhatsNew.summary(release.version, notes: release.notes, max: 3)), for: 14)
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { Updater.shared.promptInstall() }
-            } else {
-                Updater.shared.promptInstall()
-            }
+            showUpdate()
         case .broken(let reason):
             avatar.current.say(withEmoji("🔴", reason), for: 8)
             if Preferences.watchApps && !AppWatcher.isTrusted { AppWatcher.resetAndRequestTrust() }

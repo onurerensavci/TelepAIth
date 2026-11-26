@@ -544,6 +544,10 @@ final class AvatarWindowController: NSObject {
     var onOpenRoom: (() -> Void)?
     var onShowSummary: (() -> Void)?
     var onReportBug: (() -> Void)?
+    /// Hazır güncellemenin sürümü (yoksa nil); menüden güncelle / denetle
+    var updateVersion: (() -> String?)?
+    var onUpdate: (() -> Void)?
+    var onCheckUpdates: (() -> Void)?
 
     private let panel: RobotPanel
     private let host: AvatarHostingView
@@ -649,52 +653,44 @@ final class AvatarWindowController: NSObject {
     }
 
     private func showMenu(_ event: NSEvent) {
+        // Sık kullanılanlar üstte, açılıp kapananlar işaretli, gerisi "Diğer" altında
         let menu = NSMenu()
-        let history = NSMenuItem(title: loc("Son olayları göster", "Show recent events"), action: #selector(historyAction), keyEquivalent: "")
-        history.target = self
-        menu.addItem(history)
+        func add(_ title: String, _ action: Selector, on: Bool? = nil, to target: NSMenu? = nil) {
+            let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
+            item.target = self
+            if let on = on { item.state = on ? .on : .off }
+            (target ?? menu).addItem(item)
+        }
+        // Güncelleme varsa en üstte; tıklayınca robot kısaca ne geldiğini söyler, sonra kurulumu sorar
+        if let version = updateVersion?() {
+            add("⬆️ " + loc("Güncelle: \(version) hazır", "Update: \(version) is ready"), #selector(updateAction))
+            menu.addItem(.separator())
+        }
+        add(loc("Son olaylar", "Recent events"), #selector(historyAction))
+        add(loc("Robotun odası", "Robot's room"), #selector(roomAction))
+        add(loc("Bugünün özeti", "Today's summary"), #selector(summaryAction))
         menu.addItem(.separator())
-        let lock = NSMenuItem(title: avatar.locked ? loc("🔓 Kilidi aç", "🔓 Unlock") : loc("🔒 Kilitle (yerinde kalsın)", "🔒 Lock (stay here)"),
-                              action: #selector(lockAction), keyEquivalent: "")
-        lock.target = self
-        menu.addItem(lock)
-        let onTop = NSMenuItem(title: loc("📌 Her zaman üstte", "📌 Always on top"), action: #selector(alwaysOnTopAction), keyEquivalent: "")
-        onTop.target = self
-        onTop.state = Preferences.alwaysOnTop ? .on : .off
-        menu.addItem(onTop)
-        let focus = NSMenuItem(title: FocusMode.manualActive ? loc("🌙 Odak modunu kapat", "🌙 Turn off focus mode")
-                                                               : loc("🌙 Odak modu (1 saat)", "🌙 Focus mode (1 hour)"),
-                               action: #selector(focusAction), keyEquivalent: "")
-        focus.target = self
-        menu.addItem(focus)
-        let mute = NSMenuItem(title: Preferences.muted ? loc("🔊 Sesi aç", "🔊 Unmute") : loc("🔇 Sessize al", "🔇 Mute"),
-                              action: #selector(muteAction), keyEquivalent: "")
-        mute.target = self
-        mute.state = Preferences.muted ? .on : .off
-        menu.addItem(mute)
+        add(loc("Kilitle", "Lock"), #selector(lockAction), on: avatar.locked)
+        add(loc("Sessize al", "Mute"), #selector(muteAction), on: Preferences.muted)
+        add(loc("Odak modu (1 saat)", "Focus mode (1 hour)"), #selector(focusAction), on: FocusMode.manualActive)
         menu.addItem(.separator())
-        let summary = NSMenuItem(title: loc("📊 Bugünün özeti", "📊 Today's summary"), action: #selector(summaryAction), keyEquivalent: "")
-        summary.target = self
-        menu.addItem(summary)
-        let room = NSMenuItem(title: loc("🏠 Robotun odası…", "🏠 Robot's room…"), action: #selector(roomAction), keyEquivalent: "")
-        room.target = self
-        menu.addItem(room)
-        let settings = NSMenuItem(title: loc("Ayarlar…", "Settings…"), action: #selector(settingsAction), keyEquivalent: "")
-        settings.target = self
-        menu.addItem(settings)
-        let diagnostics = NSMenuItem(title: loc("Teşhis…", "Diagnostics…"), action: #selector(diagnosticsAction), keyEquivalent: "")
-        diagnostics.target = self
-        menu.addItem(diagnostics)
-        let bug = NSMenuItem(title: loc("Hata bildir…", "Report a problem…"), action: #selector(bugAction), keyEquivalent: "")
-        bug.target = self
-        menu.addItem(bug)
-        menu.addItem(.separator())
-        let hide = NSMenuItem(title: loc("Robotu gizle", "Hide robot"), action: #selector(hideAction), keyEquivalent: "")
-        hide.target = self
-        menu.addItem(hide)
+        add(loc("Ayarlar", "Settings"), #selector(settingsAction))
+        if updateVersion?() == nil { add(loc("Güncellemeleri denetle", "Check for updates"), #selector(checkUpdatesAction)) }
+        let more = NSMenu()
+        add(loc("Her zaman üstte", "Always on top"), #selector(alwaysOnTopAction), on: Preferences.alwaysOnTop, to: more)
+        add(loc("Teşhis", "Diagnostics"), #selector(diagnosticsAction), to: more)
+        add(loc("Hata bildir", "Report a problem"), #selector(bugAction), to: more)
+        more.addItem(.separator())
+        add(loc("Robotu gizle", "Hide robot"), #selector(hideAction), to: more)
+        let moreItem = NSMenuItem(title: loc("Diğer", "More"), action: nil, keyEquivalent: "")
+        moreItem.submenu = more
+        menu.addItem(moreItem)
         applyMenuTitles(menu)
         NSMenu.popUpContextMenu(menu, with: event, for: host)
     }
+
+    @objc private func updateAction() { onUpdate?() }
+    @objc private func checkUpdatesAction() { onCheckUpdates?() }
 
     @objc private func historyAction() {
         avatar.current.showHistory()

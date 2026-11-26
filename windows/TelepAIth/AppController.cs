@@ -199,29 +199,40 @@ internal sealed class AppController : ISettingsHost
         };
     }
 
-    /// <summary>Robota sağ tık</summary>
+    /// <summary>Robota sağ tık: sık kullanılanlar üstte, açılıp kapananlar işaretli, gerisi "Diğer" altında</summary>
     private ContextMenu BuildRobotMenu()
     {
         var current = Manager.Current;
-        var entries = new List<MenuEntry?>
+        var entries = new List<MenuEntry?>();
+        // Güncelleme varsa en üstte; tıklayınca robot kısaca ne geldiğini söyler, sonra kurulumu sorar
+        if (Updater.Shared.Available is { } rel)
         {
-            new(L("Son olayları göster", "Show recent events"), () => { if (current != null) Manager.ShowHistory(current.Source); }, Icon: "\uE81C"),
+            entries.Add(new MenuEntry(L($"Güncelle: {rel.Version} hazır", $"Update: {rel.Version} is ready"), Manager.ShowUpdate,
+                Enabled: !Updater.Shared.IsBusy, Icon: "\uE896"));
+            entries.Add(null);
+        }
+        entries.AddRange(new MenuEntry?[]
+        {
+            new(L("Son olaylar", "Recent events"), () => { if (current != null) Manager.ShowHistory(current.Source); }, Icon: "\uE81C"),
+            new(L("Robotun odası", "Robot's room"), OpenRoom, Icon: "\uE80F"),
+            new(L("Bugünün özeti", "Today's summary"), Manager.ShowSummary, Icon: "\uE787"),
             null,
-            new(Prefs.RobotLocked ? L("Kilidi aç", "Unlock") : L("Kilitle (yerinde kalsın)", "Lock (stay here)"), () =>
+            new(L("Kilitle", "Lock"), () =>
             {
                 var on = !Prefs.RobotLocked;
                 Manager.SetLocked(on);
                 Manager.Current?.Say(on ? WithEmoji("🔒", L("Kilitlendim, yerimden kıpırdamıyorum.", "Locked. I'm staying right here."))
                                         : WithEmoji("🔓", L("Kilidim açıldı, yine Claude ve GPT'nin peşinden gelirim.", "Unlocked. I'll follow Claude and GPT again.")), 4);
-            }, Icon: Prefs.RobotLocked ? "\uE785" : "\uE72E"),
-            new(L("Her zaman üstte", "Always on top"), () =>
+            }, Prefs.RobotLocked, Icon: Prefs.RobotLocked ? "\uE72E" : "\uE785"),
+            new(L("Sessize al", "Mute"), () =>
             {
-                var on = !Prefs.AlwaysOnTop;
-                Manager.SetAlwaysOnTop(on);
-                Manager.Current?.Say(on ? WithEmoji("📌", L("Her zaman en üstteyim.", "I'll stay on top of everything."))
-                                        : WithEmoji("🪟", L("Artık diğer pencerelerin arkasında kalabilirim.", "Other windows can cover me now.")), 4);
-            }, Prefs.AlwaysOnTop, Icon: "\uE718"),
-            new(FocusMode.ManualActive ? L("Odak modunu kapat", "Turn off focus mode") : L("Odak modu (1 saat)", "Focus mode (1 hour)"), () =>
+                Prefs.Muted = !Prefs.Muted;
+                Manager.Current?.Say(Prefs.Muted
+                    ? WithEmoji("🔇", L("Sessizim: bildirimler sessiz gelir, ses çıkarmam.", "Muted: notifications come silently, no sounds."))
+                    : WithEmoji("🔊", L("Sesim geri geldi.", "Sound is back.")), 4);
+                Changed();
+            }, Prefs.Muted, Icon: Prefs.Muted ? "\uE74F" : "\uE767"),
+            new(L("Odak modu (1 saat)", "Focus mode (1 hour)"), () =>
             {
                 if (FocusMode.ManualActive)
                 {
@@ -235,24 +246,27 @@ internal sealed class AppController : ISettingsHost
                 }
                 Manager.FocusChanged();
                 Changed();
-            }, Icon: "\uE708"),
-            new(Prefs.Muted ? L("Sesi aç", "Unmute") : L("Sessize al", "Mute"), () =>
-            {
-                Prefs.Muted = !Prefs.Muted;
-                Manager.Current?.Say(Prefs.Muted
-                    ? WithEmoji("🔇", L("Sessizim: bildirimler sessiz gelir, ses çıkarmam.", "Muted: notifications come silently, no sounds."))
-                    : WithEmoji("🔊", L("Sesim geri geldi.", "Sound is back.")), 4);
-                Changed();
-            }, Prefs.Muted, Icon: Prefs.Muted ? "\uE767" : "\uE74F"),
-            new(L("Bugünün özeti", "Today's summary"), Manager.ShowSummary, Icon: "\uE787"),
+            }, FocusMode.ManualActive, Icon: "\uE708"),
             null,
-            new(L("Robotun odası", "Robot's room"), OpenRoom, Icon: "\uE80F"),
             new(L("Ayarlar", "Settings"), () => SettingsWindow.Show(this), Icon: "\uE713"),
+        });
+        if (Updater.Shared.Available == null)
+            entries.Add(new MenuEntry(Updater.Shared.IsBusy ? L("Güncelleme indiriliyor…", "Downloading update…") : L("Güncellemeleri denetle", "Check for updates"),
+                CheckUpdates, Enabled: !Updater.Shared.IsBusy, Icon: "\uE895"));
+        entries.Add(new MenuEntry(L("Diğer", "More"), Icon: "\uE712", Children: new List<MenuEntry?>
+        {
+            new(L("Her zaman üstte", "Always on top"), () =>
+            {
+                var on = !Prefs.AlwaysOnTop;
+                Manager.SetAlwaysOnTop(on);
+                Manager.Current?.Say(on ? WithEmoji("📌", L("Her zaman en üstteyim.", "I'll stay on top of everything."))
+                                        : WithEmoji("🪟", L("Artık diğer pencerelerin arkasında kalabilirim.", "Other windows can cover me now.")), 4);
+            }, Prefs.AlwaysOnTop, Icon: "\uE718"),
             new(L("Teşhis", "Diagnostics"), OpenDiagnostics, Icon: "\uE9D9"),
             new(L("Hata bildir", "Report a problem"), ReportBug, Icon: "\uEBE8"),
             null,
             new(L("Robotu gizle", "Hide robot"), () => Manager.Visible = false, Icon: "\uED1A"),
-        };
+        }));
         // En üstte: robotun şu an gösterdiği AI ve ne yaptığı
         if (current != null)
         {
