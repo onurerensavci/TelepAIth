@@ -666,13 +666,13 @@ final class AvatarWindowController: NSObject {
             add("⬆️ " + loc("Güncelle: \(version) hazır", "Update: \(version) is ready"), #selector(updateAction))
             menu.addItem(.separator())
         }
-        add("🕘 " + loc("Son olaylar", "Recent events"), #selector(historyAction))
-        add("🏠 " + loc("Robotun odası", "Robot's room"), #selector(roomAction))
-        add("📊 " + loc("Bugünün özeti", "Today's summary"), #selector(summaryAction))
-        menu.addItem(.separator())
         add("🔒 " + loc("Kilitle", "Lock"), #selector(lockAction), on: avatar.locked)
         add("🔇 " + loc("Sessize al", "Mute"), #selector(muteAction), on: Preferences.muted)
         add("🌙 " + loc("Odak modu (1 saat)", "Focus mode (1 hour)"), #selector(focusAction), on: FocusMode.manualActive)
+        menu.addItem(.separator())
+        add("🕘 " + loc("Son olaylar", "Recent events"), #selector(historyAction))
+        add("🏠 " + loc("Robotun odası", "Robot's room"), #selector(roomAction))
+        add("📊 " + loc("Bugünün özeti", "Today's summary"), #selector(summaryAction))
         menu.addItem(.separator())
         add("⚙️ " + loc("Ayarlar", "Settings"), #selector(settingsAction))
         if updateVersion?() == nil { add("🔄 " + loc("Güncellemeleri denetle", "Check for updates"), #selector(checkUpdatesAction)) }

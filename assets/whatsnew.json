@@ -1,5 +1,14 @@
 [
  {
+  "version": "0.23.3",
+  "tr": [
+   "Sağ tık menüsünde Kilitle, Sessize al ve Odak modu en üstte"
+  ],
+  "en": [
+   "Lock, Mute and Focus mode are now at the top of the right-click menu"
+  ]
+ },
+ {
   "version": "0.23.2",
   "tr": [
    "Sağ tık menüsünde her satırın solunda bir emoji var",

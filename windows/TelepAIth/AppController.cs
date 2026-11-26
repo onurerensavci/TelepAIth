@@ -213,10 +213,6 @@ internal sealed class AppController : ISettingsHost
         }
         entries.AddRange(new MenuEntry?[]
         {
-            new(L("Son olaylar", "Recent events"), () => { if (current != null) Manager.ShowHistory(current.Source); }, Icon: "\uE81C"),
-            new(L("Robotun odası", "Robot's room"), OpenRoom, Icon: "\uE80F"),
-            new(L("Bugünün özeti", "Today's summary"), Manager.ShowSummary, Icon: "\uE787"),
-            null,
             new(L("Kilitle", "Lock"), () =>
             {
                 var on = !Prefs.RobotLocked;
@@ -247,6 +243,10 @@ internal sealed class AppController : ISettingsHost
                 Manager.FocusChanged();
                 Changed();
             }, FocusMode.ManualActive, Icon: "\uE708"),
+            null,
+            new(L("Son olaylar", "Recent events"), () => { if (current != null) Manager.ShowHistory(current.Source); }, Icon: "\uE81C"),
+            new(L("Robotun odası", "Robot's room"), OpenRoom, Icon: "\uE80F"),
+            new(L("Bugünün özeti", "Today's summary"), Manager.ShowSummary, Icon: "\uE787"),
             null,
             new(L("Ayarlar", "Settings"), () => SettingsWindow.Show(this), Icon: "\uE713"),
         });
