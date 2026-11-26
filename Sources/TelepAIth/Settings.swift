@@ -137,25 +137,6 @@ struct SettingsView: View {
                         Text(loc(option.1, option.2) + " (%\(Int(option.0 * 100)))").tag(option.0)
                     }
                 }
-                Picker(selection: Binding(get: {
-                    Preferences.costume == "off" || Effects.all.contains { $0.id == Preferences.costume } ? Preferences.costume : "auto"
-                }, set: { value in
-                    Preferences.costume = value
-                    model.changed()
-                })) {
-                    Text(loc("Otomatik (kışın kar, Aralık – 6 Ocak)", "Automatic (snow in winter, Dec – Jan 6)")).tag("auto")
-                    Text(loc("Kapalı", "Off")).tag("off")
-                    Divider()
-                    ForEach(Effects.all) { effect in
-                        Text(effect.name).tag(effect.id)
-                    }
-                } label: {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(loc("Efektler", "Effects"))
-                        Text(loc("Bitince, beklerken, hata verince canlanır", "Comes alive when done, waiting or on errors"))
-                            .font(.caption).foregroundColor(.secondary)
-                    }
-                }
                 Toggle(loc("Mac açılınca başlasın", "Open at login"),
                        isOn: model.toggle({ LaunchAtLogin.isEnabled || LaunchAtLogin.needsApproval }, { LaunchAtLogin.set($0) }))
                 if LaunchAtLogin.needsApproval {
@@ -231,56 +212,53 @@ struct SettingsView: View {
         let status = Notifier.shared.status
         return Form {
             Section {
-                HStack {
-                    Text(loc("macOS izni", "macOS permission"))
-                    Spacer()
-                    Circle().fill(status == .authorized ? Color.green : (status == .denied ? Color.red : Color.orange))
-                        .frame(width: 8, height: 8)
-                    Text(status.text).foregroundColor(.secondary)
-                }
-                if status == .denied {
-                    Text(loc("Bildirimler macOS'ta kapalı. Sistem Ayarları → Bildirimler → TelepAIth'te \"Bildirimlere izin ver\"i aç.",
-                             "Notifications are turned off in macOS. Turn on \"Allow notifications\" in System Settings → Notifications → TelepAIth."))
-                        .font(.callout).foregroundColor(.secondary)
-                }
-                HStack {
-                    if status == .notDetermined {
-                        Button(loc("İzin iste", "Ask for permission")) { Notifier.shared.requestPermission { _ in model.changed() } }
-                    }
-                    Button(loc("Sistem Ayarları'nı aç", "Open System Settings")) { Notifier.openSettings() }
-                    Spacer()
-                    Button(loc("Test bildirimi gönder", "Send a test notification")) { Notifier.shared.sendTest() }
-                }
-                if let error = Notifier.shared.lastError {
-                    Text(loc("Son hata: ", "Last error: ") + error).font(.caption).foregroundColor(.secondary)
-                }
-            }
-            Section {
-                Toggle(loc("Bildirimler", "Notifications"),
-                       isOn: model.toggle({ Preferences.notificationsEnabled }, { Preferences.notificationsEnabled = $0 }))
-                Toggle(loc("O uygulamaya bakarken de bildir", "Notify even while I'm looking at that app"),
-                       isOn: model.toggle({ Preferences.notifyWhenFrontmost }, { Preferences.notifyWhenFrontmost = $0 }))
+                Text(loc("Robot önemli anları balonunda söyler ve kısa bir ses çalar; hangi anlarda ses çıkacağını Ses sekmesinden seçersin. Biten sohbetler için bildirim gelmez.",
+                         "The robot says important moments in its bubble and plays a short sound; pick which moments make a sound in the Sound tab. Finished chats don't notify."))
+                    .font(.callout).foregroundColor(.secondary)
                 Toggle(loc("Uzun süre onay beklerse ısrar etsin (sallansın, 2 dk sonra hatırlatsın)",
                            "Nag when it waits a long time for approval (wiggle, remind after 2 min)"),
                        isOn: model.toggle({ Preferences.waitReminders }, { Preferences.waitReminders = $0 }))
-                HStack {
-                    Text(loc("\"Bitti\" bildirimi için en az", "\"Done\" notification after at least"))
-                    Spacer()
-                    Picker("", selection: Binding(get: { Int(Preferences.longTurnSeconds) }, set: { value in
-                        Preferences.longTurnSeconds = Double(value)
-                        model.changed()
-                    })) {
-                        ForEach([0, 10, 20, 60, 180], id: \.self) { s in
-                            Text(s == 0 ? loc("her zaman", "always") : formatDuration(Double(s))).tag(s)
-                        }
+            }
+            Section(header: Text(loc("macOS bildirimleri", "macOS notifications"))) {
+                Toggle(loc("Seni bekleyenler ve hatalar macOS bildirimi olarak da gelsin", "Also send waiting and errors as macOS notifications"),
+                       isOn: model.toggle({ Preferences.notificationsEnabled }, { value in
+                           Preferences.notificationsEnabled = value
+                           if value && Notifier.shared.status == .notDetermined { Notifier.shared.requestPermission { _ in model.changed() } }
+                       }))
+                Text(loc("Robot başka bir masaüstündeyken ya da gizliyken işe yarar. Kapalıyken her şeyi robot söyler.",
+                         "Useful when the robot is on another desktop or hidden. When off, the robot tells you everything."))
+                    .font(.caption).foregroundColor(.secondary)
+                if Preferences.notificationsEnabled {
+                    HStack {
+                        Text(loc("macOS izni", "macOS permission"))
+                        Spacer()
+                        Circle().fill(status == .authorized ? Color.green : (status == .denied ? Color.red : Color.orange))
+                            .frame(width: 8, height: 8)
+                        Text(status.text).foregroundColor(.secondary)
                     }
-                    .labelsHidden()
-                    .frame(width: 130)
+                    if status == .denied {
+                        Text(loc("Bildirimler macOS'ta kapalı. Sistem Ayarları → Bildirimler → TelepAIth'te \"Bildirimlere izin ver\"i aç.",
+                                 "Notifications are turned off in macOS. Turn on \"Allow notifications\" in System Settings → Notifications → TelepAIth."))
+                            .font(.callout).foregroundColor(.secondary)
+                    }
+                    HStack {
+                        if status == .notDetermined {
+                            Button(loc("İzin iste", "Ask for permission")) { Notifier.shared.requestPermission { _ in model.changed() } }
+                        }
+                        Button(loc("Sistem Ayarları'nı aç", "Open System Settings")) { Notifier.openSettings() }
+                        Spacer()
+                        Button(loc("Test bildirimi gönder", "Send a test notification")) { Notifier.shared.sendTest() }
+                    }
+                    Toggle(loc("O uygulamaya bakarken de bildir", "Notify even while I'm looking at that app"),
+                           isOn: model.toggle({ Preferences.notifyWhenFrontmost }, { Preferences.notifyWhenFrontmost = $0 }))
+                    if let error = Notifier.shared.lastError {
+                        Text(loc("Son hata: ", "Last error: ") + error).font(.caption).foregroundColor(.secondary)
+                    }
                 }
             }
             Section {
-                Text(loc("Bildirime ya da robotun balonuna tıklayınca o işin penceresine (Claude, ChatGPT ya da terminal) gidersin.",
-                         "Click a notification or the robot's bubble to jump to that task's window (Claude, ChatGPT or your terminal)."))
+                Text(loc("Robotun balonuna ya da bildirime tıklayınca o sohbete gidersin (Claude, ChatGPT ya da terminal).",
+                         "Click the robot's bubble or a notification to jump to that chat (Claude, ChatGPT or your terminal)."))
                     .font(.callout).foregroundColor(.secondary)
             }
         }
@@ -437,7 +415,7 @@ struct OnboardingView: View {
     let onFinish: () -> Void
     @State private var step = 0
 
-    private let steps = 5
+    private let steps = 6
 
     var body: some View {
         VStack(spacing: 0) {
@@ -447,6 +425,7 @@ struct OnboardingView: View {
                 case 1: notificationsStep
                 case 2: accessibilityStep
                 case 3: connectionsStep
+                case 4: roomStep
                 default: doneStep
                 }
             }
@@ -474,7 +453,7 @@ struct OnboardingView: View {
             }
             .padding(16)
         }
-        .frame(width: 540, height: 420)
+        .frame(width: 560, height: 480)
     }
 
     private func title(_ text: String) -> some View {
@@ -513,19 +492,52 @@ struct OnboardingView: View {
     private var notificationsStep: some View {
         let status = Notifier.shared.status
         return VStack(alignment: .leading, spacing: 10) {
-            title(loc("Bildirimler", "Notifications"))
-            para(loc("Uzun bir iş bitince ya da AI senden onay beklerken haber vereyim.",
-                     "I'll let you know when a long task finishes or the AI needs your approval."))
-            statusRow(status == .authorized, loc("Bildirim izni var", "Notifications allowed"),
-                      status == .denied ? loc("Bildirimler macOS'ta kapalı", "Notifications are off in macOS")
-                                        : loc("Henüz izin verilmedi", "Not allowed yet"))
-            HStack {
-                if status == .notDetermined {
-                    Button(loc("Bildirimlere izin ver", "Allow notifications")) { Notifier.shared.requestPermission { _ in model.changed() } }
-                } else if status == .denied {
+            title(loc("Bildirimler ve ses 🔔", "Notifications & sound 🔔"))
+            para(loc("Bir iş bitince, AI seni beklerken ya da hata verince robot balonunda söyler ve kısa bir ses çalar. Hangi anlarda ses çıkacağını sonra Ayarlar → Ses'ten tek tek seçebilirsin.",
+                     "When a task finishes, the AI needs you or something fails, the robot says it in its bubble and plays a short sound. Later you can pick each moment in Settings → Sound."))
+            Toggle(loc("Robotun kısa sesleri", "Robot's short sounds"),
+                   isOn: model.toggle({ Preferences.sounds }, { Preferences.sounds = $0 }))
+                .padding(.top, 4)
+            Toggle(loc("Önemli anları sesli söylesin", "Say important moments out loud"),
+                   isOn: model.toggle({ Preferences.speak }, { value in
+                       Preferences.speak = value
+                       if value { Speech.say(loc("Merhaba, ben TelepAIth.", "Hi, I'm TelepAIth.")) }
+                   }))
+            Toggle(loc("Seni bekleyenler ve hatalar macOS bildirimi olarak da gelsin", "Also send waiting and errors as macOS notifications"),
+                   isOn: model.toggle({ Preferences.notificationsEnabled }, { value in
+                       Preferences.notificationsEnabled = value
+                       if value && Notifier.shared.status == .notDetermined { Notifier.shared.requestPermission { _ in model.changed() } }
+                   }))
+            if Preferences.notificationsEnabled && status == .denied {
+                HStack {
+                    Text(loc("Bildirimler macOS'ta kapalı", "Notifications are off in macOS")).font(.callout).foregroundColor(.secondary)
                     Button(loc("Sistem Ayarları'nı aç", "Open System Settings")) { Notifier.openSettings() }
                 }
-                Button(loc("Test bildirimi gönder", "Send a test")) { Notifier.shared.sendTest() }
+            }
+        }
+    }
+
+    private var roomStep: some View {
+        let theme = Themes.shared.theme(for: "claude").color
+        return VStack(alignment: .leading, spacing: 10) {
+            title(loc("Robotun odası 🎒", "The robot's room 🎒"))
+            para(loc("Sen çalıştıkça robot seviye atlar ve gardıropta yeni parçalar açılır. Robota sağ tıkla → Robotun Odası.",
+                     "As you work, the robot levels up and new pieces open in the wardrobe. Right-click the robot → Robot's Room."))
+            HStack(spacing: 4) {
+                ForEach(["coder", "police", "king"], id: \.self) { type in
+                    RoomMiniRobot(theme: theme, items: Outfits.items(of: type).filter { !$0.legendary })
+                        .scaleEffect(1.25)
+                        .frame(width: 110, height: 90)
+                }
+            }
+            .frame(maxWidth: .infinity)
+            VStack(alignment: .leading, spacing: 7) {
+                tip("tshirt", loc("6 tip, 30 parça: Kodcu, Hipster, Polis, Pazarlamacı, Sanatçı, Kral. İstersen tipi topla, istersen kendi kombinini yap.",
+                                  "6 sets, 30 pieces: Coder, Hipster, Police, Marketer, Artist, King. Collect a set or make your own combo."))
+                tip("sparkles", loc("Her tipin son parçası parıltılı bir gizli ödül; belli bir seviyede açılır.",
+                                    "Each set's last piece is a shiny secret reward that opens at a certain level."))
+                tip("snowflake", loc("Efektler: mevsime göre kar, güneş, yaprak; sohbette aşk geçerse kalpler, kutlamada konfeti.",
+                                     "Effects: snow, sun or leaves by season; hearts when love comes up in a chat, confetti for celebrations."))
             }
         }
     }
@@ -608,7 +620,7 @@ final class OnboardingWindow: NSObject, NSWindowDelegate {
     func show(host: SettingsHost) {
         if window == nil {
             let model = SettingsModel(host: host)
-            let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 540, height: 420),
+            let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 560, height: 480),
                              styleMask: [.titled, .closable],
                              backing: .buffered, defer: false)
             w.title = AppInfo.name

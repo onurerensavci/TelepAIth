@@ -628,14 +628,22 @@ internal sealed class RobotView : FrameworkElement
         }
         _hover += (hoverTarget - _hover) * Math.Min(1, dt * 8);
         var winter = WinterActive;
-        // Efektler (güneş, gökkuşağı…): robot ses çıkaran bir an yaşayınca canlanır
-        var effect = Effects.Current() is { } fxId && fxId != "winter" ? fxId : null;
+        // Efektler (kar, güneş, kalpler…): görünürlüğüyle; robot ses çıkaran bir an yaşayınca canlanır
+        var fx = Effects.Visible(DateTime.Now, state.IsWorking());
+        var snow = fx is { Id: "winter" } s0 ? s0.Alpha : 0;
+        var effect = fx is { Id: not "winter" } f0 ? f0.Id : null;
+        var effectAlpha = fx?.Alpha ?? 0;
         var energy = effect == null ? 0 : Effects.Energy(DateTime.Now, state.IsWorking());
         var face = new FaceCtx(state, mood, model.PreviousState, model.PreviousMood, blend, idle, glyph, prevGlyph, lookU, lookV, _hover, winter);
 
         // Gölge
         dc.DrawEllipse(B(Colors.Black, 0.14), null, new Point(50, 96), Math.Max(24, 58 - lift * 1.5) / 2, 3);
-        if (effect != null && Effects.IsBackground(effect)) DrawEffect(dc, effect, time, energy);
+        if (effect != null && Effects.IsBackground(effect))
+        {
+            dc.PushOpacity(effectAlpha);
+            DrawEffect(dc, effect, time, energy);
+            dc.Pop();
+        }
         // Kullanım sınırları: ayaklarının dibinde iki küçük halka (solda oturum, sağda hafta)
         foreach (var w in _avatar.Usage)
         {
@@ -673,8 +681,18 @@ internal sealed class RobotView : FrameworkElement
         }
         if (state == RobotState.Sleeping) DrawZzz(dc, time);
 
-        if (winter) DrawSnow(dc, time);
-        if (effect != null && !Effects.IsBackground(effect)) DrawEffect(dc, effect, time, energy);
+        if (snow > 0)
+        {
+            dc.PushOpacity(snow);
+            DrawSnow(dc, time);
+            dc.Pop();
+        }
+        if (effect != null && !Effects.IsBackground(effect))
+        {
+            dc.PushOpacity(effectAlpha);
+            DrawEffect(dc, effect, time, energy);
+            dc.Pop();
+        }
 
         if (IsNudging(model, time))
         {
@@ -854,7 +872,13 @@ internal sealed class RobotView : FrameworkElement
 
     // MARK: Efektler (Mac'te EffectView.swift, aynı şekiller; kafa alanında, -20…120 × -25…125)
 
-    private static double Fade(double y) => Math.Max(0, Math.Min(1, Math.Min((115 - y) / 30, (y + 25) / 12)));
+    /// <summary>Robotun penceresi kafanın her yanında ancak ~14 nokta yer bırakıyor: efektler -12…112 içinde kalır,
+    /// kenarlara yaklaşınca yumuşakça söner (sert kesik görünmesin)</summary>
+    private static double Edge(double x, double y)
+    {
+        static double C(double v) => Math.Clamp(v, 0, 1);
+        return C((x + 12) / 10) * C((112 - x) / 10) * C((y + 12) / 10) * C((112 - y) / 16);
+    }
 
     private static Pen RoundPen(Color c, double a, double w) =>
         new(B(c, Math.Clamp(a, 0, 1)), w) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round, LineJoin = PenLineJoin.Round };
@@ -875,14 +899,14 @@ internal sealed class RobotView : FrameworkElement
         return g;
     }
 
-    private static void DrawEffect(DrawingContext dc, string id, double t, double e)
+    internal static void DrawEffect(DrawingContext dc, string id, double t, double e)
     {
         const double Tau = Math.PI * 2;
         switch (id)
         {
             case "sun":
             {
-                double cx = 50, cy = 46, r = 62 + 6 * e;
+                double cx = 50, cy = 48, r = 50 + 6 * e;
                 var glow = new RadialGradientBrush
                 {
                     MappingMode = BrushMappingMode.Absolute, Center = new Point(cx, cy), GradientOrigin = new Point(cx, cy), RadiusX = r, RadiusY = r,
@@ -893,7 +917,7 @@ internal sealed class RobotView : FrameworkElement
                 for (var i = 0; i < 12; i++)
                 {
                     var a = t * 0.25 % Tau + i * Tau / 12;
-                    double r1 = 46, r2 = 55 + 6 * e + 2.5 * Math.Sin(t * 2 % Tau + i);
+                    double r1 = 44, r2 = 50 + 5 * e + 2 * Math.Sin(t * 2 % Tau + i);
                     dc.DrawLine(RoundPen(C(1, 0.8, 0.3), 0.45 + 0.35 * e, i % 2 == 1 ? 2 : 3),
                         new Point(cx + Math.Cos(a) * r1, cy + Math.Sin(a) * r1), new Point(cx + Math.Cos(a) * r2, cy + Math.Sin(a) * r2));
                 }
@@ -917,18 +941,32 @@ internal sealed class RobotView : FrameworkElement
             }
             case "aurora":
             {
+                // Kafanın üstünde kavis yapan ışık şeritleri; uçlarda saydamlaşır
                 (double R, double G, double B)[] cols = { (0.3, 1, 0.6), (0.3, 0.85, 1), (0.75, 0.45, 1) };
                 for (var k = 0; k < 3; k++)
                 {
                     var kk = k;
-                    var band = Poly(Enumerable.Range(0, 35).Select(j =>
+                    var band = Poly(Enumerable.Range(0, 31).Select(j =>
                     {
-                        var x = -18.0 + j * 4;
-                        return new Point(x, 4 + kk * 7 + Math.Sin(x * 0.06 + t * (0.8 + 0.25 * kk) % Tau + kk * 1.3) * (4 + 5 * e));
+                        var x = -10.0 + j * 4;
+                        return new Point(x, 6 + kk * 6 + 0.0045 * (x - 50) * (x - 50)
+                                            + Math.Sin(x * 0.07 + t * (0.8 + 0.25 * kk) % Tau + kk * 1.3) * (2.5 + 3 * e));
                     }));
                     var c = C(cols[k].R, cols[k].G, cols[k].B);
-                    dc.DrawGeometry(null, RoundPen(c, 0.13 * (1 + 0.9 * e), 11 + 4 * e), band);
-                    dc.DrawGeometry(null, RoundPen(c, 0.32 * (1 + 0.9 * e), 4 + 2 * e), band);
+                    Brush Fade(double a)
+                    {
+                        var g = new LinearGradientBrush { MappingMode = BrushMappingMode.Absolute, StartPoint = new Point(-10, 0), EndPoint = new Point(110, 0) };
+                        var on = Color.FromArgb((byte)(255 * Math.Clamp(a, 0, 1)), c.R, c.G, c.B);
+                        var off = Color.FromArgb(0, c.R, c.G, c.B);
+                        g.GradientStops.Add(new GradientStop(off, 0));
+                        g.GradientStops.Add(new GradientStop(on, 0.22));
+                        g.GradientStops.Add(new GradientStop(on, 0.78));
+                        g.GradientStops.Add(new GradientStop(off, 1));
+                        return g;
+                    }
+                    Pen Band(double a, double w) => new(Fade(a), w) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round, LineJoin = PenLineJoin.Round };
+                    dc.DrawGeometry(null, Band(0.14 * (1 + 0.9 * e), 9 + 3 * e), band);
+                    dc.DrawGeometry(null, Band(0.34 * (1 + 0.9 * e), 3.5 + 1.5 * e), band);
                 }
                 break;
             }
@@ -936,7 +974,7 @@ internal sealed class RobotView : FrameworkElement
                 for (var i = 0; i < 9; i++)
                 {
                     var a = (i * 40 + 10) * Math.PI / 180;
-                    var r = 57 + i % 3 * 4;
+                    var r = 52 + i % 3 * 3;
                     double x = 50 + Math.Cos(a) * r, y = 48 + Math.Sin(a) * r * 0.92;
                     var s = 0.5 + 0.5 * Math.Sin(t * (1.5 + i * 0.3) % Tau + i * 2);
                     var size = (1.8 + 1.6 * s) * (1 + 0.7 * e);
@@ -950,14 +988,14 @@ internal sealed class RobotView : FrameworkElement
                         ctx.QuadraticBezierTo(mid, new Point(x - size, y), true, true);
                         ctx.QuadraticBezierTo(mid, new Point(x, y - size), true, true);
                     }
-                    dc.DrawGeometry(B(C(1, 0.95, 0.7), 0.35 + 0.65 * s), null, g);
+                    dc.DrawGeometry(B(C(1, 0.95, 0.7), (0.35 + 0.65 * s) * Edge(x, y)), null, g);
                 }
                 break;
             case "hearts":
                 for (var i = 0; i < 7; i++)
                 {
                     var ph = (t * 0.13 + i / 7.0) % 1;
-                    double y = 108 - ph * 125, x = 8 + i * 37 % 84 + Math.Sin(t * 1.2 % Tau + i) * 6;
+                    double y = 104 - ph * 112, x = 8 + i * 37 % 84 + Math.Sin(t * 1.2 % Tau + i) * 6;
                     var s = (3 + 1.2 * (i % 3)) * (1 + 0.6 * e);
                     var g = new StreamGeometry();
                     using (var ctx = g.Open())
@@ -966,16 +1004,16 @@ internal sealed class RobotView : FrameworkElement
                         ctx.BezierTo(new Point(x - s * 1.4, y - s * 0.1), new Point(x - s * 0.7, y - s * 1.1), new Point(x, y - s * 0.35), true, true);
                         ctx.BezierTo(new Point(x + s * 0.7, y - s * 1.1), new Point(x + s * 1.4, y - s * 0.1), new Point(x, y + s * 0.9), true, true);
                     }
-                    dc.DrawGeometry(B(C(1, 0.42, 0.62), Math.Clamp(Math.Sin(ph * Math.PI) * (0.55 + 0.4 * e), 0, 1)), null, g);
+                    dc.DrawGeometry(B(C(1, 0.42, 0.62), Math.Clamp(Math.Sin(ph * Math.PI) * (0.55 + 0.4 * e) * Edge(x, y), 0, 1)), null, g);
                 }
                 break;
             case "bubbles":
                 for (var i = 0; i < 8; i++)
                 {
                     var ph = (t * 0.11 + i / 8.0) % 1;
-                    double y = 108 - ph * 125, x = 6 + i * 41 % 88 + Math.Sin(t * 1.5 % Tau + i * 2) * 5;
+                    double y = 104 - ph * 112, x = 6 + i * 41 % 88 + Math.Sin(t * 1.5 % Tau + i * 2) * 5;
                     var r = (1.8 + i % 3) * (1 + 0.5 * e);
-                    var a = Math.Clamp(Math.Sin(ph * Math.PI) * (0.55 + 0.4 * e), 0, 1);
+                    var a = Math.Clamp(Math.Sin(ph * Math.PI) * (0.55 + 0.4 * e) * Edge(x, y), 0, 1);
                     dc.DrawEllipse(B(C(0.7, 0.9, 1), a * 0.18), new Pen(B(C(0.85, 0.95, 1), a), 0.8), new Point(x, y), r, r);
                     dc.DrawEllipse(B(Colors.White, a * 0.9), null, new Point(x - r * 0.35, y - r * 0.35), r * 0.25, r * 0.25);
                 }
@@ -985,7 +1023,7 @@ internal sealed class RobotView : FrameworkElement
                 {
                     var x = 50 + Math.Cos(t * 0.4 * (1 + i % 3 * 0.3) % Tau + i * 1.7) * 56;
                     var y = 50 + Math.Sin(t * 0.5 * (1 + i % 2 * 0.4) % Tau + i * 2.3) * 50;
-                    var b = 0.5 + 0.5 * Math.Sin(t * 3 % Tau + i * 1.3);
+                    var b = (0.5 + 0.5 * Math.Sin(t * 3 % Tau + i * 1.3)) * Edge(x, y);
                     dc.DrawEllipse(B(C(0.8, 1, 0.4), Math.Min(1, 0.18 * b * (1 + 1.2 * e))), null, new Point(x, y), 4 + 2 * e, 4 + 2 * e);
                     dc.DrawEllipse(B(C(0.9, 1, 0.55), Math.Min(1, 0.45 + 0.55 * b)), null, new Point(x, y), 1.2 + 0.5 * e, 1.2 + 0.5 * e);
                 }
@@ -993,10 +1031,10 @@ internal sealed class RobotView : FrameworkElement
             case "rain":
                 for (var i = 0; i < 14; i++)
                 {
-                    var y = (t * 75 + i * 29) % 140 - 25;
-                    var x = i * 41 % 130 - 15 - (y + 25) * 0.18;
+                    var y = (t * 75 + i * 29) % 124 - 12;
+                    var x = 4 + i * 41 % 108 - (y + 12) * 0.12;
                     var len = 5 + 3 * e;
-                    dc.DrawLine(RoundPen(C(0.6, 0.8, 1), (0.45 + 0.35 * e) * Fade(y), 1.1), new Point(x, y), new Point(x - len * 0.18, y + len));
+                    dc.DrawLine(RoundPen(C(0.6, 0.8, 1), (0.45 + 0.35 * e) * Edge(x, y + len), 1.1), new Point(x, y), new Point(x - len * 0.12, y + len));
                 }
                 break;
             case "leaves":
@@ -1004,8 +1042,8 @@ internal sealed class RobotView : FrameworkElement
                 (double R, double G, double B)[] cols = { (0.95, 0.5, 0.2), (0.85, 0.3, 0.2), (0.95, 0.75, 0.25) };
                 for (var i = 0; i < 8; i++)
                 {
-                    var y = (t * (10 + i % 3 * 3) + i * 43) % 140 - 25;
-                    var x = i * 47 % 130 - 15 + Math.Sin(t * 1.1 % Tau + i) * 8 * (1 + e);
+                    var y = (t * (10 + i % 3 * 3) + i * 43) % 124 - 12;
+                    var x = i * 47 % 108 - 4 + Math.Sin(t * 1.1 % Tau + i) * 5 * (1 + 0.6 * e);
                     var rot = Math.Sin(t * 1.5 % Tau + i) * 0.8 + i;
                     var s = 1 + 0.4 * e;
                     var g = new StreamGeometry();
@@ -1018,7 +1056,7 @@ internal sealed class RobotView : FrameworkElement
                     var k = cols[i % 3];
                     dc.PushTransform(new TranslateTransform(x, y));
                     dc.PushTransform(new RotateTransform(rot * 180 / Math.PI));
-                    dc.DrawGeometry(B(C(k.R, k.G, k.B), 0.85 * Fade(y)), null, g);
+                    dc.DrawGeometry(B(C(k.R, k.G, k.B), 0.85 * Edge(x, y)), null, g);
                     dc.Pop();
                     dc.Pop();
                 }
@@ -1029,14 +1067,14 @@ internal sealed class RobotView : FrameworkElement
                 (double R, double G, double B)[] cols = { (1, 0.4, 0.45), (1, 0.8, 0.3), (0.4, 0.8, 1), (0.5, 0.9, 0.5), (0.8, 0.5, 1) };
                 for (var i = 0; i < 14; i++)
                 {
-                    var y = (t * (18 + i % 4 * 4) + i * 31) % 140 - 25;
-                    var x = i * 59 % 130 - 15 + Math.Sin(t * 2 % Tau + i) * 4;
+                    var y = (t * (18 + i % 4 * 4) + i * 31) % 124 - 12;
+                    var x = i * 59 % 110 - 5 + Math.Sin(t * 2 % Tau + i) * 4;
                     var rot = (t * (2 + i % 3) + i) % Tau;
                     var s = 1 + 0.5 * e;
                     var k = cols[i % 5];
                     dc.PushTransform(new TranslateTransform(x, y));
                     dc.PushTransform(new RotateTransform(rot * 180 / Math.PI));
-                    dc.DrawRectangle(B(C(k.R, k.G, k.B), 0.9 * Fade(y)), null, new Rect(-1.3 * s, -0.7 * s, 2.6 * s, 1.4 * s));
+                    dc.DrawRectangle(B(C(k.R, k.G, k.B), 0.9 * Edge(x, y)), null, new Rect(-1.3 * s, -0.7 * s, 2.6 * s, 1.4 * s));
                     dc.Pop();
                     dc.Pop();
                 }
@@ -1047,19 +1085,20 @@ internal sealed class RobotView : FrameworkElement
 
     // MARK: Kış kostümü
 
-    private static void DrawSnow(DrawingContext dc, double time)
+    internal static void DrawSnow(DrawingContext dc, double time)
     {
         for (var i = 0; i < 12; i++)
         {
             var speed = 9 + i % 4 * 3;
-            var y = (time * speed + i * 37) % 140 - 25;
-            var x = (i * 53 % 130) - 15 + Math.Sin(time * 0.9 + i) * 5;
+            // Pencere kenarında kesilmesin: -12…112 içinde, kenara yaklaşınca söner
+            var y = (time * speed + i * 37) % 124 - 12;
+            var x = (i * 53 % 112) - 6 + Math.Sin(time * 0.9 + i) * 4;
             var r = 0.9 + i % 3 * 0.4;
-            dc.DrawEllipse(B(Colors.White, 0.75 * Math.Min(1, (115 - y) / 30)), null, new Point(x, y), r, r);
+            dc.DrawEllipse(B(Colors.White, 0.75 * Math.Clamp(Math.Min((112 - y) / 24, (y + 12) / 10), 0, 1)), null, new Point(x, y), r, r);
         }
     }
 
-    public static bool WinterActive => Effects.Current() == "winter";
+    public static bool WinterActive => Effects.WinterCostume(DateTime.Now);
 
     // MARK: Nokta matris gözler (her göz 14 × 18 nokta)
 

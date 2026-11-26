@@ -511,10 +511,13 @@ struct HeadFigure: View {
         // Hiçbir sohbet çalışmıyorken ve son iş biteli 20 sn olunca gözler imleci izler
         let gaze = pointer?.sample(time: time, active: (pointer?.avatar?.gazeAllowed ?? false)
                                    && [.idle, .done, .error].contains(state) && model.mood == nil) ?? Gaze()
-        let winter = Preferences.winterActive
-        // Efektler (güneş, gökkuşağı…): robot ses çıkaran bir an yaşayınca canlanır
-        let effect = Effects.current().flatMap { $0 == "winter" ? nil : $0 }
-        let energy = effect == nil ? 0 : Effects.energy(Date(timeIntervalSinceReferenceDate: time), working: state.isWorking)
+        let winter = Preferences.winterActive   // kış beresi
+        // Efektler (kar, güneş, kalpler…): görünürlüğüyle; robot ses çıkaran bir an yaşayınca canlanır
+        let now = Date(timeIntervalSinceReferenceDate: time)
+        let fx = Effects.visible(now, working: state.isWorking)
+        let snow = fx?.id == "winter" ? fx?.alpha ?? 0 : 0
+        let effect = fx?.id == "winter" ? nil : fx
+        let energy = effect == nil ? 0 : Effects.energy(now, working: state.isWorking)
 
         return ZStack {
             // Gölge ve arkadaki efekt (güneş, gökkuşağı, kuzey ışıkları)
@@ -523,8 +526,8 @@ struct HeadFigure: View {
                     .fill(Color.black.opacity(0.14))
                     .frame(width: Swift.max(24, 58 - lift * 1.5), height: 6)
                     .position(x: 50, y: 96)
-                if let effect = effect, Effects.isBackground(effect) {
-                    EffectView(id: effect, time: time, energy: energy)
+                if let effect = effect, Effects.isBackground(effect.id) {
+                    EffectView(id: effect.id, time: time, energy: energy).opacity(effect.alpha)
                 }
             }
             .frame(width: 100, height: 100)
@@ -587,13 +590,14 @@ struct HeadFigure: View {
             }
             // Öndeki efektler: kar, yıldız, kalp, yağmur…
             ZStack {
-                if winter {
+                if snow > 0 {
                     SnowView(time: time)
                         .frame(width: 130, height: 140)
                         .position(x: 50, y: 45)
+                        .opacity(snow)
                 }
-                if let effect = effect, !Effects.isBackground(effect) {
-                    EffectView(id: effect, time: time, energy: energy)
+                if let effect = effect, !Effects.isBackground(effect.id) {
+                    EffectView(id: effect.id, time: time, energy: energy).opacity(effect.alpha)
                 }
             }
             .frame(width: 100, height: 100)
@@ -1453,10 +1457,11 @@ struct SnowView: View {
         Canvas { ctx, _ in
             for i in 0..<12 {
                 let speed = Double(9 + i % 4 * 3)
-                let y = (time * speed + Double(i * 37)).truncatingRemainder(dividingBy: 140) - 25
-                let x = Double(i * 53 % 130) - 15 + sin(time * 0.9 + Double(i)) * 5
+                // Pencere kenarında kesilmesin: -12…112 içinde, kenara yaklaşınca söner
+                let y = (time * speed + Double(i * 37)).truncatingRemainder(dividingBy: 124) - 12
+                let x = Double(i * 53 % 112) - 6 + sin(time * 0.9 + Double(i)) * 4
                 let r = 0.9 + Double(i % 3) * 0.4
-                let o = 0.75 * Swift.min(1, (115 - y) / 30)
+                let o = 0.75 * Swift.max(0, Swift.min(1, (112 - y) / 24, (y + 12) / 10))
                 ctx.fill(Path(ellipseIn: CGRect(x: x + 15 - r, y: y + 25 - r, width: r * 2, height: r * 2)),
                          with: .color(Color.white.opacity(o)))
             }

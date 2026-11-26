@@ -5,8 +5,8 @@ public static partial class Tests
     public static void SoundKindsAndNotices()
     {
         // Ayarlar: varsayılan açık, kapatılınca kapalı, sessize alınca hepsi susar
-        A.Eq(7, Text.SoundKinds.Length);
-        A.True(Text.SoundKinds.All(k => Prefs.Sound(k.Id)));
+        A.Eq(8, Text.SoundKinds.Length);
+        A.True(Text.SoundKinds.All(k => Prefs.Sound(k.Id) == (k.Id != "background")));   // "arkada çalışınca" baştan kapalı
         Prefs.SetSound("done", false);
         A.True(!Prefs.SoundOn("done") && Prefs.SoundOn("waiting"));
         Prefs.Muted = true;

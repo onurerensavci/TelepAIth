@@ -217,7 +217,7 @@ Check ($tr.fill16 -gt 0.6 -and $tr.fill -gt 0.6) "tepsi simgesi dolu (%$([int]($
 
 # Yeni görünüm: menüler ve pencereler açılıp hatasız çiziliyor mu?
 foreach ($ui in @("robotmenu", "traymenu", "settings&page=0", "settings&page=1", "settings&page=2", "settings&page=3", "settings&page=4", "onboarding", "diagnostics",
-                  "room&tab=wardrobe", "room&tab=achievements", "room&tab=effort", "room&tab=usage")) {
+                  "room&tab=wardrobe", "room&tab=effects", "room&tab=achievements", "room&tab=effort", "room&tab=usage")) {
   $r = Dbg ("ui?open=" + $ui)
   Check ($r -eq "ok") "açıldı: $ui"
   Start-Sleep -Milliseconds 900

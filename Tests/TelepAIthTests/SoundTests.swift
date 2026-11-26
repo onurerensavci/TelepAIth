@@ -10,7 +10,7 @@ final class SoundTests: XCTestCase {
             Preferences.setSound("done", oldDone)
         }
         // Ayarlar: kapatılan tür susar, sessize alınca hepsi susar
-        XCTAssertEqual(Preferences.soundKinds.count, 7)
+        XCTAssertEqual(Preferences.soundKinds.count, 8)
         Preferences.muted = false
         Preferences.setSound("done", false)
         XCTAssertFalse(Preferences.soundOn("done"))

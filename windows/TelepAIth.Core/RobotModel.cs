@@ -285,7 +285,10 @@ public sealed class RobotModel
                     s = new Session { Project = e.Project, Updated = now };
                     _sessions[e.SessionId] = s;
                 }
+                var wasWorking = s.State.IsWorking();
                 if (e.State is { } st) s.State = st;
+                // Yan menüdeki bir sohbet arkada çalışmaya başladı (Ses sekmesinden açılırsa kısa ses)
+                if (!wasWorking && s.State.IsWorking() && e.Emoji == "🔄") Play("Tink", "background");
                 if (e.Text != null)
                 {
                     s.Text = e.Text;

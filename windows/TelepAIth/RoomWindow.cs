@@ -25,6 +25,9 @@ internal static class RoomWindow
     private static Action<bool>? _setUsageLine;
     private static string _tab = "wardrobe";
     private static string _type = "coder";
+    /// <summary>Gardırop görünümü: tiplere göre ya da parçalara göre (Baş, Gözlük…; istediğin kombini yap)</summary>
+    private static bool _bySlot;
+    private static string _slot = "head";
     private static int _days = 30;
 
     public static bool IsOpen => _window != null;
@@ -78,6 +81,7 @@ internal static class RoomWindow
         var page = _tab switch
         {
             "achievements" => AchievementsPage(p),
+            "effects" => EffectsPage(),
             "effort" => EffortPage(),
             "usage" => UsagePage(),
             _ => WardrobePage(p),
@@ -198,6 +202,7 @@ internal static class RoomWindow
             row.Children.Add(b);
         }
         Tab("wardrobe", L("Gardırop", "Wardrobe"), $"{Outfits.All.Count(i => Outfits.Unlocked(i, p))}/{Outfits.All.Count}");
+        Tab("effects", L("Efektler", "Effects"), null);
         Tab("achievements", L("Başarımlar", "Achievements"), $"{Achievements.All.Count(a => a.Done(p))}/{Achievements.All.Count}");
         Tab("effort", L("Emek", "Effort"), null);
         Tab("usage", L("Kullanım", "Usage"), null);
@@ -214,9 +219,44 @@ internal static class RoomWindow
         var grid = new Grid();
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(180) });
         grid.ColumnDefinitions.Add(new ColumnDefinition());
-        // Tipler: Kodcu, Hipster, Polis, Pazarlamacı, Sanatçı, Kral
+        // Tiplere göre (Polis, Kral…) ya da parçalara göre (Baş, Gözlük…): her yuvadan istediğini seç, kendi kombinini yap
         var list = new StackPanel { Margin = new Thickness(0, 0, 20, 0) };
-        foreach (var t in Outfits.Types)
+        var seg = new UniformGrid { Columns = 2, Margin = new Thickness(0, 0, 0, 10) };
+        foreach (var (bySlot, label) in new[] { (false, L("Tipler", "Sets")), (true, L("Parçalar", "Pieces")) })
+        {
+            var on = _bySlot == bySlot;
+            var b = new Border
+            {
+                Child = T(label, 12, on ? FontWeights.SemiBold : FontWeights.Normal, color: on ? Colors.White : null).Also(t => t.HorizontalAlignment = HorizontalAlignment.Center),
+                Padding = new Thickness(6, 5, 6, 5), CornerRadius = new CornerRadius(7), Cursor = Cursors.Hand, Margin = new Thickness(0, 0, 4, 0),
+                Background = on ? new SolidColorBrush(Accent) : new SolidColorBrush(Color.FromArgb(0x20, 0x80, 0x80, 0x80)),
+            };
+            var v = bySlot;
+            b.MouseLeftButtonUp += (_, _) => { _bySlot = v; Rebuild(); };
+            seg.Children.Add(b);
+        }
+        list.Children.Add(seg);
+        if (_bySlot)
+            foreach (var slot in Outfits.Slots)
+            {
+                var items = Outfits.All.Where(i => i.Slot == slot).ToList();
+                var open = items.Count(i => Outfits.Unlocked(i, p));
+                var row = new DockPanel { LastChildFill = true };
+                var count = T($"{open}/{items.Count}", 11, muted: true);
+                DockPanel.SetDock(count, Dock.Right);
+                row.Children.Add(count);
+                row.Children.Add(T(Outfits.SlotName(slot), 13, FontWeights.Medium));
+                var b = new Border
+                {
+                    Child = row, Padding = new Thickness(10, 7, 10, 7), CornerRadius = new CornerRadius(8), Cursor = Cursors.Hand,
+                    Background = _slot == slot ? new SolidColorBrush(Color.FromArgb(0x30, Accent.R, Accent.G, Accent.B)) : Brushes.Transparent,
+                    Margin = new Thickness(0, 0, 0, 4),
+                };
+                var sl = slot;
+                b.MouseLeftButtonUp += (_, _) => { _slot = sl; Rebuild(); };
+                list.Children.Add(b);
+            }
+        else foreach (var t in Outfits.Types)
         {
             var items = Outfits.ItemsOf(t.Id);
             var open = items.Count(i => Outfits.Unlocked(i, p));
@@ -245,6 +285,38 @@ internal static class RoomWindow
 
         var right = new StackPanel();
         Grid.SetColumn(right, 1);
+        grid.Children.Add(right);
+        Border Card(OutfitItem item, string subtitle)
+        {
+            var open = Outfits.Unlocked(item, p);
+            var selected = open && Prefs.Outfit(item.Slot) == item.Id;
+            void Toggle()
+            {
+                if (!open) return;
+                Prefs.SetOutfit(item.Slot, Prefs.Outfit(item.Slot) == item.Id ? null : item.Id);
+                Rebuild();
+            }
+            return item.Legendary
+                ? LegendaryCard(item, open, selected, Toggle)
+                : OutfitCard(item.Name, open ? subtitle : Outfits.UnlockHint(item), selected, !open, new[] { item }, Toggle);
+        }
+        if (_bySlot)
+        {
+            // Parçalara göre: bir yuvanın bütün parçaları (her tipten), en başta "Hiçbiri"
+            right.Children.Add(T(Outfits.SlotName(_slot), 18, FontWeights.Bold));
+            right.Children.Add(T(L("Her yuvadan istediğini seç, kendi kombinini yap.", "Pick anything for each slot and make your own combo."), 11.5, muted: true)
+                .Also(t => t.Margin = new Thickness(0, 2, 0, 12)));
+            var slotCards = new WrapPanel();
+            slotCards.Children.Add(OutfitCard(L("Hiçbiri", "None"), null, Prefs.Outfit(_slot) == null, false, Array.Empty<OutfitItem>(), () =>
+            {
+                Prefs.SetOutfit(_slot, null);
+                Rebuild();
+            }));
+            foreach (var item in Outfits.All.Where(i => i.Slot == _slot))
+                slotCards.Children.Add(Card(item, Outfits.FindType(item.Type) is { } ty ? $"{ty.Emoji} {ty.Name}" : ""));
+            right.Children.Add(slotCards);
+            return grid;
+        }
         var type = Outfits.FindType(_type) ?? Outfits.Types[0];
         var typeItems = Outfits.ItemsOf(type.Id);
         var openCount = typeItems.Count(i => Outfits.Unlocked(i, p));
@@ -268,23 +340,8 @@ internal static class RoomWindow
         right.Children.Add(header);
         right.Children.Add(Bar(openCount / (double)Math.Max(1, typeItems.Count), Accent, 360).Also(b => b.Margin = new Thickness(0, 0, 0, 14)));
         var cards = new WrapPanel();
-        foreach (var item in typeItems)
-        {
-            var open = Outfits.Unlocked(item, p);
-            var it = item;
-            var selected = open && Prefs.Outfit(item.Slot) == item.Id;
-            void Toggle()
-            {
-                if (!open) return;
-                Prefs.SetOutfit(it.Slot, Prefs.Outfit(it.Slot) == it.Id ? null : it.Id);
-                Rebuild();
-            }
-            cards.Children.Add(item.Legendary
-                ? LegendaryCard(it, open, selected, Toggle)
-                : OutfitCard(item.Name, open ? Outfits.SlotName(item.Slot) : Outfits.UnlockHint(item), selected, !open, new[] { item }, Toggle));
-        }
+        foreach (var item in typeItems) cards.Children.Add(Card(item, Outfits.SlotName(item.Slot)));
         right.Children.Add(cards);
-        grid.Children.Add(right);
         return grid;
     }
 
@@ -370,6 +427,39 @@ internal static class RoomWindow
         card.Cursor = locked ? Cursors.Arrow : Cursors.Hand;
         card.MouseLeftButtonUp += (_, _) => click();
         return card;
+    }
+
+    // MARK: Efektler
+
+    private static UIElement EffectsPage()
+    {
+        var page = new StackPanel();
+        page.Children.Add(T(L("Efektler", "Effects"), 16, FontWeights.SemiBold));
+        page.Children.Add(T(L("Robotun çevresinde dolaşır; bitince, beklerken ya da hata verince canlanıp parlar.",
+            "They float around the robot and light up when a task finishes, needs you or fails."), 11.5, muted: true).Also(t => t.Margin = new Thickness(0, 4, 0, 12)));
+        var current = Prefs.Costume == "off" || Effects.All.Any(e => e.Id == Prefs.Costume) ? Prefs.Costume : "auto";
+        var cards = new WrapPanel();
+        void Card(string id, string title, string? subtitle, string? preview)
+        {
+            var s = new StackPanel { Width = 112 };
+            s.Children.Add(new RobotPreview(ThemeRgb, Array.Empty<OutfitItem>(), 0.62, simple: true, effect: preview) { Width = 112, Height = 84 });
+            s.Children.Add(T(title, 11.5, FontWeights.SemiBold).Also(t => { t.TextAlignment = TextAlignment.Center; t.TextTrimming = TextTrimming.CharacterEllipsis; t.TextWrapping = TextWrapping.NoWrap; }));
+            s.Children.Add(T(subtitle ?? " ", 9.5, muted: true).Also(t => { t.TextAlignment = TextAlignment.Center; t.TextWrapping = TextWrapping.NoWrap; }));
+            var card = CardBox(s, current == id, Accent);
+            card.Cursor = Cursors.Hand;
+            card.MouseLeftButtonUp += (_, _) => { Prefs.Costume = id; Rebuild(); };
+            cards.Children.Add(card);
+        }
+        Card("auto", L("Otomatik", "Automatic"), L("Mevsim + duygular", "Season + feelings"), Effects.Season(DateTime.Now));
+        Card("off", L("Kapalı", "Off"), null, null);
+        foreach (var (id, name) in Effects.All) Card(id, name(), null, id);
+        page.Children.Add(cards);
+        var info = new StackPanel();
+        info.Children.Add(T(L("Otomatik mod nasıl seçer?", "How does Automatic choose?"), 12.5, FontWeights.SemiBold).Also(t => t.Margin = new Thickness(0, 0, 0, 6)));
+        info.Children.Add(T(L("• Mevsime göre: kışın kar, baharda gökkuşağı, yazın güneş, sonbaharda yapraklar. Yılbaşında konfeti, sevgililer gününde kalpler.\n• Sohbette bir duygu geçerse ona göre tepki verir: aşk → kalpler, kutlama → konfeti, övgü → yıldızlar, üzüntü → yağmur, iyi geceler → ateş böcekleri.\n• Robot bir şey yaparken görünür, boşta kalınca yavaşça söner.",
+            "• By season: snow in winter, a rainbow in spring, sun in summer, leaves in autumn. Confetti on New Year's, hearts on Valentine's Day.\n• Reacts to feelings in a chat: love → hearts, celebration → confetti, praise → stars, sadness → rain, good night → fireflies.\n• Shows while the robot is busy and slowly fades when it's idle."), 11.5, muted: true));
+        page.Children.Add(CardBox(info).Also(b => b.Margin = new Thickness(0, 4, 0, 0)));
+        return page;
     }
 
     // MARK: Başarımlar
@@ -606,19 +696,31 @@ internal static class RoomWindow
     }
 
     /// <summary>Odadaki robot: kabuk, vizör, gözler ve takılı parçalar (RobotView.DrawOutfit ile)</summary>
-    private sealed class RobotPreview : FrameworkElement
+    internal sealed class RobotPreview : FrameworkElement
     {
         private readonly Rgb _theme;
         private readonly IReadOnlyList<OutfitItem> _items;
         private readonly double _scale;
         private readonly bool _simple;
+        private readonly string? _effect;
+        private System.Windows.Threading.DispatcherTimer? _timer;
 
-        public RobotPreview(Rgb theme, IReadOnlyList<OutfitItem> items, double scale, bool simple = false)
+        /// <param name="effect">Efekt önizlemesi (kar, güneş…): verilirse saniyede 24 kez yeniden çizilir</param>
+        public RobotPreview(Rgb theme, IReadOnlyList<OutfitItem> items, double scale, bool simple = false, string? effect = null)
         {
             _theme = theme;
             _items = items;
             _scale = scale;
             _simple = simple;
+            _effect = effect;
+            if (effect == null) return;
+            Loaded += (_, _) =>
+            {
+                _timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(42) };
+                _timer.Tick += (_, _) => InvalidateVisual();
+                _timer.Start();
+            };
+            Unloaded += (_, _) => { _timer?.Stop(); _timer = null; };
         }
 
         protected override void OnRender(DrawingContext dc)
@@ -627,6 +729,9 @@ internal static class RoomWindow
             var h = ActualHeight;
             dc.PushTransform(new TranslateTransform((w - 100 * _scale) / 2, (h - 100 * _scale) / 2 + (_simple ? 4 : 8)));
             dc.PushTransform(new ScaleTransform(_scale, _scale));
+            var t = (DateTime.UtcNow - DateTime.UnixEpoch).TotalSeconds;
+            var e = Math.Pow(Math.Max(0, Math.Sin(t * 1.1)), 3);
+            if (_effect != null && Effects.IsBackground(_effect)) RobotView.DrawEffect(dc, _effect, t, e);
             if (!_simple) dc.DrawEllipse(new SolidColorBrush(Color.FromArgb(0x24, 0, 0, 0)), null, new Point(50, 96), 28, 3);
             RobotView.DrawShell(dc);
             var eye = new SolidColorBrush(Color.FromRgb(_theme.Mix(Rgb.White, 0.18).R, _theme.Mix(Rgb.White, 0.18).G, _theme.Mix(Rgb.White, 0.18).B));
@@ -637,6 +742,8 @@ internal static class RoomWindow
             // Alındaki sağlık ışığı her zaman üstte (kep ve berede delikten görünür)
             dc.DrawEllipse(new SolidColorBrush(Color.FromArgb(0x4D, 0x33, 0xD4, 0x78)), null, new Point(50, 22.5), 5.5, 5.5);
             dc.DrawEllipse(new SolidColorBrush(Color.FromRgb(0x33, 0xD4, 0x78)), null, new Point(50, 22.5), 2.5, 2.5);
+            if (_effect == "winter") RobotView.DrawSnow(dc, t);
+            else if (_effect != null && !Effects.IsBackground(_effect)) RobotView.DrawEffect(dc, _effect, t, e);
             dc.Pop();
             dc.Pop();
         }

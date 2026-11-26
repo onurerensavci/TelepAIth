@@ -232,6 +232,8 @@ final class RobotManager {
             for p in approvals where p.event.source == event.source && p.event.sessionID == event.sessionID { p.release() }
         }
         let m = model(for: event.source)
+        // Otomatik efekt: sohbette bir duygu geçerse (aşk → kalpler, kutlama → konfeti…)
+        Effects.hear([event.text, event.lastMessage, event.project].compactMap { $0 }.joined(separator: " "))
         if let notice = m.apply(event) {
             deliver(notice, quietPID: event.quietIfFrontmostPID)
         }
@@ -256,9 +258,18 @@ final class RobotManager {
            NSWorkspace.shared.frontmostApplication?.processIdentifier == pid {
             return
         }
+        // Robotun kısa sesi: bitti, bekliyor ve hata zaten çaldı; hatırlatma, kullanım sınırı ve uyarılar burada
+        switch notice.kind {
+        case "reminder": RobotModel.play("Ping", notice.kind)
+        case "usage": RobotModel.play("Purr", notice.kind)
+        case "alert": RobotModel.play("Pop", notice.kind)
+        default: break
+        }
+        if !FocusMode.isActive { Speech.say(notice.title, kind: notice.kind) }
+        // Sistem bildirimi: biten sohbetler hiç (robot zaten söylüyor); diğerleri sadece ayarda açıksa
+        guard notice.kind != "done" else { return }
         Notifier.shared.notify(title: notice.title, body: notice.body, target: notice.target, kind: notice.kind,
                                source: notice.source, sessionID: notice.sessionID)
-        if !FocusMode.isActive { Speech.say(notice.title, kind: notice.kind) }
     }
 
     /// Bir uygulamayı öne getirir (süreç kimliğiyle ya da bundle id ile; kapalıysa açar).
@@ -423,6 +434,30 @@ final class RobotManager {
         }
     }
 
+    /// Otomatik efektte mevsim değişti: robot söyler ("🍂 Sonbahar geldi!"); ilk açılışta sessizce kaydeder
+    private func checkSeason() {
+        guard Effects.isAuto, !FocusMode.isActive, let avatar = avatar else { return }
+        let key = Effects.seasonKey(Date())
+        let last = Preferences.lastSeason
+        guard last != key else { return }
+        Preferences.lastSeason = key
+        guard last != nil else { return }
+        Effects.kick(1)
+        avatar.current.say(Effects.seasonGreeting(key), for: 8)
+    }
+
+    /// Güncellemeden sonraki ilk açılış: robot yeni bir özelliği söyler ("🎁 0.23.0 geldi! Şuna bakabilirsin: …")
+    private var whatsNewChecked = false
+    private func checkWhatsNew() {
+        guard !whatsNewChecked, let avatar = avatar, !FocusMode.isActive else { return }
+        whatsNewChecked = true
+        let current = Updater.shared.currentVersion
+        let last = Preferences.lastRunVersion
+        Preferences.lastRunVersion = current
+        guard let last = last, last != current, Updater.isNewer(current, than: last), let text = WhatsNew.afterUpdate(current) else { return }
+        avatar.current.celebrate(text, for: 12)
+    }
+
     private func announceUpdate(_ version: String) {
         lastUpdateAnnounce = CACurrentMediaTime()
         let text = loc("Güncelleme var: \(version)! Bana tıkla, kurayım.", "Update available: \(version)! Click me to install.")
@@ -461,7 +496,13 @@ final class RobotManager {
         guard let avatar = avatar else { return }
         switch avatar.health {
         case .update:
-            Updater.shared.promptInstall()
+            // Önce balonda kısaca ne geldiğini söyle, sonra kurulumu sor
+            if let release = Updater.shared.available {
+                avatar.current.say(WhatsNew.bubble(release.version, WhatsNew.summary(release.version, notes: release.notes, max: 3)), for: 14)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { Updater.shared.promptInstall() }
+            } else {
+                Updater.shared.promptInstall()
+            }
         case .broken(let reason):
             avatar.current.say(withEmoji("🔴", reason), for: 8)
             if Preferences.watchApps && !AppWatcher.isTrusted { AppWatcher.resetAndRequestTrust() }
@@ -622,7 +663,7 @@ final class RobotManager {
         }
         // Güncelleme hâlâ bekliyorsa, robot boştayken arada bir hatırlatsın
         if let avatar = avatar, case .update(let version) = avatar.health,
-           now - lastUpdateAnnounce > 45 * 60, avatar.current.state == .idle {
+           now - lastUpdateAnnounce > 30 * 60, avatar.current.state == .idle {
             announceUpdate(version)
         }
         // Bekleme hatırlatmaları gibi zamanlayıcı bildirimleri
@@ -667,6 +708,8 @@ final class RobotManager {
             lastSlowCheck = now
             updateMeeting()
             checkDailySummary()
+            checkSeason()
+            checkWhatsNew()
         }
         if visible { window?.tick(dt: dt) }
     }
@@ -709,7 +752,7 @@ final class RobotManager {
         calmNow = calmNow && m.mood == nil && m.bubbleText == nil && m.eyeGlyph(at: date) == nil && m.quotaLeft == nil
         if let start = m.celebrateStart, date.timeIntervalSince(start) <= 3 { calmNow = false }
         calmNow = calmNow && avatar.minis.isEmpty && avatar.chatList == nil && avatar.extras.isEmpty && avatar.approval == nil
-        calmNow = calmNow && avatar.health == .ok && !avatar.isMoving && Effects.current() == nil
+        calmNow = calmNow && avatar.health == .ok && !avatar.isMoving && Effects.visible(working: false) == nil
         calmNow = calmNow && date.timeIntervalSince(avatar.currentSince) > 1 && time - pointerMovedAt > 1.5
         var calm = avatar.calm
         calm.reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion

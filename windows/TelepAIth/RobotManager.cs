@@ -179,6 +179,8 @@ internal sealed class RobotManager
         // Terminaldeki Claude Code / Codex: hook'u çalıştıran sürecin penceresi olan atası (terminal, VS Code…)
         if (e.AppPid == null && e.HookParentPid is { } ppid) e.AppPid = WindowedAncestor(ppid);
         var m = Model(e.Source);
+        // Otomatik efekt: sohbette bir duygu geçerse (aşk → kalpler, kutlama → konfeti…)
+        Effects.Hear(string.Join(" ", new[] { e.Text, e.LastMessage, e.Project }.Where(s => s != null)), DateTime.Now);
         if (m.Apply(e) is { } notice) Deliver(notice, e.QuietIfForegroundPid);
         ChooseDisplay();
         Changed?.Invoke();
@@ -274,10 +276,19 @@ internal sealed class RobotManager
     {
         if (FocusMode.IsActive && !notice.Important) return;
         if (!Prefs.NotifyWhenFrontmost && quietPid is { } pid && Native.WindowPid(Native.GetForegroundWindow()) == pid) return;
-        // Sohbetin bildirimi: tıklayınca o sohbet açılır (listeden seçmek gibi)
+        // Robotun kısa sesi: bitti, bekliyor ve hata zaten çaldı; hatırlatma, kullanım sınırı ve uyarılar burada
+        switch (notice.Kind)
+        {
+            case "reminder": RobotModel.Play("Ping", notice.Kind); break;
+            case "usage": RobotModel.Play("Purr", notice.Kind); break;
+            case "alert": RobotModel.Play("Pop", notice.Kind); break;
+        }
+        if (!FocusMode.IsActive) Speech.Say(notice.Title, notice.Kind);
+        // Sistem bildirimi: biten sohbetler hiç (robot zaten söylüyor); diğerleri sadece ayarda açıksa.
+        // Tıklayınca o sohbet açılır (listeden seçmek gibi)
+        if (notice.Kind == "done") return;
         Action? open = notice is { Source: { } src, SessionId: { } sid } ? () => OpenChat(src, sid, notice.Target) : null;
         Notifier.Notify(notice.Title, notice.Body, notice.Target, open, notice.Kind);
-        if (!FocusMode.IsActive) Speech.Say(notice.Title, notice.Kind);
     }
 
     /// <summary>Bir uygulamayı öne getirir (süreç kimliğiyle ya da süreç adıyla).</summary>
@@ -358,7 +369,13 @@ internal sealed class RobotManager
         switch (_avatar.Health)
         {
             case Health.Update:
-                Updater.Shared.PromptInstall();
+                // Önce balonda kısaca ne geldiğini söyle, sonra kurulumu sor
+                if (Updater.Shared.Available is { } rel)
+                {
+                    _avatar.Current.Say(WhatsNew.Bubble(rel.Version, WhatsNew.Summary(rel.Version, rel.Notes, 3)), 14);
+                    Application.Current.Dispatcher.InvokeAsync(() => Updater.Shared.PromptInstall(), DispatcherPriority.Background);
+                }
+                else Updater.Shared.PromptInstall();
                 break;
             case Health.Broken:
                 _avatar.Current.Say(WithEmoji("🔴", _avatar.HealthText), 8);
@@ -441,6 +458,32 @@ internal sealed class RobotManager
         if (_avatar.Health == health && _avatar.HealthText == text) return;
         _avatar.SetHealth(health, text);
         if (health == Health.Update && !wasUpdate) AnnounceUpdate(text);
+    }
+
+    /// <summary>Otomatik efektte mevsim değişti: robot söyler ("🍂 Sonbahar geldi!"); ilk açılışta sessizce kaydeder</summary>
+    private void CheckSeason()
+    {
+        if (!Effects.IsAuto || FocusMode.IsActive || _avatar == null) return;
+        var key = Effects.SeasonKey(DateTime.Now);
+        var last = Prefs.LastSeason;
+        if (last == key) return;
+        Prefs.LastSeason = key;
+        if (last == null) return;
+        Effects.Kick(1);
+        _avatar.Current.Say(Effects.SeasonGreeting(key), 8);
+    }
+
+    /// <summary>Güncellemeden sonraki ilk açılış: robot yeni bir özelliği söyler ("🎁 0.23.0 geldi! Şuna bakabilirsin: …")</summary>
+    private bool _whatsNewChecked;
+    private void CheckWhatsNew()
+    {
+        if (_whatsNewChecked || _avatar == null || FocusMode.IsActive) return;
+        _whatsNewChecked = true;
+        var current = AppInfo.Version;
+        var last = Prefs.LastRunVersion;
+        Prefs.LastRunVersion = current;
+        if (last == null || last == current || !VersionCompare.IsNewer(current, last) || WhatsNew.AfterUpdate(current) is not { } text) return;
+        _avatar.Current.Celebrate(text, 12);
     }
 
     private void AnnounceUpdate(string version)
@@ -694,7 +737,7 @@ internal sealed class RobotManager
             RefreshDock();
         }
         // Güncelleme hâlâ bekliyorsa, robot boştayken arada bir hatırlatsın
-        if (_avatar is { Health: Health.Update } a && now - _lastUpdateAnnounce > 45 * 60 && a.Current.State == RobotState.Idle)
+        if (_avatar is { Health: Health.Update } a && now - _lastUpdateAnnounce > 30 * 60 && a.Current.State == RobotState.Idle)
             AnnounceUpdate(a.HealthText);
         // Bekleme hatırlatmaları gibi zamanlayıcı bildirimleri
         foreach (var m in _models.Values.Where(m => m.PendingNotices.Count > 0))
@@ -740,6 +783,8 @@ internal sealed class RobotManager
             _lastSlowCheck = now;
             UpdateMeeting();
             CheckDailySummary();
+            CheckSeason();
+            CheckWhatsNew();
         }
         _window?.Frame(dt, render: !(_avatar?.Paused ?? false));
     }
@@ -782,7 +827,7 @@ internal sealed class RobotManager
                    && m.Mood == null && m.BubbleText == null && m.EyeGlyph(date) == '\0' && m.QuotaLeft == null
                    && (m.CelebrateStart is not { } cs || (date - cs).TotalSeconds > 3)
                    && _avatar.Minis.Count == 0 && _avatar.ChatList == null && _avatar.Extras.Count == 0 && _avatar.Approval == null
-                   && _avatar.Health == Health.Ok && !_avatar.Moving && Effects.Current() == null
+                   && _avatar.Health == Health.Ok && !_avatar.Moving && Effects.Visible(false) == null
                    && (date - _avatar.CurrentSince).TotalSeconds > 1 && now - _pointerMovedAt > 1.5;
         var time = RobotView.Seconds(date);
         if (calm != _calm)

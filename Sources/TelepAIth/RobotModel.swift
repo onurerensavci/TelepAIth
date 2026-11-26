@@ -274,7 +274,10 @@ final class RobotModel: ObservableObject {
         default:
             var s = sessions[e.sessionID]
                 ?? Session(state: .idle, text: nil, emoji: nil, project: e.project, updated: now, turnStart: nil, lastWaitNotice: nil)
+            let wasWorking = s.state.isWorking
             if let st = e.state { s.state = st }
+            // Yan menüdeki bir sohbet arkada çalışmaya başladı (Ses sekmesinden açılırsa kısa ses)
+            if !wasWorking && s.state.isWorking && e.emoji == "🔄" { RobotModel.play("Tink", "background") }
             if let t = e.text {
                 s.text = t
                 s.emoji = e.emoji ?? s.state.emoji

@@ -11,11 +11,16 @@ protocol RoomHost: AnyObject {
 
 /// Robotun odası: solda robot ve seviye, sağda Gardırop · Başarımlar · Emek · Kullanım. (Windows'ta RoomWindow.cs)
 final class RoomModel: ObservableObject {
-    enum Tab: String, CaseIterable { case wardrobe, achievements, effort, usage }
+    enum Tab: String, CaseIterable { case wardrobe, effects, achievements, effort, usage }
 
     weak var host: RoomHost?
     @Published var tab: Tab = .wardrobe
     @Published var type = "coder"
+    /// Gardırop görünümü: tiplere göre (Polis, Kral…) ya da parçalara göre (Baş, Gözlük…; istediğin kombini yap)
+    @Published var bySlot = false
+    @Published var slot = "head"
+    /// Seçili efekt: "auto", "off" ya da bir efekt
+    @Published var effect = RoomModel.currentEffect
     @Published var days = 30
     @Published private(set) var progress = ProgressData()
     @Published private(set) var effort = DailyStats.shared.effort(today: Date(), days: 30)
@@ -60,8 +65,23 @@ final class RoomModel: ObservableObject {
         refresh()
     }
 
+    static var currentEffect: String {
+        let c = Preferences.costume
+        return c == "off" || Effects.all.contains { $0.id == c } ? c : "auto"
+    }
+
+    func setEffect(_ id: String) {
+        Preferences.costume = id
+        effect = id
+    }
+
     func takeOffAll() {
         Outfits.takeOffAll()
+        refresh()
+    }
+
+    func takeOff(_ slot: String) {
+        Preferences.setOutfit(slot, nil)
         refresh()
     }
 
@@ -121,6 +141,7 @@ struct RoomView: View {
                     Group {
                         switch model.tab {
                         case .wardrobe: WardrobeTab(model: model)
+                        case .effects: EffectsTab(model: model)
                         case .achievements: AchievementsTab(model: model)
                         case .effort: EffortTab(model: model)
                         case .usage: UsageTab(model: model)
@@ -258,6 +279,7 @@ struct RoomTabs: View {
         let p = model.progress
         HStack(spacing: 22) {
             tab(.wardrobe, loc("Gardırop", "Wardrobe"), "\(Outfits.all.filter { Outfits.unlocked($0, p) }.count)/\(Outfits.all.count)")
+            tab(.effects, loc("Efektler", "Effects"), nil)
             tab(.achievements, loc("Başarımlar", "Achievements"), "\(Achievements.all.filter { $0.done(p) }.count)/\(Achievements.all.count)")
             tab(.effort, loc("Emek", "Effort"), nil)
             tab(.usage, loc("Kullanım", "Usage"), nil)
@@ -295,29 +317,29 @@ struct WardrobeTab: View {
     var body: some View {
         let p = model.progress
         HStack(alignment: .top, spacing: 20) {
-            // Tipler: Kodcu, Hipster, Polis, Pazarlamacı, Sanatçı, Kral
             VStack(alignment: .leading, spacing: 4) {
-                ForEach(Outfits.types) { t in
-                    let items = Outfits.items(of: t.id)
-                    let open = items.filter { Outfits.unlocked($0, p) }.count
-                    Button { model.type = t.id } label: {
-                        HStack(spacing: 8) {
-                            Text(t.emoji).font(.system(size: 15))
-                            Text(t.name).font(.system(size: 12.5, weight: .medium))
-                            Spacer()
-                            if open == items.count {
-                                Image(systemName: "checkmark.seal.fill").font(.system(size: 12)).foregroundColor(model.accent)
-                            } else {
-                                Text("\(open)/\(items.count)").font(.system(size: 11)).foregroundColor(.secondary)
-                            }
-                        }
-                        .padding(.horizontal, 10)
-                        .frame(height: 32)
-                        .background(RoundedRectangle(cornerRadius: 8)
-                            .fill(model.type == t.id ? model.accent.opacity(0.16) : Color.clear))
-                        .contentShape(Rectangle())
+                // Tiplere göre (Polis, Kral…) ya da parçalara göre (Baş, Gözlük…): her yuvadan istediğini seç, kendi kombinini yap
+                Picker("", selection: $model.bySlot) {
+                    Text(loc("Tipler", "Sets")).tag(false)
+                    Text(loc("Parçalar", "Pieces")).tag(true)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .padding(.bottom, 6)
+                if model.bySlot {
+                    ForEach(Outfits.slots, id: \.self) { slot in
+                        let items = Outfits.all.filter { $0.slot == slot }
+                        let open = items.filter { Outfits.unlocked($0, p) }.count
+                        listRow(selected: model.slot == slot, title: Outfits.slotName(slot), emoji: nil,
+                                trailing: "\(open)/\(items.count)", done: false) { model.slot = slot }
                     }
-                    .buttonStyle(.plain)
+                } else {
+                    ForEach(Outfits.types) { t in
+                        let items = Outfits.items(of: t.id)
+                        let open = items.filter { Outfits.unlocked($0, p) }.count
+                        listRow(selected: model.type == t.id, title: t.name, emoji: t.emoji,
+                                trailing: "\(open)/\(items.count)", done: open == items.count) { model.type = t.id }
+                    }
                 }
                 Divider().padding(.vertical, 6)
                 Button(loc("Hepsini Çıkar", "Take All Off")) { model.takeOffAll() }
@@ -327,45 +349,98 @@ struct WardrobeTab: View {
             }
             .frame(width: 170)
 
-            if let t = Outfits.findType(model.type) {
-                let items = Outfits.items(of: t.id)
-                let open = items.filter { Outfits.unlocked($0, p) }.count
-                let done = open == items.count
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack(alignment: .center, spacing: 12) {
-                        Text(t.emoji).font(.system(size: 30))
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(t.name).font(.system(size: 18, weight: .bold))
-                            Text(done ? loc("Tamamlandı! \(t.name) tipi artık senin.", "Complete! The \(t.name) set is yours.")
-                                      : t.description + " · " + loc("5 parçayı topla, \(t.name) ol", "collect all 5 to become a \(t.name)"))
-                                .font(.system(size: 11.5)).foregroundColor(.secondary)
-                        }
-                        Spacer()
-                        if done {
-                            Button(loc("Hepsini Giy", "Wear All")) { model.wearType(t.id) }
-                                .buttonStyle(.borderedProminent)
-                                .tint(model.accent)
-                        }
-                    }
-                    RoomBar(fraction: Double(open) / Double(Swift.max(1, items.count)), color: model.accent)
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 104, maximum: 130), spacing: 10)], spacing: 10) {
-                        ForEach(items) { item in
-                            let isOpen = Outfits.unlocked(item, p)
-                            let selected = model.worn[item.slot] == item.id && isOpen
-                            Group {
-                                if item.legendary {
-                                    LegendaryCard(item: item, open: isOpen, selected: selected, theme: model.themeColor, accent: model.accent)
-                                } else {
-                                    WardrobeCard(title: item.name, subtitle: isOpen ? Outfits.slotName(item.slot) : Outfits.unlockHint(item),
-                                                 selected: selected, locked: !isOpen, accent: model.accent) {
-                                        RoomMiniRobot(theme: model.themeColor, items: [item])
-                                    }
-                                }
-                            }
-                            .onTapGesture { model.toggle(item) }
-                        }
-                    }
+            if model.bySlot {
+                slotPage(p)
+            } else if let t = Outfits.findType(model.type) {
+                typePage(t, p)
+            }
+        }
+    }
+
+    private func listRow(selected: Bool, title: String, emoji: String?, trailing: String, done: Bool,
+                         action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                if let emoji = emoji { Text(emoji).font(.system(size: 15)) }
+                Text(title).font(.system(size: 12.5, weight: .medium))
+                Spacer()
+                if done {
+                    Image(systemName: "checkmark.seal.fill").font(.system(size: 12)).foregroundColor(model.accent)
+                } else {
+                    Text(trailing).font(.system(size: 11)).foregroundColor(.secondary)
                 }
+            }
+            .padding(.horizontal, 10)
+            .frame(height: 32)
+            .background(RoundedRectangle(cornerRadius: 8).fill(selected ? model.accent.opacity(0.16) : Color.clear))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var grid: [GridItem] { [GridItem(.adaptive(minimum: 104, maximum: 130), spacing: 10)] }
+
+    @ViewBuilder
+    private func card(_ item: OutfitItem, _ p: ProgressData, subtitle: String) -> some View {
+        let isOpen = Outfits.unlocked(item, p)
+        let selected = model.worn[item.slot] == item.id && isOpen
+        Group {
+            if item.legendary {
+                LegendaryCard(item: item, open: isOpen, selected: selected, theme: model.themeColor, accent: model.accent)
+            } else {
+                WardrobeCard(title: item.name, subtitle: isOpen ? subtitle : Outfits.unlockHint(item),
+                             selected: selected, locked: !isOpen, accent: model.accent) {
+                    RoomMiniRobot(theme: model.themeColor, items: [item])
+                }
+            }
+        }
+        .onTapGesture { model.toggle(item) }
+    }
+
+    /// Parçalara göre: bir yuvanın bütün parçaları (her tipten), en başta "Hiçbiri"
+    private func slotPage(_ p: ProgressData) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(Outfits.slotName(model.slot)).font(.system(size: 18, weight: .bold))
+            Text(loc("Her yuvadan istediğini seç, kendi kombinini yap.", "Pick anything for each slot and make your own combo."))
+                .font(.system(size: 11.5)).foregroundColor(.secondary)
+            LazyVGrid(columns: grid, spacing: 10) {
+                WardrobeCard(title: loc("Hiçbiri", "None"), subtitle: nil, selected: model.worn[model.slot] == nil,
+                             locked: false, accent: model.accent) {
+                    RoomMiniRobot(theme: model.themeColor, items: [])
+                }
+                .onTapGesture { model.takeOff(model.slot) }
+                ForEach(Outfits.all.filter { $0.slot == model.slot }) { item in
+                    let type = Outfits.findType(item.type)
+                    card(item, p, subtitle: type.map { "\($0.emoji) \($0.name)" } ?? "")
+                }
+            }
+        }
+    }
+
+    /// Tiplere göre: tipin 5 parçası, tamamlanınca "Hepsini Giy"
+    private func typePage(_ t: OutfitType, _ p: ProgressData) -> some View {
+        let items = Outfits.items(of: t.id)
+        let open = items.filter { Outfits.unlocked($0, p) }.count
+        let done = open == items.count
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .center, spacing: 12) {
+                Text(t.emoji).font(.system(size: 30))
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(t.name).font(.system(size: 18, weight: .bold))
+                    Text(done ? loc("Tamamlandı! \(t.name) tipi artık senin.", "Complete! The \(t.name) set is yours.")
+                              : t.description + " · " + loc("5 parçayı topla, \(t.name) ol", "collect all 5 to become a \(t.name)"))
+                        .font(.system(size: 11.5)).foregroundColor(.secondary)
+                }
+                Spacer()
+                if done {
+                    Button(loc("Hepsini Giy", "Wear All")) { model.wearType(t.id) }
+                        .buttonStyle(.borderedProminent)
+                        .tint(model.accent)
+                }
+            }
+            RoomBar(fraction: Double(open) / Double(Swift.max(1, items.count)), color: model.accent)
+            LazyVGrid(columns: grid, spacing: 10) {
+                ForEach(items) { item in card(item, p, subtitle: Outfits.slotName(item.slot)) }
             }
         }
     }
@@ -472,6 +547,78 @@ struct WardrobeCard<Content: View>: View {
         .background(RoundedRectangle(cornerRadius: 12).fill(Color.primary.opacity(0.05)))
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(selected ? accent : Color.clear, lineWidth: 2))
         .contentShape(Rectangle())
+    }
+}
+
+// MARK: Efektler
+
+struct EffectsTab: View {
+    @ObservedObject var model: RoomModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(loc("Efektler", "Effects")).font(.system(size: 16, weight: .semibold))
+            Text(loc("Robotun çevresinde dolaşır; bitince, beklerken ya da hata verince canlanıp parlar.",
+                     "They float around the robot and light up when a task finishes, needs you or fails."))
+                .font(.system(size: 11.5)).foregroundColor(.secondary)
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 118, maximum: 150), spacing: 10)], spacing: 10) {
+                card("auto", loc("Otomatik", "Automatic"), loc("Mevsim + duygular", "Season + feelings"), preview: Effects.season(Date()))
+                card("off", loc("Kapalı", "Off"), nil, preview: nil)
+                ForEach(Effects.all) { fx in card(fx.id, fx.name, nil, preview: fx.id) }
+            }
+            VStack(alignment: .leading, spacing: 6) {
+                Text(loc("Otomatik mod nasıl seçer?", "How does Automatic choose?")).font(.system(size: 12.5, weight: .semibold))
+                Text(loc("• Mevsime göre: kışın kar, baharda gökkuşağı, yazın güneş, sonbaharda yapraklar. Yılbaşında konfeti, sevgililer gününde kalpler.\n• Sohbette bir duygu geçerse ona göre tepki verir: aşk → kalpler, kutlama → konfeti, övgü → yıldızlar, üzüntü → yağmur, iyi geceler → ateş böcekleri.\n• Robot bir şey yaparken görünür, boşta kalınca yavaşça söner.",
+                         "• By season: snow in winter, a rainbow in spring, sun in summer, leaves in autumn. Confetti on New Year's, hearts on Valentine's Day.\n• Reacts to feelings in a chat: love → hearts, celebration → confetti, praise → stars, sadness → rain, good night → fireflies.\n• Shows while the robot is busy and slowly fades when it's idle."))
+                    .font(.system(size: 11.5)).foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(12)
+            .background(RoundedRectangle(cornerRadius: 12).fill(Color.primary.opacity(0.05)))
+        }
+    }
+
+    private func card(_ id: String, _ title: String, _ subtitle: String?, preview: String?) -> some View {
+        let selected = model.effect == id
+        return VStack(spacing: 4) {
+            EffectPreview(effect: preview, theme: model.themeColor)
+            Text(title).font(.system(size: 11.5, weight: .semibold)).lineLimit(1)
+            Text(subtitle ?? " ").font(.system(size: 9.5)).foregroundColor(.secondary).lineLimit(1)
+        }
+        .padding(8)
+        .frame(maxWidth: .infinity)
+        .background(RoundedRectangle(cornerRadius: 12).fill(Color.primary.opacity(0.05)))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(selected ? model.accent : Color.clear, lineWidth: 2))
+        .contentShape(Rectangle())
+        .onTapGesture { model.setEffect(id) }
+    }
+}
+
+/// Efekt kartındaki canlı önizleme: küçük robot ve çevresinde efekt (arada bir canlanır)
+struct EffectPreview: View {
+    let effect: String?
+    let theme: NSColor
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 24.0, paused: false)) { context in
+            let t = context.date.timeIntervalSinceReferenceDate
+            let e = pow(Swift.max(0, sin(t * 1.1)), 3)
+            ZStack {
+                if let fx = effect, Effects.isBackground(fx) { EffectView(id: fx, time: t, energy: e) }
+                RobotShell()
+                Capsule().fill(Color(nsColor: theme).opacity(0.9)).frame(width: 9, height: 16).position(x: 36, y: 52)
+                Capsule().fill(Color(nsColor: theme).opacity(0.9)).frame(width: 9, height: 16).position(x: 64, y: 52)
+                VisorGlass()
+                Circle().fill(Color(red: 0.2, green: 0.83, blue: 0.47)).frame(width: 5, height: 5).position(x: 50, y: 22.5)
+                if effect == "winter" {
+                    SnowView(time: t).frame(width: 130, height: 140).position(x: 50, y: 45)
+                }
+                if let fx = effect, fx != "winter", !Effects.isBackground(fx) { EffectView(id: fx, time: t, energy: e) }
+            }
+            .frame(width: 100, height: 100)
+            .scaleEffect(0.62)
+            .frame(width: 92, height: 80)
+        }
     }
 }
 

@@ -108,7 +108,8 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         content.body = body
         // Ses en fazla 10 sn'de bir: art arda gelen bildirimler sessiz düşer ("din din din" olmasın)
         let now = Date()
-        let soundOK = kind.map { Preferences.soundOn($0) } ?? !Preferences.muted
+        // Robotun kendi kısa sesleri açıksa bildirim sessiz gelir (iki kez çalmasın)
+        let soundOK = (kind.map { Preferences.soundOn($0) } ?? !Preferences.muted) && (kind == nil || !Preferences.sounds)
         if soundOK && now.timeIntervalSince(lastSoundAt) >= 10 {
             content.sound = .default
             lastSoundAt = now

@@ -449,10 +449,6 @@ internal static class SettingsWindow
             Ui.PickerCard(L("Robot boyutu", "Robot size"), L("Robot ve balonu bu oranda büyür", "Scales the robot and its bubble"),
                 new[] { (0.75, L("Küçük (%75)", "Small (75%)")), (1.0, L("Normal (%100)", "Normal (100%)")), (1.3, L("Büyük (%130)", "Large (130%)")), (1.6, L("Çok büyük (%160)", "Extra large (160%)")) },
                 new[] { 0.75, 1.0, 1.3, 1.6 }.OrderBy(v => Math.Abs(v - Prefs.RobotScale)).First(), v => m.SetRobotScale(v), ""),
-            Ui.PickerCard(L("Efektler", "Effects"), L("Robotun çevresinde; bitince, beklerken, hata verince canlanır", "Around the robot; comes alive when done, waiting or on errors"),
-                new[] { ("auto", L("Otomatik (kışın kar, Aralık – 6 Ocak)", "Automatic (snow in winter, Dec – Jan 6)")), ("off", L("Kapalı", "Off")) }
-                    .Concat(Effects.All.Select(fx => (fx.Id, fx.Name()))),
-                Prefs.Costume == "off" || Effects.All.Any(fx => fx.Id == Prefs.Costume) ? Prefs.Costume : "auto", v => Prefs.Costume = v, ""),
             Ui.SwitchCard(L("Robotu göster", "Show the robot"), null, m.Visible, v => m.Visible = v, ""),
             Ui.SwitchCard(L("Her zaman üstte", "Always on top"), L("Diğer pencereler robotu örtmesin", "Other windows won't cover the robot"), Prefs.AlwaysOnTop, v => m.SetAlwaysOnTop(v), ""),
             Ui.SwitchCard(L("Kilitli", "Locked"), L("Yerinde kalsın, AI pencerelerine gitmesin", "Stay put, don't follow AI windows"), Prefs.RobotLocked, v => m.SetLocked(v), ""),
@@ -468,53 +464,27 @@ internal static class SettingsWindow
     private static UIElement Notifications(ISettingsHost host)
     {
         var off = Notifier.SystemDisabled;
-        return Ui.Page(
-            Ui.PageTitle(L("Bildirimler", "Notifications")),
-            Ui.StatusCard(!off, L("Windows'ta bildirimler açık", "Notifications are on in Windows"),
-                L("Windows'ta bildirimler kapalı: Ayarlar → Sistem → Bildirimler", "Notifications are off in Windows: Settings → System → Notifications"),
-                Ui.Row(Ui.Button(L("Windows ayarları", "Windows settings"), Notifier.OpenSystemSettings), Ui.Button(L("Test gönder", "Send a test"), SendTest))),
-            Ui.Section(L("Ne zaman", "When")),
-            Ui.SwitchCard(L("Bildirimler", "Notifications"), L("İş bitince ya da AI seni beklerken haber ver", "Tell me when a task finishes or the AI needs me"),
-                Prefs.NotificationsEnabled, v => { Prefs.NotificationsEnabled = v; host.Changed(); }, ""),
-            Ui.SwitchCard(L("O uygulamaya bakarken de bildir", "Notify while I'm looking at that app"), null, Prefs.NotifyWhenFrontmost, v => Prefs.NotifyWhenFrontmost = v, ""),
-            Ui.SwitchCard(L("Israr etsin", "Nag me"), L("Uzun süre onay beklerse sallansın, 2 dakika sonra yeniden hatırlatsın", "Wiggle when it waits long, remind again after 2 minutes"),
-                Prefs.WaitReminders, v => Prefs.WaitReminders = v, ""),
-            Ui.PickerCard(L("\"Bitti\" bildirimi", "\"Done\" notification"), L("Bundan kısa süren işler için bildirim atmaz", "Shorter tasks don't notify"),
-                new[] { 0, 10, 20, 60, 180 }.Select(s => ((double)s, s == 0 ? L("her zaman", "always") : L("en az ", "at least ") + FormatDuration(s))),
-                new[] { 0.0, 10, 20, 60, 180 }.OrderBy(v => Math.Abs(v - Prefs.LongTurnSeconds)).First(), v => Prefs.LongTurnSeconds = v, ""),
-            Ui.Para(L("Bildirime ya da robotun balonuna tıklayınca o işin penceresine (Claude, ChatGPT ya da terminal) gidersin.",
-                "Click a notification or the robot's bubble to jump to that task's window (Claude, ChatGPT or the terminal)."), true, 12));
-    }
-
-    private static readonly Dictionary<string, string> SoundGlyphs = new()
-    {
-        ["done"] = "\uE73E", ["waiting"] = "\uE8BD", ["reminder"] = "\uE823", ["error"] = "\uE7BA",
-        ["usage"] = "\uE9D2", ["alert"] = "\uE7E8", ["summary"] = "\uE787",
-    };
-
-    /// <summary>Ses: neye ses çıksın (bildirim sesi, kısa ses, sesli söyleme), sessize al.</summary>
-    private static UIElement Sound(ISettingsHost host)
-    {
         var items = new List<UIElement>
         {
-            Ui.PageTitle(L("Ses", "Sound")),
-            Ui.SwitchCard(L("Sessize al", "Mute"), L("Hiçbir şey ses çıkarmaz; bildirimler sessiz gelir", "Nothing makes a sound; notifications arrive silently"),
-                Prefs.Muted, v => { Prefs.Muted = v; host.Changed(); Application.Current.Dispatcher.BeginInvoke(() => Refresh(host)); }, "\uE74F"),
-            Ui.Section(L("Neye ses çıksın", "What makes a sound")),
+            Ui.PageTitle(L("Bildirimler", "Notifications")),
+            Ui.Para(L("Robot önemli anları balonunda söyler ve kısa bir ses çalar; hangi anlarda ses çıkacağını Ses sayfasından seçersin. Biten sohbetler için bildirim gelmez.",
+                "The robot says important moments in its bubble and plays a short sound; pick which moments make a sound on the Sound page. Finished chats don't notify."), true, 12),
+            Ui.SwitchCard(L("Israr etsin", "Nag me"), L("Uzun süre onay beklerse sallansın, 2 dakika sonra yeniden hatırlatsın", "Wiggle when it waits long, remind again after 2 minutes"),
+                Prefs.WaitReminders, v => Prefs.WaitReminders = v, "\uE7E8"),
+            Ui.Section(L("Windows bildirimleri", "Windows notifications")),
+            Ui.SwitchCard(L("Seni bekleyenler ve hatalar Windows bildirimi olarak da gelsin", "Also send waiting and errors as Windows notifications"),
+                L("Robot gizliyken işe yarar. Kapalıyken her şeyi robot söyler.", "Useful when the robot is hidden. When off, the robot tells you everything."),
+                Prefs.NotificationsEnabled, v => { Prefs.NotificationsEnabled = v; host.Changed(); Application.Current.Dispatcher.BeginInvoke(() => Refresh(host)); }, "\uEA8F"),
         };
-        foreach (var (id, title, detail) in TelepAIth.Core.Text.SoundKinds)
-            items.Add(Ui.SwitchCard(title(), detail(), Prefs.Sound(id), v => Prefs.SetSound(id, v), SoundGlyphs.GetValueOrDefault(id, "\uE767")));
-        items.Add(Ui.Para(Prefs.Muted
-            ? L("Sessize alındığı için şu an hiçbiri çalmaz.", "Muted, so none of these play right now.")
-            : L("Kapattıkların bildirim olarak yine gelir, sadece sessiz gelir.", "The ones you turn off still notify, just silently."), true, 12));
-        items.Add(Ui.Section(L("Ses türleri", "Kinds of sound")));
-        items.Add(Ui.SwitchCard(L("Robotun kısa sesleri", "Robot's short sounds"), L("Bitince, beklerken ya da hata verince kısa bir ses", "A short sound when done, waiting or on errors"),
-            Prefs.Sounds, v => Prefs.Sounds = v, "\uE767"));
-        items.Add(Ui.SwitchCard(L("Sesli söylesin", "Speak out loud"), L("Önemli anları Windows'un sesiyle okur", "Reads important moments with the Windows voice"), Prefs.Speak, v =>
+        if (Prefs.NotificationsEnabled)
         {
-            Prefs.Speak = v;
-            if (v) Speech.Say(L("Merhaba, ben TelepAIth.", "Hi, I'm TelepAIth."));
-        }, "\uE995"));
+            items.Add(Ui.StatusCard(!off, L("Windows'ta bildirimler açık", "Notifications are on in Windows"),
+                L("Windows'ta bildirimler kapalı: Ayarlar → Sistem → Bildirimler", "Notifications are off in Windows: Settings → System → Notifications"),
+                Ui.Row(Ui.Button(L("Windows ayarları", "Windows settings"), Notifier.OpenSystemSettings), Ui.Button(L("Test gönder", "Send a test"), SendTest))));
+            items.Add(Ui.SwitchCard(L("O uygulamaya bakarken de bildir", "Notify while I'm looking at that app"), null, Prefs.NotifyWhenFrontmost, v => Prefs.NotifyWhenFrontmost = v, "\uE7B3"));
+        }
+        items.Add(Ui.Para(L("Robotun balonuna ya da bildirime tıklayınca o sohbete gidersin (Claude, ChatGPT ya da terminal).",
+            "Click the robot's bubble or a notification to jump to that chat (Claude, ChatGPT or the terminal)."), true, 12));
         return Ui.Page(items.ToArray());
     }
 
@@ -584,18 +554,18 @@ internal static class SettingsWindow
     }
 }
 
-/// <summary>İlk açılış sihirbazı: hoş geldin → bildirimler → uygulamalar → kodlama ajanları → hazır.</summary>
+/// <summary>İlk açılış sihirbazı: hoş geldin → bildirimler ve ses → uygulamalar → kodlama ajanları → robotun odası → hazır.</summary>
 internal static class OnboardingWindow
 {
     private static Window? _window;
     private static int _step;
-    private const int Last = 4;
+    private const int Last = 5;
 
     public static void Show(ISettingsHost host)
     {
         if (_window == null)
         {
-            _window = Ui.Window(L("Kurulum", "Setup"), 620, 560);
+            _window = Ui.Window(L("Kurulum", "Setup"), 640, 620);
             _window.ResizeMode = ResizeMode.CanMinimize;
             _window.Closed += (_, _) =>
             {
@@ -623,12 +593,17 @@ internal static class OnboardingWindow
                     "Let's set up notifications and connections in a few steps. You can change all of it later in Settings.")),
                 Ui.Card(L("Deneme sürümü", "Trial build"), L("Bir şey ters giderse robota sağ tıkla → Hata bildir.", "If something goes wrong, right-click the robot → Report a problem."), null, "")),
             1 => Ui.Page(
-                Ui.PageTitle(L("Bildirimler 🔔", "Notifications 🔔")),
-                Ui.Para(L("Uzun bir iş bitince ya da AI senden onay beklerken haber vereyim.",
-                    "I'll let you know when a long task finishes or the AI needs your approval.")),
-                Ui.StatusCard(!Notifier.SystemDisabled, L("Windows'ta bildirimler açık", "Notifications are on in Windows"), L("Windows'ta bildirimler kapalı", "Notifications are off in Windows"),
-                    Ui.Row(Ui.Button(L("Test gönder", "Send a test"), SettingsWindow.SendTest), Ui.Button(L("Windows ayarları", "Windows settings"), Notifier.OpenSystemSettings))),
-                Ui.SwitchCard(L("Bildirimler", "Notifications"), null, Prefs.NotificationsEnabled, v => Prefs.NotificationsEnabled = v, "")),
+                Ui.PageTitle(L("Bildirimler ve ses 🔔", "Notifications & sound 🔔")),
+                Ui.Para(L("Bir iş bitince, AI seni beklerken ya da hata verince robot balonunda söyler ve kısa bir ses çalar. Hangi anlarda ses çıkacağını sonra Ayarlar → Ses'ten tek tek seçebilirsin.",
+                    "When a task finishes, the AI needs you or something fails, the robot says it in its bubble and plays a short sound. Later you can pick each moment in Settings → Sound.")),
+                Ui.SwitchCard(L("Robotun kısa sesleri", "Robot's short sounds"), L("Bitince, beklerken, hata verince", "When done, waiting or on errors"), Prefs.Sounds, v => Prefs.Sounds = v, "\uE767"),
+                Ui.SwitchCard(L("Sesli söylesin", "Speak out loud"), L("Önemli anları Windows'un sesiyle okur", "Reads important moments with the Windows voice"), Prefs.Speak, v =>
+                {
+                    Prefs.Speak = v;
+                    if (v) Speech.Say(L("Merhaba, ben TelepAIth.", "Hi, I'm TelepAIth."));
+                }, "\uE995"),
+                Ui.SwitchCard(L("Windows bildirimleri de gelsin", "Windows notifications too"), L("Seni bekleyenler ve hatalar; robot gizliyken işe yarar", "Waiting and errors; useful when the robot is hidden"),
+                    Prefs.NotificationsEnabled, v => Prefs.NotificationsEnabled = v, "\uEA8F")),
             2 => Ui.Page(
                 Ui.PageTitle(L("Claude ve ChatGPT 👀", "Claude and ChatGPT 👀")),
                 Ui.Para(L("Masaüstü uygulamalarının ne zaman çalıştığını, onay beklediğini ve bitirdiğini Windows'un erişilebilirlik arayüzüyle görürüm. Ekrandan okuduklarım hiçbir yere gönderilmez.",
@@ -640,6 +615,7 @@ internal static class OnboardingWindow
                     "If you use Claude Code or Codex in a terminal, connect them; I'll see every step instantly.")),
                 Ui.SwitchCard("Claude Code", L("Yeni açacağın oturumlar bağlanır", "New sessions connect"), HookInstaller.IsInstalled(HookTarget.Claude), v => host.SetHook(HookTarget.Claude, v, true), ""),
                 Ui.SwitchCard("Codex", L("Codex'te bir kere /hooks yazıp onayla", "Type /hooks once in Codex and approve"), HookInstaller.IsInstalled(HookTarget.Codex), v => host.SetHook(HookTarget.Codex, v, true), "")),
+            4 => RoomStep(),
             _ => Ui.Page(
                 Ui.PageTitle(L("Hazırız 🎉", "All set 🎉")),
                 Ui.Card(L("Köşeye bırak", "Drop it in a corner"), L("Robotu sürükleyip bir köşeye bırak, oraya yapışır.", "Drag the robot near a corner and it snaps there."), null, ""),
@@ -681,6 +657,26 @@ internal static class OnboardingWindow
         root.Children.Add(bar);
         root.Children.Add(content);
         _window!.Content = root;
+    }
+
+    /// <summary>Robotun odası: tipler, gizli ödüller, efektler (Mac'te roomStep)</summary>
+    private static UIElement RoomStep()
+    {
+        var theme = Themes.Shared.Theme("claude").Color;
+        var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 4, 0, 10) };
+        foreach (var type in new[] { "coder", "police", "king" })
+            row.Children.Add(new RoomWindow.RobotPreview(theme, Outfits.ItemsOf(type).Where(i => !i.Legendary).ToList(), 0.9, simple: true) { Width = 150, Height = 120 });
+        return Ui.Page(
+            Ui.PageTitle(L("Robotun odası 🎒", "The robot's room 🎒")),
+            Ui.Para(L("Sen çalıştıkça robot seviye atlar ve gardıropta yeni parçalar açılır. Robota sağ tıkla → Robotun Odası.",
+                "As you work, the robot levels up and new pieces open in the wardrobe. Right-click the robot → Robot's Room.")),
+            row,
+            Ui.Card(L("6 tip, 30 parça", "6 sets, 30 pieces"), L("Kodcu, Hipster, Polis, Pazarlamacı, Sanatçı, Kral: 5 parçayı topla, o tip ol.",
+                "Coder, Hipster, Police, Marketer, Artist, King: collect all 5 to become one."), null, "\uE7BF"),
+            Ui.Card(L("Gizli ödüller ✨", "Secret rewards ✨"), L("Her tipin son parçası parıltılı bir sürpriz; belli bir seviyede açılır.",
+                "Each set's last piece is a shiny surprise that opens at a certain level."), null, "\uE734"),
+            Ui.Card(L("Efektler", "Effects"), L("Mevsime göre kar, güneş, yaprak; sohbette aşk geçerse kalpler, kutlamada konfeti. Odadan değiştirebilirsin.",
+                "Snow, sun or leaves by season; hearts when love comes up in a chat, confetti for celebrations. Change it in the room."), null, "\uE790"));
     }
 
     private static UIElement Header()

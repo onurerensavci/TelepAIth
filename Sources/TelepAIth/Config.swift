@@ -96,7 +96,7 @@ enum Preferences {
     static func setOutfit(_ slot: String, _ id: String?) { defaults.set(id ?? "", forKey: "outfit." + slot) }
 
     /// Kış kostümü şu an takılı mı?
-    static var winterActive: Bool { Effects.current() == "winter" }
+    static var winterActive: Bool { Effects.winterCostume() }
 
     /// Claude Code izin isteyince robotun balonunda İzin ver / Reddet düğmeleri
     static var approveFromRobot: Bool {
@@ -117,7 +117,7 @@ enum Preferences {
     }
 
     /// Ses sekmesi: bu tür (done, waiting, reminder, error, usage, alert, summary) ses çıkarsın mı (bildirim sesi, kısa ses, sesli söyleme)
-    static func sound(_ kind: String) -> Bool { defaults.object(forKey: "sound." + kind) as? Bool ?? true }
+    static func sound(_ kind: String) -> Bool { defaults.object(forKey: "sound." + kind) as? Bool ?? (kind != "background") }
     static func setSound(_ kind: String, _ on: Bool) { defaults.set(on, forKey: "sound." + kind) }
     /// Sessize alınmadıysa ve bu türün sesi açıksa
     static func soundOn(_ kind: String) -> Bool { !muted && sound(kind) }
@@ -134,6 +134,7 @@ enum Preferences {
             SoundKind(id: "done", title: loc("İş bitince", "When a task finishes"), detail: loc("Bir sohbet işini bitirdiğinde", "A chat finished its work")),
             SoundKind(id: "waiting", title: loc("Seni bekleyince", "When it needs you"), detail: loc("Onay ya da cevap beklerken", "Waiting for an approval or an answer")),
             SoundKind(id: "reminder", title: loc("Hatırlatma", "Reminders"), detail: loc("Bir süredir hâlâ seni bekliyorsa", "Still waiting for you after a while")),
+            SoundKind(id: "background", title: loc("Arkada çalışınca", "Working in the background"), detail: loc("Yan menüdeki bir sohbet arkada çalışmaya başlayınca", "A chat in the sidebar starts working in the background")),
             SoundKind(id: "error", title: loc("Hata verince", "On errors"), detail: loc("Bir sohbet hata verdiğinde", "A chat hit an error")),
             SoundKind(id: "usage", title: loc("Kullanım sınırı", "Usage limits"), detail: loc("%80, %95 ve limit yenilenince", "At 80%, 95% and when the limit resets")),
             SoundKind(id: "alert", title: loc("Akıllı uyarılar", "Smart alerts"), detail: loc("Takıldı, aynı dosya, CI sonucu, commit hatırlatması", "Stuck, same file, CI result, commit reminder")),
@@ -141,9 +142,9 @@ enum Preferences {
         ]
     }
 
-    /// Bitti, bekliyor, hata gibi anlarda kısa sesler.
+    /// Robotun kısa sesleri (bitti, bekliyor, hata…); hangi anlarda çalacağını Ses sekmesindeki türler seçer.
     static var sounds: Bool {
-        get { defaults.object(forKey: "sounds") as? Bool ?? false }
+        get { defaults.object(forKey: "sounds") as? Bool ?? true }
         set { defaults.set(newValue, forKey: "sounds") }
     }
 
@@ -184,8 +185,8 @@ enum Preferences {
     }
 
     static var notificationsEnabled: Bool {
-        get { defaults.object(forKey: "notificationsEnabled") as? Bool ?? true }
-        set { defaults.set(newValue, forKey: "notificationsEnabled") }
+        get { defaults.object(forKey: "systemNotifications") as? Bool ?? false }
+        set { defaults.set(newValue, forKey: "systemNotifications") }
     }
 
     static var robotsVisible: Bool {
@@ -248,6 +249,17 @@ enum Preferences {
     }
 
     /// İlk açılış sihirbazı tamamlandı mı?
+    /// Son söylenen mevsim (otomatik efekt geçişi) ve en son çalışan sürüm (güncellemeden sonra yeniliği söylemek için)
+    static var lastSeason: String? {
+        get { defaults.string(forKey: "lastSeason") }
+        set { defaults.set(newValue, forKey: "lastSeason") }
+    }
+
+    static var lastRunVersion: String? {
+        get { defaults.string(forKey: "lastRunVersion") }
+        set { defaults.set(newValue, forKey: "lastRunVersion") }
+    }
+
     static var onboardingDone: Bool {
         get { defaults.object(forKey: "onboardingDone") as? Bool ?? false }
         set { defaults.set(newValue, forKey: "onboardingDone") }

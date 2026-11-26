@@ -58,10 +58,10 @@ Windows güncelleyicisi kurulu `runtime.txt` ile sürümdekini karşılaştırı
 
 ## Sürüm yayınlama
 
-1. `VERSION` dosyasındaki numarayı artır (ör. `0.9.3`) ve main'e gönder.
+1. `VERSION` dosyasındaki numarayı artır (ör. `0.9.3`), `assets/whatsnew.json`'ın en üstüne o sürümün yeniliklerini (Türkçe ve İngilizce kısa maddeler) ekleyip `python3 scripts/gen-whatsnew.py` çalıştır ve main'e gönder. Sürüm notları bu maddelerden yazılır; robot güncellemeye basınca bunları gösterir, güncellemeden sonra da ilk maddeyi söyler.
 2. GitHub'da **Actions → Release → Run workflow**. Sürüm kutusu boşsa `VERSION` kullanılır.
 
-Actions uygulamayı derler, imzalar, `v0.9.3` etiketini atar ve Releases'a `TelepAIth-v0.9.3.zip`, `TelepAIth-v0.9.3.dmg` ve sabit adlı `TelepAIth.zip` / `TelepAIth.dmg` kopyalarını koyar. Sabit adlılar README'deki indirme bağlantıları ve Homebrew cask'ı (`Casks/telepaith.rb`) içindir; cask her zaman son sürümü indirir, güncellenmesi gerekmez. Açık TelepAIth'ler 3 saat içinde (ya da açılıştan 15 saniye sonra) yeni sürümü görür, robotun ışığı turuncu yanar. `scripts/release.sh 0.9.3` etiketi bilgisayardan gönderir, aynı işi yapar.
+Actions uygulamayı derler, imzalar, `v0.9.3` etiketini atar ve Releases'a `TelepAIth-v0.9.3.zip`, `TelepAIth-v0.9.3.dmg` ve sabit adlı `TelepAIth.zip` / `TelepAIth.dmg` kopyalarını koyar. Sabit adlılar README'deki indirme bağlantıları ve Homebrew cask'ı (`Casks/telepaith.rb`) içindir; cask her zaman son sürümü indirir, güncellenmesi gerekmez. Açık TelepAIth'ler yarım saat içinde (ya da açılıştan 15 saniye sonra) yeni sürümü görür, robotun ışığı turuncu yanar. `scripts/release.sh 0.9.3` etiketi bilgisayardan gönderir, aynı işi yapar.
 
 Depo herkese açık olmalı: güncelleme denetimi GitHub API'sine anahtarsız bakar.
 

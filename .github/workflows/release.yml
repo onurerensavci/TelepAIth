@@ -98,10 +98,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.v.outputs.tag }}
         run: |
+          # Yenilikler assets/whatsnew.json'dan (uygulama güncellemeye basınca bunları gösterir); GitHub'ın listesi altına eklenir
+          python3 scripts/gen-whatsnew.py --notes "$TAG" > build/notes.md
           gh release create "$TAG" "build/TelepAIth-${TAG}.zip" "build/TelepAIth-${TAG}.dmg" \
             build/TelepAIth.zip build/TelepAIth.dmg \
             --target "$GITHUB_SHA" \
             --title "TelepAIth ${TAG}" \
+            --notes-file build/notes.md \
             --generate-notes
 
   windows:

@@ -46,7 +46,8 @@ internal static class Notifier
         _lastAction = onClick;
         try
         {
-            if (kind == null ? Prefs.Muted : !Prefs.SoundOn(kind))
+            // Robotun kendi kısa sesleri açıksa bildirim sessiz gelir (iki kez çalmasın)
+            if (kind == null ? Prefs.Muted : !Prefs.SoundOn(kind) || Prefs.Sounds)
             {
                 // Sessize alındı ya da bu türün sesi kapalı: bildirimi Windows'un sessiz seçeneğiyle göster; olmazsa hiç gösterme (robot balonda söyler)
                 SilentBalloon(Clip(title, 60), Clip(string.IsNullOrWhiteSpace(body) ? " " : body, 250));
@@ -338,7 +339,7 @@ internal sealed class Updater
             while (true)
             {
                 await CheckAsync(false);
-                await Task.Delay(TimeSpan.FromHours(3));
+                await Task.Delay(TimeSpan.FromMinutes(30));   // yarım saatte bir; yeni sürüm varsa robot söyler
             }
         });
     }

@@ -43,7 +43,8 @@ final class Updater {
         DispatchQueue.main.asyncAfter(deadline: .now() + 15) { [weak self] in
             self?.check(userInitiated: false)
         }
-        let t = Timer(timeInterval: 3 * 3600, repeats: true) { [weak self] _ in
+        // Yarım saatte bir bak; yeni sürüm varsa robot söyler (sağlık ışığı turuncu olur)
+        let t = Timer(timeInterval: 30 * 60, repeats: true) { [weak self] _ in
             self?.check(userInitiated: false)
         }
         RunLoop.main.add(t, forMode: .common)

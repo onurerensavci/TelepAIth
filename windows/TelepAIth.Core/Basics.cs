@@ -117,6 +117,7 @@ public static class Text
         ("done", () => L("İş bitince", "When a task finishes"), () => L("Bir sohbet işini bitirdiğinde", "A chat finished its work")),
         ("waiting", () => L("Seni bekleyince", "When it needs you"), () => L("Onay ya da cevap beklerken", "Waiting for an approval or an answer")),
         ("reminder", () => L("Hatırlatma", "Reminders"), () => L("Bir süredir hâlâ seni bekliyorsa", "Still waiting for you after a while")),
+        ("background", () => L("Arkada çalışınca", "Working in the background"), () => L("Yan menüdeki bir sohbet arkada çalışmaya başlayınca", "A chat in the sidebar starts working in the background")),
         ("error", () => L("Hata verince", "On errors"), () => L("Bir sohbet hata verdiğinde", "A chat hit an error")),
         ("usage", () => L("Kullanım sınırı", "Usage limits"), () => L("%80, %95 ve limit yenilenince", "At 80%, 95% and when the limit resets")),
         ("alert", () => L("Akıllı uyarılar", "Smart alerts"), () => L("Takıldı, aynı dosya, CI sonucu, commit hatırlatması", "Stuck, same file, CI result, commit reminder")),
@@ -253,7 +254,8 @@ public static class Prefs
     public static void Set(string key, string? value) { lock (Gate) { Data[key] = value; Save(); } }
 
     // Mac sürümüyle aynı ayarlar
-    public static bool NotificationsEnabled { get => GetBool("notificationsEnabled", true); set => Set("notificationsEnabled", value); }
+    /// <summary>Windows bildirimleri de gelsin mi (varsayılan kapalı: robot balonda söyler ve ses çalar)</summary>
+    public static bool NotificationsEnabled { get => GetBool("systemNotifications", false); set => Set("systemNotifications", value); }
     public static bool EmojiEnabled { get => GetBool("emojiEnabled", true); set => Set("emojiEnabled", value); }
     public static bool RobotsVisible { get => GetBool("robotsVisible", true); set => Set("robotsVisible", value); }
     public static double LongTurnSeconds { get => GetDouble("longTurnSeconds", 20); set => Set("longTurnSeconds", value); }
@@ -269,11 +271,11 @@ public static class Prefs
     /// <summary>Claude Code izin isteyince robotun balonunda İzin ver / Reddet düğmeleri</summary>
     public static bool ApproveFromRobot { get => GetBool("approveFromRobot", true); set => Set("approveFromRobot", value); }
     public static bool Speak { get => GetBool("speak", false); set => Set("speak", value); }
-    public static bool Sounds { get => GetBool("sounds", false); set => Set("sounds", value); }
+    public static bool Sounds { get => GetBool("sounds", true); set => Set("sounds", value); }
     /// <summary>Sessize al (robota sağ tık): bildirim sesi, kısa sesler ve sesli söyleme susar; bildirimler sessiz gelir</summary>
     public static bool Muted { get => GetBool("muted", false); set => Set("muted", value); }
     /// <summary>Bu tür olayda ses çıksın mı (bildirim sesi, robotun kısa sesi, sesli okuma); bkz. SoundKinds</summary>
-    public static bool Sound(string kind) => GetBool("sound." + kind, true);
+    public static bool Sound(string kind) => GetBool("sound." + kind, kind != "background");
     public static void SetSound(string kind, bool on) => Set("sound." + kind, on);
     /// <summary>Ses açık mı: sessize alınmamış ve bu tür açık</summary>
     public static bool SoundOn(string kind) => !Muted && Sound(kind);
@@ -289,6 +291,9 @@ public static class Prefs
     public static bool DailySummary { get => GetBool("dailySummary", true); set => Set("dailySummary", value); }
     public static int DailySummaryHour { get => (int)GetDouble("dailySummaryHour", 18); set => Set("dailySummaryHour", value); }
     public static bool OnboardingDone { get => GetBool("onboardingDone", false); set => Set("onboardingDone", value); }
+    /// <summary>Son söylenen mevsim (otomatik efekt geçişi) ve en son çalışan sürüm (güncellemeden sonra yeniliği söylemek için)</summary>
+    public static string? LastSeason { get => GetString("lastSeason") is { Length: > 0 } v ? v : null; set => Set("lastSeason", value ?? ""); }
+    public static string? LastRunVersion { get => GetString("lastRunVersion") is { Length: > 0 } v ? v : null; set => Set("lastRunVersion", value ?? ""); }
     public static bool StartWithWindows { get => GetBool("startWithWindows", true); set => Set("startWithWindows", value); }
 
     public static double RobotScale
