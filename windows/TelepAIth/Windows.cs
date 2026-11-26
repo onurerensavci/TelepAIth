@@ -488,6 +488,38 @@ internal static class SettingsWindow
         return Ui.Page(items.ToArray());
     }
 
+    private static readonly Dictionary<string, string> SoundGlyphs = new()
+    {
+        ["done"] = "\uE73E", ["background"] = "\uE895", ["waiting"] = "\uE8BD", ["reminder"] = "\uE823", ["error"] = "\uE7BA",
+        ["usage"] = "\uE9D2", ["alert"] = "\uE7E8", ["summary"] = "\uE787",
+    };
+
+    /// <summary>Ses: neye ses çıksın (bildirim sesi, kısa ses, sesli söyleme), sessize al.</summary>
+    private static UIElement Sound(ISettingsHost host)
+    {
+        var items = new List<UIElement>
+        {
+            Ui.PageTitle(L("Ses", "Sound")),
+            Ui.SwitchCard(L("Sessize al", "Mute"), L("Hiçbir şey ses çıkarmaz; bildirimler sessiz gelir", "Nothing makes a sound; notifications arrive silently"),
+                Prefs.Muted, v => { Prefs.Muted = v; host.Changed(); Application.Current.Dispatcher.BeginInvoke(() => Refresh(host)); }, "\uE74F"),
+            Ui.Section(L("Neye ses çıksın", "What makes a sound")),
+        };
+        foreach (var (id, title, detail) in TelepAIth.Core.Text.SoundKinds)
+            items.Add(Ui.SwitchCard(title(), detail(), Prefs.Sound(id), v => Prefs.SetSound(id, v), SoundGlyphs.GetValueOrDefault(id, "\uE767")));
+        items.Add(Ui.Para(Prefs.Muted
+            ? L("Sessize alındığı için şu an hiçbiri çalmaz.", "Muted, so none of these play right now.")
+            : L("Kapattıkların bildirim olarak yine gelir, sadece sessiz gelir.", "The ones you turn off still notify, just silently."), true, 12));
+        items.Add(Ui.Section(L("Ses türleri", "Kinds of sound")));
+        items.Add(Ui.SwitchCard(L("Robotun kısa sesleri", "Robot's short sounds"), L("Bitince, beklerken ya da hata verince kısa bir ses", "A short sound when done, waiting or on errors"),
+            Prefs.Sounds, v => Prefs.Sounds = v, "\uE767"));
+        items.Add(Ui.SwitchCard(L("Sesli söylesin", "Speak out loud"), L("Önemli anları Windows'un sesiyle okur", "Reads important moments with the Windows voice"), Prefs.Speak, v =>
+        {
+            Prefs.Speak = v;
+            if (v) Speech.Say(L("Merhaba, ben TelepAIth.", "Hi, I'm TelepAIth."));
+        }, "\uE995"));
+        return Ui.Page(items.ToArray());
+    }
+
     public static void SendTest() =>
         Notifier.Notify("🔔 " + L("TelepAIth test bildirimi", "TelepAIth test notification"),
             L("Bunu görüyorsan bildirimler çalışıyor.", "If you can see this, notifications work."));
