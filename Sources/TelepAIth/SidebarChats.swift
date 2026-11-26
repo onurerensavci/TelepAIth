@@ -159,8 +159,10 @@ final class SidebarChats {
                     current = current || r.current
                 }
             }
-            // Sohbet satırı bir bağlantıdır: adresi olmayan (sohbetin içindeki mesaj, düğme…) satır sayılmaz
-            guard title.count >= 2, url != nil else { continue }
+            // Sohbet satırı bir bağlantıdır: adresi olmayan (sohbetin içindeki mesaj, düğme…) satır sayılmaz.
+            // Tek istisna: durumu kendi adında taşıyan satır ("Tarif · running")
+            let ownName = statusOf(item.name) != nil && stripStatus(item.name).count >= 2
+            guard title.count >= 2, url != nil || ownName else { continue }
             let k = key(url: url, title: title)
             if let old = rows[k], old.row.state.priority >= st.priority { continue }
             if rows[k] == nil { order.append(k) }

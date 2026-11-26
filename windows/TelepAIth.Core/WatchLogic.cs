@@ -578,8 +578,10 @@ public sealed class SidebarChats
                     current |= r.Current;
                 }
             }
-            // Sohbet satırı bir bağlantıdır: adresi olmayan (sohbetin içindeki mesaj, düğme…) satır sayılmaz
-            if (title.Length < 2 || url == null) continue;
+            // Sohbet satırı bir bağlantıdır: adresi olmayan (sohbetin içindeki mesaj, düğme…) satır sayılmaz.
+            // Tek istisna: durumu kendi adında taşıyan satır ("Tarif · running")
+            var ownName = StatusOf(item.Name) != null && StripStatus(item.Name).Length >= 2;
+            if (title.Length < 2 || (url == null && !ownName)) continue;
             var key = KeyOf(url, title);
             if (rows.TryGetValue(key, out var old) && old.Row.State.Priority() >= st.Value.Priority()) continue;
             rows[key] = (new Row(key, title, url, st.Value), current);
