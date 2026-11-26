@@ -3,13 +3,33 @@ import SwiftUI
 
 // Robotun odası (Windows'ta TelepAIth.Core/Room.cs, aynı kurallar): gardırop, seviye ve başarımlar, emek, kullanım.
 
+/// Boya: düz renk ("#RRGGBB(AA)" ya da "theme…") veya ışık geçişi: doğrusal [x1,y1,x2,y2] / dairesel [cx,cy,r],
+/// duraklar (konum 0…1, renk). Koordinatlar 100×100 kafa alanında; parçalara hacim (3B görünüm) verir.
+struct OutfitPaint {
+    let color: String?
+    let linear: [Double]?
+    let radial: [Double]?
+    let stops: [(offset: Double, color: String)]
+
+    static func from(_ any: Any?) -> OutfitPaint? {
+        if let s = any as? String { return OutfitPaint(color: s, linear: nil, radial: nil, stops: []) }
+        guard let o = any as? [String: Any] else { return nil }
+        let stops: [(offset: Double, color: String)] = (o["stops"] as? [[Any]] ?? []).compactMap { a in
+            guard a.count == 2, let off = (a[0] as? NSNumber)?.doubleValue, let c = a[1] as? String else { return nil }
+            return (off, c)
+        }
+        return OutfitPaint(color: nil, linear: (o["lin"] as? [NSNumber])?.map(\.doubleValue),
+                           radial: (o["rad"] as? [NSNumber])?.map(\.doubleValue), stops: stops)
+    }
+}
+
 /// Gardırop parçasının bir şekli: SVG yolu, elips [cx,cy,rx,ry] ya da dikdörtgen [x,y,w,h,r]; 100×100 kafa alanında.
 struct OutfitShape {
     let path: String?
     let ellipse: [Double]?
     let rect: [Double]?
-    let fill: String?
-    let stroke: String?
+    let fill: OutfitPaint?
+    let stroke: OutfitPaint?
     let width: Double
 }
 
@@ -47,7 +67,7 @@ enum Outfits {
                 OutfitShape(path: s["d"] as? String,
                             ellipse: (s["ellipse"] as? [NSNumber])?.map(\.doubleValue),
                             rect: (s["rect"] as? [NSNumber])?.map(\.doubleValue),
-                            fill: s["fill"] as? String, stroke: s["stroke"] as? String,
+                            fill: OutfitPaint.from(s["fill"]), stroke: OutfitPaint.from(s["stroke"]),
                             width: (s["w"] as? NSNumber)?.doubleValue ?? 1)
             }
             return OutfitItem(id: node["id"] as? String ?? "", slot: node["slot"] as? String ?? "head",

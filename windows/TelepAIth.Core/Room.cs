@@ -5,8 +5,25 @@ namespace TelepAIth.Core;
 
 // Robotun odası (Mac'te Room.swift, aynı kurallar): gardırop, seviye ve başarımlar, emek, kullanım.
 
+/// <summary>
+/// Boya: düz renk ("#RRGGBB(AA)" ya da "theme…") veya ışık geçişi: doğrusal [x1,y1,x2,y2] / dairesel [cx,cy,r],
+/// duraklar (konum 0…1, renk). Koordinatlar 100×100 kafa alanında; parçalara hacim (3B görünüm) verir.
+/// </summary>
+public sealed record OutfitPaint(string? Color, double[]? Linear, double[]? Radial, IReadOnlyList<(double Offset, string Color)> Stops)
+{
+    public static OutfitPaint? From(JsonNode? node)
+    {
+        if (node is JsonValue v && v.TryGetValue<string>(out var s)) return new OutfitPaint(s, null, null, Array.Empty<(double, string)>());
+        if (node is not JsonObject o) return null;
+        var stops = (o["stops"] as JsonArray ?? new JsonArray()).OfType<JsonArray>()
+            .Select(a => (a[0]!.GetValue<double>(), a[1]!.GetValue<string>())).ToList();
+        static double[]? Nums(JsonNode? n) => (n as JsonArray)?.Select(x => x!.GetValue<double>()).ToArray();
+        return new OutfitPaint(null, Nums(o["lin"]), Nums(o["rad"]), stops);
+    }
+}
+
 /// <summary>Gardırop parçasının bir şekli: SVG yolu, elips [cx,cy,rx,ry] ya da dikdörtgen [x,y,w,h,r]; 100×100 kafa alanında.</summary>
-public sealed record OutfitShape(string? Path, double[]? Ellipse, double[]? Rect, string? Fill, string? Stroke, double Width);
+public sealed record OutfitShape(string? Path, double[]? Ellipse, double[]? Rect, OutfitPaint? Fill, OutfitPaint? Stroke, double Width);
 
 public sealed record OutfitItem(string Id, string Slot, string NameTr, string NameEn, int Level, string? Achievement, IReadOnlyList<OutfitShape> Shapes)
 {
@@ -40,7 +57,7 @@ public static class Outfits
             foreach (var s in (node["shapes"] as JsonArray ?? new JsonArray()).OfType<JsonObject>())
             {
                 static double[]? Nums(JsonNode? n) => (n as JsonArray)?.Select(x => x!.GetValue<double>()).ToArray();
-                shapes.Add(new OutfitShape(s.Str("d"), Nums(s["ellipse"]), Nums(s["rect"]), s.Str("fill"), s.Str("stroke"), s.Num("w") ?? 1));
+                shapes.Add(new OutfitShape(s.Str("d"), Nums(s["ellipse"]), Nums(s["rect"]), OutfitPaint.From(s["fill"]), OutfitPaint.From(s["stroke"]), s.Num("w") ?? 1));
             }
             list.Add(new OutfitItem(node.Str("id") ?? "", node.Str("slot") ?? "head", node.Str("tr") ?? "", node.Str("en") ?? "",
                 (int)(node.Num("level") ?? 0), node.Str("achievement"), shapes));

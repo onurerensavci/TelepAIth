@@ -13,6 +13,9 @@ public static partial class Tests
         A.True(c == new Rgb(0xFF, 0x8F, 0xB1) && Math.Abs(a - 0x80 / 255.0) < 0.001);
         A.True(Outfits.Color("theme", new Rgb(10, 20, 30)).Color == new Rgb(10, 20, 30));
         A.True(Outfits.Color("theme-dark", new Rgb(100, 100, 100)).Color == new Rgb(72, 72, 72));
+        // Işık geçişleri (3B görünüm) okunuyor
+        A.True(Outfits.Find("beanie")!.Shapes.Any(sh => sh.Fill?.Radial is { Length: 3 } && sh.Fill.Stops.Count >= 2));
+        A.True(Outfits.Find("tophat")!.Shapes.Any(sh => sh.Fill?.Linear is { Length: 4 }));
     }
 
     public static void LevelsGrow()

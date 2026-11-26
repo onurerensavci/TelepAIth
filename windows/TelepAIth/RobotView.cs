@@ -733,10 +733,24 @@ internal sealed class RobotView : FrameworkElement
     /// <summary>Gardırop parçalarını çizer (100×100 kafa alanı; Mac'te OutfitView, aynı veri: assets/outfits.json)</summary>
     internal static void DrawOutfit(DrawingContext dc, IEnumerable<OutfitItem> items, Rgb theme)
     {
-        Brush Paint(string token)
+        Color Tone(string token)
         {
             var (c, a) = Outfits.Color(token, theme);
-            return B(C(c), a);
+            return Color.FromArgb((byte)Math.Round(a * 255), c.R, c.G, c.B);
+        }
+        Brush Paint(OutfitPaint p)
+        {
+            if (p.Color is { } solid) return new SolidColorBrush(Tone(solid));
+            var stops = new GradientStopCollection(p.Stops.Select(s => new GradientStop(Tone(s.Color), s.Offset)));
+            if (p.Linear is { Length: 4 } l)
+                return new LinearGradientBrush(stops, new Point(l[0], l[1]), new Point(l[2], l[3])) { MappingMode = BrushMappingMode.Absolute };
+            if (p.Radial is { Length: 3 } r)
+                return new RadialGradientBrush(stops)
+                {
+                    MappingMode = BrushMappingMode.Absolute, Center = new Point(r[0], r[1]), GradientOrigin = new Point(r[0], r[1]),
+                    RadiusX = r[2], RadiusY = r[2],
+                };
+            return Brushes.Transparent;
         }
         foreach (var item in items)
         foreach (var s in item.Shapes)

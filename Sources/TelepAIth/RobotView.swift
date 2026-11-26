@@ -1333,6 +1333,17 @@ struct OutfitView: View {
                 let c = Outfits.color(token, theme: rgb)
                 return Color(red: c.r, green: c.g, blue: c.b).opacity(c.a)
             }
+            func shading(_ p: OutfitPaint) -> GraphicsContext.Shading {
+                if let solid = p.color { return .color(color(solid)) }
+                let gradient = Gradient(stops: p.stops.map { Gradient.Stop(color: color($0.color), location: $0.offset) })
+                if let l = p.linear, l.count == 4 {
+                    return .linearGradient(gradient, startPoint: CGPoint(x: l[0], y: l[1]), endPoint: CGPoint(x: l[2], y: l[3]))
+                }
+                if let r = p.radial, r.count == 3 {
+                    return .radialGradient(gradient, center: CGPoint(x: r[0], y: r[1]), startRadius: 0, endRadius: r[2])
+                }
+                return .color(.clear)
+            }
             for item in items {
                 for s in item.shapes {
                     var path: Path
@@ -1345,9 +1356,9 @@ struct OutfitView: View {
                     } else {
                         continue
                     }
-                    if let fill = s.fill { ctx.fill(path, with: .color(color(fill)), style: FillStyle(eoFill: true)) }
+                    if let fill = s.fill { ctx.fill(path, with: shading(fill), style: FillStyle(eoFill: true)) }
                     if let stroke = s.stroke {
-                        ctx.stroke(path, with: .color(color(stroke)),
+                        ctx.stroke(path, with: shading(stroke),
                                    style: StrokeStyle(lineWidth: s.width, lineCap: .round, lineJoin: .round))
                     }
                 }
