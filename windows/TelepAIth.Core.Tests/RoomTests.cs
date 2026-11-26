@@ -16,6 +16,14 @@ public static partial class Tests
         // Işık geçişleri (3B görünüm) okunuyor
         A.True(Outfits.Find("beanie")!.Shapes.Any(sh => sh.Fill?.Radial is { Length: 3 } && sh.Fill.Stops.Count >= 2));
         A.True(Outfits.Find("tophat")!.Shapes.Any(sh => sh.Fill?.Linear is { Length: 4 }));
+        // Hareketler: ponpon sallanır, buhar yükselip söner
+        var sway = Outfits.Find("beanie")!.Shapes.First(sh => sh.Anim != null).Anim!;
+        A.Eq("sway", sway.Kind);
+        A.True(Math.Abs(sway.At(0.25 / sway.Speed).Rotate - sway.Amount) < 0.001);
+        var rise = Outfits.Find("coffee")!.Shapes.First(sh => sh.Anim?.Kind == "rise").Anim!;
+        A.True(Math.Abs(rise.At(0.5 / rise.Speed).Dy + rise.Amount / 2) < 0.001 && Math.Abs(rise.At(0.5 / rise.Speed).Opacity - 1) < 0.001);
+        var twinkle = new OutfitAnim("twinkle", 1, 1, 0, null);
+        A.True(twinkle.At(0.1).Opacity > 0.99 && twinkle.At(0.5).Opacity == 0);
     }
 
     public static void LevelsGrow()

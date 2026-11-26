@@ -514,14 +514,11 @@ internal static class RoomWindow
             dc.PushTransform(new TranslateTransform((w - 100 * _scale) / 2, (h - 100 * _scale) / 2 + (_simple ? 4 : 8)));
             dc.PushTransform(new ScaleTransform(_scale, _scale));
             if (!_simple) dc.DrawEllipse(new SolidColorBrush(Color.FromArgb(0x24, 0, 0, 0)), null, new Point(50, 96), 28, 3);
-            var bolt = new SolidColorBrush(Color.FromRgb(0xBD, 0xB5, 0xD6));
-            dc.DrawEllipse(bolt, null, new Point(6, 50), 6, 6);
-            dc.DrawEllipse(bolt, null, new Point(94, 50), 6, 6);
-            dc.DrawRoundedRectangle(new LinearGradientBrush(Color.FromRgb(0xFA, 0xF7, 0xF2), Color.FromRgb(0xDB, 0xD6, 0xEB), 90), null, new Rect(7, 15, 86, 70), 24, 24);
-            dc.DrawRoundedRectangle(new SolidColorBrush(Color.FromRgb(0x17, 0x14, 0x29)), null, new Rect(15, 30, 70, 44), 18, 18);
+            RobotView.DrawShell(dc);
             var eye = new SolidColorBrush(Color.FromRgb(_theme.Mix(Rgb.White, 0.18).R, _theme.Mix(Rgb.White, 0.18).G, _theme.Mix(Rgb.White, 0.18).B));
             dc.DrawRoundedRectangle(eye, null, new Rect(31, 43, 10, 18), 5, 5);
             dc.DrawRoundedRectangle(eye, null, new Rect(59, 43, 10, 18), 5, 5);
+            RobotView.DrawGlass(dc);
             RobotView.DrawOutfit(dc, _items, _theme);
             // Alındaki sağlık ışığı her zaman üstte (kep ve berede delikten görünür)
             dc.DrawEllipse(new SolidColorBrush(Color.FromArgb(0x4D, 0x33, 0xD4, 0x78)), null, new Point(50, 22.5), 5.5, 5.5);

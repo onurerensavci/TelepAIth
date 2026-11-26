@@ -19,6 +19,12 @@ final class RoomTests: XCTestCase {
         XCTAssertEqual(Outfits.color("theme-dark", theme: (100.0 / 255, 100.0 / 255, 100.0 / 255)).r, 72.0 / 255, accuracy: 0.001)
         XCTAssertTrue(Outfits.find("beanie")!.shapes.contains { $0.fill?.radial?.count == 3 && ($0.fill?.stops.count ?? 0) >= 2 })
         XCTAssertTrue(Outfits.find("tophat")!.shapes.contains { $0.fill?.linear?.count == 4 })
+        let sway = Outfits.find("beanie")!.shapes.compactMap(\.anim).first!
+        XCTAssertEqual(sway.kind, "sway")
+        XCTAssertEqual(sway.at(0.25 / sway.speed).rotate, sway.amount, accuracy: 0.001)
+        let rise = Outfits.find("coffee")!.shapes.compactMap(\.anim).first { $0.kind == "rise" }!
+        XCTAssertEqual(rise.at(0.5 / rise.speed).dy, -rise.amount / 2, accuracy: 0.001)
+        XCTAssertEqual(OutfitAnim(kind: "twinkle", amount: 1, speed: 1, offset: 0, pivot: nil).at(0.5).opacity, 0)
         // Her yol okunabiliyor
         for item in Outfits.all { for s in item.shapes { if let d = s.path { XCTAssertFalse(SVGPath.parse(d).isEmpty, item.id) } } }
     }

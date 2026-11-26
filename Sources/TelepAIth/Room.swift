@@ -23,6 +23,43 @@ struct OutfitPaint {
     }
 }
 
+/// Şeklin hareketi (Windows'ta OutfitAnim, aynı formüller): sway (pivot etrafında ±amount derece), bob (±amount nokta
+/// yukarı-aşağı), beat (1±amount ölçek), rise (amount nokta yükselip söner), twinkle (arada bir parlayıp söner),
+/// slide (±amount nokta kayan parlama). speed: saniyedeki tur, offset: faz (0…1).
+struct OutfitAnim {
+    let kind: String
+    let amount: Double
+    let speed: Double
+    let offset: Double
+    let pivot: [Double]?
+
+    static func from(_ any: Any?) -> OutfitAnim? {
+        guard let o = any as? [String: Any] else { return nil }
+        return OutfitAnim(kind: o["k"] as? String ?? "", amount: (o["a"] as? NSNumber)?.doubleValue ?? 0,
+                          speed: (o["s"] as? NSNumber)?.doubleValue ?? 1, offset: (o["o"] as? NSNumber)?.doubleValue ?? 0,
+                          pivot: (o["p"] as? [NSNumber])?.map(\.doubleValue))
+    }
+
+    /// t anındaki kayma, dönme (derece), ölçek ve saydamlık
+    func at(_ t: Double) -> (dx: Double, dy: Double, rotate: Double, scale: Double, opacity: Double) {
+        let ph = speed * t + offset
+        let f = ph - floor(ph)
+        switch kind {
+        case "sway": return (0, 0, amount * sin(2 * .pi * ph), 1, 1)
+        case "bob": return (0, amount * sin(2 * .pi * ph), 0, 1, 1)
+        case "beat": return (0, 0, 0, 1 + amount * pow(Swift.max(0, sin(2 * .pi * ph)), 2), 1)
+        case "rise": return (0, -amount * f, 0, 1, sin(.pi * f))
+        case "twinkle":
+            let op = f < 0.2 ? sin(.pi * f / 0.2) : 0
+            return (0, 0, 0, 0.5 + 0.5 * op, op)
+        case "slide":
+            let op = f < 0.35 ? sin(.pi * f / 0.35) : 0
+            return (-amount + 2 * amount * Swift.min(1, f / 0.35), 0, 0, 1, op)
+        default: return (0, 0, 0, 1, 1)
+        }
+    }
+}
+
 /// Gardırop parçasının bir şekli: SVG yolu, elips [cx,cy,rx,ry] ya da dikdörtgen [x,y,w,h,r]; 100×100 kafa alanında.
 struct OutfitShape {
     let path: String?
@@ -31,6 +68,7 @@ struct OutfitShape {
     let fill: OutfitPaint?
     let stroke: OutfitPaint?
     let width: Double
+    var anim: OutfitAnim? = nil
 }
 
 struct OutfitItem: Identifiable {
@@ -68,7 +106,7 @@ enum Outfits {
                             ellipse: (s["ellipse"] as? [NSNumber])?.map(\.doubleValue),
                             rect: (s["rect"] as? [NSNumber])?.map(\.doubleValue),
                             fill: OutfitPaint.from(s["fill"]), stroke: OutfitPaint.from(s["stroke"]),
-                            width: (s["w"] as? NSNumber)?.doubleValue ?? 1)
+                            width: (s["w"] as? NSNumber)?.doubleValue ?? 1, anim: OutfitAnim.from(s["anim"]))
             }
             return OutfitItem(id: node["id"] as? String ?? "", slot: node["slot"] as? String ?? "head",
                               nameTr: node["tr"] as? String ?? "", nameEn: node["en"] as? String ?? "",

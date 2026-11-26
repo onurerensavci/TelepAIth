@@ -324,12 +324,10 @@ struct RoomMiniRobot: View {
 
     var body: some View {
         ZStack {
-            Circle().fill(Color(red: 0.74, green: 0.71, blue: 0.84)).frame(width: 12, height: 12).position(x: 6, y: 50)
-            Circle().fill(Color(red: 0.74, green: 0.71, blue: 0.84)).frame(width: 12, height: 12).position(x: 94, y: 50)
-            RoundedRectangle(cornerRadius: 24).fill(Color(red: 0.95, green: 0.94, blue: 0.95)).frame(width: 86, height: 70).position(x: 50, y: 50)
-            RoundedRectangle(cornerRadius: 18).fill(Color(red: 0.09, green: 0.08, blue: 0.16)).frame(width: 70, height: 44).position(x: 50, y: 52)
+            RobotShell()
             Capsule().fill(Color(nsColor: theme).opacity(0.9)).frame(width: 9, height: 16).position(x: 36, y: 52)
             Capsule().fill(Color(nsColor: theme).opacity(0.9)).frame(width: 9, height: 16).position(x: 64, y: 52)
+            VisorGlass()
             OutfitView(items: items, theme: theme)
             Circle().fill(Color(red: 0.2, green: 0.83, blue: 0.47)).frame(width: 5, height: 5).position(x: 50, y: 22.5)
         }

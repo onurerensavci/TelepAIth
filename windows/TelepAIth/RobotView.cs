@@ -639,7 +639,7 @@ internal sealed class RobotView : FrameworkElement
             DrawRing(dc, center, 5.5, w.Percent / 100.0, UsageColor(w.Percent, baseColor.Mix(Rgb.White, 0.2)));
         }
         // Gardırop: yanındaki parça (kaktüs, kahve…) kafayla birlikte sallanmaz
-        DrawOutfit(dc, _avatar.Outfit.Where(i => i.Slot == "side"), baseColor);
+        DrawOutfit(dc, _avatar.Outfit.Where(i => i.Slot == "side"), baseColor, _avatar.Stillness >= 0.999 ? 0.3 : time);
 
         dc.PushTransform(new TranslateTransform(shake, -lift));
 
@@ -702,20 +702,20 @@ internal sealed class RobotView : FrameworkElement
 
     private void DrawFace(DrawingContext dc, double time, Color eyeColor, FaceCtx f, Color theme)
     {
-        dc.DrawEllipse(B(Bolt), null, new Point(6, 50), 6, 6);
-        dc.DrawEllipse(B(Bolt), null, new Point(94, 50), 6, 6);
-        dc.DrawRoundedRectangle(ShellBrush, null, new Rect(7, 15, 86, 70), 24, 24);
-        dc.DrawRoundedRectangle(B(Visor), null, new Rect(15, 30, 70, 44), 18, 18);
+        DrawShell(dc);
         DrawEyes(dc, time, eyeColor, f);
+        DrawGlass(dc);
         var themeRgb = new Rgb(theme.R, theme.G, theme.B);
         var worn = _avatar.Outfit;
         var hasHat = worn.Any(i => i.Slot == "head");
-        DrawOutfit(dc, worn.Where(i => i.Slot is "face" or "eyes"), themeRgb);
+        // Parça hareketleri: robot dinginken (sakin çizim, "hareketi azalt") durur
+        var itemTime = _avatar.Stillness >= 0.999 ? 0.3 : time;
+        DrawOutfit(dc, worn.Where(i => i.Slot is "face" or "eyes"), themeRgb, itemTime);
 
         // Baş parçası (kışın şapka takılı değilse bere); alındaki sağlık ışığı her zaman üstte görünür:
         // ışığı örten kep ve berede ışığın olduğu yerde delik var
-        if (hasHat) DrawOutfit(dc, worn.Where(i => i.Slot == "head"), themeRgb);
-        else if (f.Winter && Outfits.Find("beanie") is { } beanie) DrawOutfit(dc, new[] { beanie }, themeRgb);
+        if (hasHat) DrawOutfit(dc, worn.Where(i => i.Slot == "head"), themeRgb, itemTime);
+        else if (f.Winter && Outfits.Find("beanie") is { } beanie) DrawOutfit(dc, new[] { beanie }, themeRgb, itemTime);
         var (led, op) = _avatar.Health switch
         {
             Health.Update => (C(1.0, 0.6, 0.2), 0.6 + 0.4 * Math.Sin(time * 3)),
@@ -726,12 +726,63 @@ internal sealed class RobotView : FrameworkElement
         dc.DrawEllipse(B(led, op), null, new Point(50, 22.5), 2.5, 2.5);
     }
 
+    // MARK: Kabuk ve vizör (hacimli: parlama, kenar ışığı, cam yansıması; Mac'te RobotShell/VisorGlass)
+
+    private static readonly Brush ShellFill = Frozen(new LinearGradientBrush(new GradientStopCollection
+    {
+        new(C(0.992, 0.984, 0.969), 0), new(C(0.925, 0.906, 0.949), 0.55), new(C(0.812, 0.78, 0.886), 1),
+    }, new Point(0, 15), new Point(0, 85)) { MappingMode = BrushMappingMode.Absolute });
+    private static readonly Brush ShellGloss = Frozen(new RadialGradientBrush(new GradientStopCollection
+    {
+        new(Color.FromArgb(0xE6, 0xFF, 0xFF, 0xFF), 0), new(Color.FromArgb(0, 0xFF, 0xFF, 0xFF), 1),
+    }) { MappingMode = BrushMappingMode.Absolute, Center = new Point(34, 24), GradientOrigin = new Point(34, 24), RadiusX = 34, RadiusY = 34 });
+    private static readonly Brush VisorFill = Frozen(new LinearGradientBrush(new GradientStopCollection
+    {
+        new(C(0.043, 0.035, 0.086), 0), new(C(0.114, 0.098, 0.196), 0.25), new(C(0.071, 0.059, 0.133), 1),
+    }, new Point(0, 30), new Point(0, 74)) { MappingMode = BrushMappingMode.Absolute });
+    private static readonly Brush VisorLip = Frozen(new LinearGradientBrush(C(0.725, 0.694, 0.816), Colors.White, new Point(0, 29), new Point(0, 75)) { MappingMode = BrushMappingMode.Absolute });
+    private static Brush BoltFill(double cx) => new RadialGradientBrush(C(0.945, 0.929, 0.973), C(0.584, 0.549, 0.706))
+        { MappingMode = BrushMappingMode.Absolute, Center = new Point(cx - 2, 47), GradientOrigin = new Point(cx - 2, 47), RadiusX = 8, RadiusY = 8 };
+    private static readonly Brush BoltLeft = Frozen(BoltFill(6)), BoltRight = Frozen(BoltFill(94));
+    private static readonly Pen ShellRim = Frozen(new Pen(B(Colors.White, 0.95), 1.6) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round });
+    private static readonly Pen ShellShade = Frozen(new Pen(B(C(0.557, 0.518, 0.698), 0.35), 2));
+    private static readonly Pen ShellEdge = Frozen(new Pen(B(C(0.655, 0.624, 0.769), 0.5), 1));
+    private static readonly Geometry RimPath = Frozen(Geometry.Parse("M 17,24 C 22,18 30,16.5 40,16.5 L 60,16.5"));
+    private static readonly Geometry ShadePath = Frozen(Geometry.Parse("M 12,68 C 14,78 22,83.5 31,83.5 L 69,83.5 C 78,83.5 86,78 88,68"));
+    private static readonly Geometry GlassBand = Frozen(Geometry.Parse("M 22,33 L 44,33 L 30,71 L 20,71 C 17,66 16,60 16,52 L 16,46 C 16,39 18,35 22,33 Z"));
+    private static readonly Geometry GlassTop = Frozen(Geometry.Parse("M 25,33.5 C 38,31.5 62,31.5 75,33.5"));
+    private static readonly Pen GlassTopPen = Frozen(new Pen(B(Colors.White, 0.22), 1.6) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round });
+
+    /// <summary>Kulak cıvataları, kabuk (parlama, üst kenar ışığı, alt gölge) ve çerçeveli vizör</summary>
+    internal static void DrawShell(DrawingContext dc)
+    {
+        dc.DrawEllipse(BoltLeft, null, new Point(6, 50), 6.2, 6.2);
+        dc.DrawEllipse(BoltRight, null, new Point(94, 50), 6.2, 6.2);
+        dc.DrawEllipse(B(Colors.White, 0.8), null, new Point(4.6, 48), 1.5, 1.5);
+        dc.DrawEllipse(B(Colors.White, 0.8), null, new Point(92.6, 48), 1.5, 1.5);
+        var shell = new Rect(7, 15, 86, 70);
+        dc.DrawRoundedRectangle(ShellFill, null, shell, 24, 24);
+        dc.DrawRoundedRectangle(ShellGloss, null, shell, 24, 24);
+        dc.DrawGeometry(null, ShellRim, RimPath);
+        dc.DrawGeometry(null, ShellShade, ShadePath);
+        dc.DrawRoundedRectangle(null, ShellEdge, new Rect(7.5, 15.5, 85, 69), 23.5, 23.5);
+        dc.DrawRoundedRectangle(VisorLip, null, new Rect(14, 29, 72, 46), 19, 19);
+        dc.DrawRoundedRectangle(VisorFill, null, new Rect(15, 30, 70, 44), 18, 18);
+    }
+
+    /// <summary>Vizör camı: gözlerin üstünde hafif çapraz yansıma ve üst parlama</summary>
+    internal static void DrawGlass(DrawingContext dc)
+    {
+        dc.DrawGeometry(B(Colors.White, 0.06), null, GlassBand);
+        dc.DrawGeometry(null, GlassTopPen, GlassTop);
+    }
+
     // MARK: Gardırop
 
     private static readonly Dictionary<string, Geometry> OutfitPaths = new();
 
     /// <summary>Gardırop parçalarını çizer (100×100 kafa alanı; Mac'te OutfitView, aynı veri: assets/outfits.json)</summary>
-    internal static void DrawOutfit(DrawingContext dc, IEnumerable<OutfitItem> items, Rgb theme)
+    internal static void DrawOutfit(DrawingContext dc, IEnumerable<OutfitItem> items, Rgb theme, double time = 0.3)
     {
         Color Tone(string token)
         {
@@ -759,6 +810,22 @@ internal sealed class RobotView : FrameworkElement
             var pen = s.Stroke is { } st
                 ? new Pen(Paint(st), s.Width) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round, LineJoin = PenLineJoin.Round }
                 : null;
+            // Hareket: ponpon sallanır, buhar yükselir, yıldız parlar… (pivot etrafında)
+            var moved = false;
+            if (s.Anim is { } anim)
+            {
+                var m = anim.At(time);
+                if (m.Opacity <= 0.01) continue;
+                var px = anim.Pivot is { Length: 2 } pv ? pv[0] : 50;
+                var py = anim.Pivot is { Length: 2 } pv2 ? pv2[1] : 50;
+                var tg = new TransformGroup();
+                tg.Children.Add(new ScaleTransform(m.Scale, m.Scale, px, py));
+                tg.Children.Add(new RotateTransform(m.Rotate, px, py));
+                tg.Children.Add(new TranslateTransform(m.Dx, m.Dy));
+                dc.PushTransform(tg);
+                dc.PushOpacity(m.Opacity);
+                moved = true;
+            }
             if (s.Path is { } d)
             {
                 if (!OutfitPaths.TryGetValue(d, out var g))
@@ -772,6 +839,11 @@ internal sealed class RobotView : FrameworkElement
                 dc.DrawEllipse(fill, pen, new Point(e[0], e[1]), e[2], e[3]);
             else if (s.Rect is { Length: 5 } r)
                 dc.DrawRoundedRectangle(fill, pen, new Rect(r[0], r[1], r[2], r[3]), r[4], r[4]);
+            if (moved)
+            {
+                dc.Pop();
+                dc.Pop();
+            }
         }
     }
 

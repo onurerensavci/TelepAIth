@@ -526,7 +526,7 @@ struct HeadFigure: View {
                         .frame(width: 11, height: 11)
                         .position(x: w.kind == "five_hour" ? 14 : 86, y: 94)
                 }
-                OutfitView(items: outfit.filter { $0.slot == "side" }, theme: base)
+                OutfitView(items: outfit.filter { $0.slot == "side" }, theme: base, time: still >= 0.999 ? 0.3 : time)
             }
             .frame(width: 100, height: 100)
 
@@ -550,7 +550,8 @@ struct HeadFigure: View {
                     FaceView(state: state, mood: model.mood, time: time, look: look, eyeColor: eyeColor, health: health,
                              prevState: prevState, prevMood: prevMood, blend: blend, idle: idle,
                              glyph: glyph, prevGlyph: prevGlyph, gaze: gaze, winter: winter, theme: Color(nsColor: base),
-                             outfit: outfit.filter { $0.slot != "side" }, themeColor: base)
+                             outfit: outfit.filter { $0.slot != "side" }, themeColor: base,
+                             itemTime: still >= 0.999 ? 0.3 : time)
                     // Diğer sohbetler: ekranın altında küçük ışıklar (mavi çalışıyor, turuncu seni bekliyor)
                     if !extras.isEmpty {
                         ExtraLightsView(extras: extras, time: time,
@@ -705,6 +706,8 @@ struct FaceView: View {
     /// Gardırop: yüz, gözlük, baş parçaları (yanındaki parça kafanın dışında çizilir)
     var outfit: [OutfitItem] = []
     var themeColor: NSColor = .systemPurple
+    /// Parça hareketlerinin saati (robot dinginken sabit)
+    var itemTime: Double = 0.3
 
     private var hasHat: Bool { outfit.contains { $0.slot == "head" } }
 
@@ -716,28 +719,18 @@ struct FaceView: View {
 
     var body: some View {
         ZStack {
-            Circle().fill(Color(red: 0.74, green: 0.71, blue: 0.84)).frame(width: 12, height: 12).position(x: 6, y: 50)
-            Circle().fill(Color(red: 0.74, green: 0.71, blue: 0.84)).frame(width: 12, height: 12).position(x: 94, y: 50)
-            RoundedRectangle(cornerRadius: 24)
-                .fill(LinearGradient(colors: [Color(red: 0.98, green: 0.97, blue: 0.95),
-                                              Color(red: 0.86, green: 0.84, blue: 0.92)],
-                                     startPoint: .top, endPoint: .bottom))
-                .frame(width: 86, height: 70)
-                .position(x: 50, y: 50)
-            RoundedRectangle(cornerRadius: 18)
-                .fill(Color(red: 0.09, green: 0.08, blue: 0.16))
-                .frame(width: 70, height: 44)
-                .position(x: 50, y: 52)
+            RobotShell()
             DotEyes(state: state, mood: mood, look: look, time: time, color: eyeColor,
                     prevState: prevState, prevMood: prevMood, blend: blend, idle: idle,
                     glyph: glyph, prevGlyph: prevGlyph, gaze: gaze)
                 .frame(width: 70, height: 44)
                 .position(x: 50, y: 52)
-            OutfitView(items: outfit.filter { $0.slot == "face" || $0.slot == "eyes" }, theme: themeColor)
+            VisorGlass()
+            OutfitView(items: outfit.filter { $0.slot == "face" || $0.slot == "eyes" }, theme: themeColor, time: itemTime)
             // Baş parçası (kışın şapka takılı değilse bere); alındaki sağlık ışığı her zaman üstte görünür:
             // ışığı örten kep ve berede ışığın olduğu yerde delik var
             ZStack {
-                OutfitView(items: headItems, theme: themeColor)
+                OutfitView(items: headItems, theme: themeColor, time: itemTime)
                 ledView
             }
             .frame(width: 100, height: 100)
@@ -1318,11 +1311,63 @@ struct ExtraLightsView: View {
 
 // MARK: - Kış kostümü
 
+/// Kulak cıvataları, kabuk (parlama, üst kenar ışığı, alt gölge) ve çerçeveli vizör. (Windows'ta RobotView.DrawShell)
+struct RobotShell: View {
+    var body: some View {
+        Canvas { ctx, _ in
+            func c(_ r: Double, _ g: Double, _ b: Double, _ a: Double = 1) -> Color { Color(red: r, green: g, blue: b).opacity(a) }
+            for (x, hx) in [(6.0, 4.6), (94.0, 92.6)] {
+                ctx.fill(Path(ellipseIn: CGRect(x: x - 6.2, y: 43.8, width: 12.4, height: 12.4)),
+                         with: .radialGradient(Gradient(colors: [c(0.945, 0.929, 0.973), c(0.584, 0.549, 0.706)]),
+                                               center: CGPoint(x: x - 2, y: 47), startRadius: 0, endRadius: 8))
+                ctx.fill(Path(ellipseIn: CGRect(x: hx - 1.5, y: 46.5, width: 3, height: 3)), with: .color(.white.opacity(0.8)))
+            }
+            let shell = Path(roundedRect: CGRect(x: 7, y: 15, width: 86, height: 70), cornerRadius: 24)
+            ctx.fill(shell, with: .linearGradient(Gradient(stops: [
+                .init(color: c(0.992, 0.984, 0.969), location: 0), .init(color: c(0.925, 0.906, 0.949), location: 0.55),
+                .init(color: c(0.812, 0.78, 0.886), location: 1)]), startPoint: CGPoint(x: 0, y: 15), endPoint: CGPoint(x: 0, y: 85)))
+            ctx.fill(shell, with: .radialGradient(Gradient(colors: [.white.opacity(0.9), .white.opacity(0)]),
+                                                  center: CGPoint(x: 34, y: 24), startRadius: 0, endRadius: 34))
+            ctx.stroke(SVGPath.parse("M 17,24 C 22,18 30,16.5 40,16.5 L 60,16.5"), with: .color(.white.opacity(0.95)),
+                       style: StrokeStyle(lineWidth: 1.6, lineCap: .round))
+            ctx.stroke(SVGPath.parse("M 12,68 C 14,78 22,83.5 31,83.5 L 69,83.5 C 78,83.5 86,78 88,68"),
+                       with: .color(c(0.557, 0.518, 0.698, 0.35)), lineWidth: 2)
+            ctx.stroke(Path(roundedRect: CGRect(x: 7.5, y: 15.5, width: 85, height: 69), cornerRadius: 23.5),
+                       with: .color(c(0.655, 0.624, 0.769, 0.5)), lineWidth: 1)
+            ctx.fill(Path(roundedRect: CGRect(x: 14, y: 29, width: 72, height: 46), cornerRadius: 19),
+                     with: .linearGradient(Gradient(colors: [c(0.725, 0.694, 0.816), .white]),
+                                           startPoint: CGPoint(x: 0, y: 29), endPoint: CGPoint(x: 0, y: 75)))
+            ctx.fill(Path(roundedRect: CGRect(x: 15, y: 30, width: 70, height: 44), cornerRadius: 18),
+                     with: .linearGradient(Gradient(stops: [
+                        .init(color: c(0.043, 0.035, 0.086), location: 0), .init(color: c(0.114, 0.098, 0.196), location: 0.25),
+                        .init(color: c(0.071, 0.059, 0.133), location: 1)]), startPoint: CGPoint(x: 0, y: 30), endPoint: CGPoint(x: 0, y: 74)))
+        }
+        .frame(width: 100, height: 100)
+        .allowsHitTesting(false)
+    }
+}
+
+/// Vizör camı: gözlerin üstünde hafif çapraz yansıma ve üst parlama. (Windows'ta RobotView.DrawGlass)
+struct VisorGlass: View {
+    var body: some View {
+        Canvas { ctx, _ in
+            ctx.fill(SVGPath.parse("M 22,33 L 44,33 L 30,71 L 20,71 C 17,66 16,60 16,52 L 16,46 C 16,39 18,35 22,33 Z"),
+                     with: .color(.white.opacity(0.06)))
+            ctx.stroke(SVGPath.parse("M 25,33.5 C 38,31.5 62,31.5 75,33.5"), with: .color(.white.opacity(0.22)),
+                       style: StrokeStyle(lineWidth: 1.6, lineCap: .round))
+        }
+        .frame(width: 100, height: 100)
+        .allowsHitTesting(false)
+    }
+}
+
 /// Gardırop parçalarını çizer (100×100 kafa alanı; parçalar dışarı taşabilir: tuval 140×140, 20 nokta kaydırılmış).
 /// Windows'ta RobotView.DrawOutfit ile aynı veri (assets/outfits.json).
 struct OutfitView: View {
     let items: [OutfitItem]
     let theme: NSColor
+    /// Hareketlerin saati (ponpon sallanır, buhar yükselir…)
+    var time: Double = 0.3
 
     var body: some View {
         Canvas { ctx, _ in
@@ -1356,10 +1401,23 @@ struct OutfitView: View {
                     } else {
                         continue
                     }
-                    if let fill = s.fill { ctx.fill(path, with: shading(fill), style: FillStyle(eoFill: true)) }
+                    var c = ctx
+                    if let anim = s.anim {
+                        // Hareket: pivot etrafında dönme/ölçek, kayma, saydamlık
+                        let m = anim.at(time)
+                        if m.opacity <= 0.01 { continue }
+                        let px = anim.pivot?.first ?? 50, py = anim.pivot?.last ?? 50
+                        c.translateBy(x: m.dx, y: m.dy)
+                        c.translateBy(x: px, y: py)
+                        c.rotate(by: .degrees(m.rotate))
+                        c.scaleBy(x: m.scale, y: m.scale)
+                        c.translateBy(x: -px, y: -py)
+                        c.opacity = m.opacity
+                    }
+                    if let fill = s.fill { c.fill(path, with: shading(fill), style: FillStyle(eoFill: true)) }
                     if let stroke = s.stroke {
-                        ctx.stroke(path, with: shading(stroke),
-                                   style: StrokeStyle(lineWidth: s.width, lineCap: .round, lineJoin: .round))
+                        c.stroke(path, with: shading(stroke),
+                                 style: StrokeStyle(lineWidth: s.width, lineCap: .round, lineJoin: .round))
                     }
                 }
             }

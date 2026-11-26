@@ -22,8 +22,48 @@ public sealed record OutfitPaint(string? Color, double[]? Linear, double[]? Radi
     }
 }
 
+/// <summary>
+/// Şeklin hareketi (Mac'te OutfitAnim, aynı formüller): sway (Pivot etrafında ±Amount derece), bob (±Amount nokta
+/// yukarı-aşağı), beat (1±Amount ölçek), rise (Amount nokta yükselip söner), twinkle (arada bir parlayıp söner),
+/// slide (±Amount nokta kayan parlama). Speed: saniyedeki tur, Offset: faz (0…1).
+/// </summary>
+public sealed record OutfitAnim(string Kind, double Amount, double Speed, double Offset, double[]? Pivot)
+{
+    public static OutfitAnim? From(JsonNode? node) =>
+        node is JsonObject o
+            ? new OutfitAnim(o.Str("k") ?? "", o.Num("a") ?? 0, o.Num("s") ?? 1, o.Num("o") ?? 0,
+                             (o["p"] as JsonArray)?.Select(x => x!.GetValue<double>()).ToArray())
+            : null;
+
+    /// <summary>t anındaki kayma, dönme (derece), ölçek ve saydamlık</summary>
+    public (double Dx, double Dy, double Rotate, double Scale, double Opacity) At(double t)
+    {
+        var ph = Speed * t + Offset;
+        var f = ph - Math.Floor(ph);
+        switch (Kind)
+        {
+            case "sway": return (0, 0, Amount * Math.Sin(2 * Math.PI * ph), 1, 1);
+            case "bob": return (0, Amount * Math.Sin(2 * Math.PI * ph), 0, 1, 1);
+            case "beat": return (0, 0, 0, 1 + Amount * Math.Pow(Math.Max(0, Math.Sin(2 * Math.PI * ph)), 2), 1);
+            case "rise": return (0, -Amount * f, 0, 1, Math.Sin(Math.PI * f));
+            case "twinkle":
+            {
+                var op = f < 0.2 ? Math.Sin(Math.PI * f / 0.2) : 0;
+                return (0, 0, 0, 0.5 + 0.5 * op, op);
+            }
+            case "slide":
+            {
+                var op = f < 0.35 ? Math.Sin(Math.PI * f / 0.35) : 0;
+                return (-Amount + 2 * Amount * Math.Min(1, f / 0.35), 0, 0, 1, op);
+            }
+            default: return (0, 0, 0, 1, 1);
+        }
+    }
+}
+
 /// <summary>Gardırop parçasının bir şekli: SVG yolu, elips [cx,cy,rx,ry] ya da dikdörtgen [x,y,w,h,r]; 100×100 kafa alanında.</summary>
-public sealed record OutfitShape(string? Path, double[]? Ellipse, double[]? Rect, OutfitPaint? Fill, OutfitPaint? Stroke, double Width);
+public sealed record OutfitShape(string? Path, double[]? Ellipse, double[]? Rect, OutfitPaint? Fill, OutfitPaint? Stroke, double Width,
+                                 OutfitAnim? Anim = null);
 
 public sealed record OutfitItem(string Id, string Slot, string NameTr, string NameEn, int Level, string? Achievement, IReadOnlyList<OutfitShape> Shapes)
 {
@@ -57,7 +97,8 @@ public static class Outfits
             foreach (var s in (node["shapes"] as JsonArray ?? new JsonArray()).OfType<JsonObject>())
             {
                 static double[]? Nums(JsonNode? n) => (n as JsonArray)?.Select(x => x!.GetValue<double>()).ToArray();
-                shapes.Add(new OutfitShape(s.Str("d"), Nums(s["ellipse"]), Nums(s["rect"]), OutfitPaint.From(s["fill"]), OutfitPaint.From(s["stroke"]), s.Num("w") ?? 1));
+                shapes.Add(new OutfitShape(s.Str("d"), Nums(s["ellipse"]), Nums(s["rect"]), OutfitPaint.From(s["fill"]), OutfitPaint.From(s["stroke"]), s.Num("w") ?? 1,
+                    OutfitAnim.From(s["anim"])));
             }
             list.Add(new OutfitItem(node.Str("id") ?? "", node.Str("slot") ?? "head", node.Str("tr") ?? "", node.Str("en") ?? "",
                 (int)(node.Num("level") ?? 0), node.Str("achievement"), shapes));
