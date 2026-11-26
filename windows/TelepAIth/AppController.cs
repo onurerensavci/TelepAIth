@@ -145,6 +145,9 @@ internal sealed class AppController : ISettingsHost
             list.Add(new MenuEntry($"{m.Theme.DisplayName} — {m.StatusLine}", () => Manager.ShowHistory(source), Dot: m.Theme.Color));
         }
         list.Add(null);
+        // Güncelleme denetimi en üstte, Robotu göster'in hemen üstünde
+        list.Add(new MenuEntry(Updater.Shared.IsBusy ? L("Güncelleme indiriliyor…", "Downloading update…") : L("Güncellemeleri denetle", "Check for updates"),
+            CheckUpdates, Enabled: !Updater.Shared.IsBusy, Icon: "\uE895"));
         list.Add(new MenuEntry(L("Robotu göster", "Show robot"), () => Manager.Visible = !Manager.Visible, Manager.Visible, Icon: "\uE890"));
         list.Add(new MenuEntry(L("Odak modu", "Focus mode"), Children: FocusEntries(), Icon: "\uE708"));
         list.Add(new MenuEntry(L("Bugünün özeti", "Today's summary"), Manager.ShowSummary, Icon: "\uE787"));
@@ -164,8 +167,6 @@ internal sealed class AppController : ISettingsHost
         });
         list.Add(new MenuEntry(L("Yardım", "Help"), Icon: "\uE897", Children: new List<MenuEntry?>
         {
-            new(Updater.Shared.IsBusy ? L("Güncelleme indiriliyor…", "Downloading update…") : L("Güncellemeleri denetle", "Check for updates"),
-                CheckUpdates, Enabled: !Updater.Shared.IsBusy, Icon: "\uE895"),
             new(L("Robotu bu masaüstüne getir", "Bring robot to this desktop"), Manager.BringHere, Icon: "\uE7C4"),
             new(L("Kurulum sihirbazı", "Setup assistant"), () => OnboardingWindow.Show(this), Icon: "\uE82F"),
             demo,

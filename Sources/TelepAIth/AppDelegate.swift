@@ -219,6 +219,13 @@ final class AppController: NSObject {
         }
 
         menu.addItem(.separator())
+        // Güncelleme denetimi en üstte, Robotu göster'in hemen üstünde
+        let checkTitle = Updater.shared.isBusy
+            ? loc("Güncelleme indiriliyor…", "Downloading update…")
+            : loc("Güncellemeleri denetle…", "Check for updates…")
+        let check = actionItem(checkTitle, #selector(checkForUpdates))
+        check.isEnabled = !Updater.shared.isBusy
+        menu.addItem(check)
         menu.addItem(toggleItem(loc("Robotu göster", "Show robot"), on: manager.visible, action: #selector(toggleRobots)))
 
         let focus = NSMenuItem(title: loc("Odak modu", "Focus mode"), action: nil, keyEquivalent: "")
@@ -256,16 +263,9 @@ final class AppController: NSObject {
         demoMenu.addItem(actionItem(loc("Test bildirimi gönder", "Send a test notification"), #selector(testNotification)))
         demo.submenu = demoMenu
 
-        let checkTitle = Updater.shared.isBusy
-            ? loc("Güncelleme indiriliyor…", "Downloading update…")
-            : loc("Güncellemeleri denetle…", "Check for updates…")
-        let check = actionItem(checkTitle, #selector(checkForUpdates))
-        check.isEnabled = !Updater.shared.isBusy
-
         let help = NSMenuItem(title: loc("Yardım", "Help"), action: nil, keyEquivalent: "")
         let helpMenu = NSMenu()
         helpMenu.autoenablesItems = false
-        helpMenu.addItem(check)
         helpMenu.addItem(actionItem(loc("Robotu bu masaüstüne getir", "Bring robot to this desktop"), #selector(bringRobotHere)))
         helpMenu.addItem(actionItem(loc("Kurulum sihirbazı…", "Setup assistant…"), #selector(openOnboarding)))
         helpMenu.addItem(demo)
