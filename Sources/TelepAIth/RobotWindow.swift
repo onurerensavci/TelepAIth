@@ -252,6 +252,23 @@ final class RobotAvatar: ObservableObject {
         return CGPoint(x: x, y: y)
     }
 
+    /// Serbest konum: üstte menü çubuğunun üstüne de çıkabilir (kafanın tepesi ekranın tepesine kadar)
+    private static func clampFree(_ p: CGPoint, on screen: NSScreen?) -> CGPoint {
+        let visible = screen?.visibleFrame ?? fallbackFrame
+        var q = clamp(p, to: visible)
+        if p.y > q.y {
+            let top = (screen?.frame ?? visible).maxY - Layout.headSize.height / 2 - 2
+            q.y = Swift.max(q.y, Swift.min(p.y, top))
+        }
+        return q
+    }
+
+    /// Kafa menü çubuğunun üstüne çıktı mı? (pencere menü çubuğunun da üstünde çizilmeli)
+    var overMenuBar: Bool {
+        guard let screen = RobotAvatar.screen(containing: head) else { return false }
+        return head.y + Layout.headSize.height / 2 > screen.visibleFrame.maxY + 1
+    }
+
     // MARK: Ev konumu (kullanıcının bıraktığı köşe ya da nokta, hangi ekranda olursa)
 
     /// Ekranın altına itildi: sadece kafasının üstü görünür; tıklayınca ya da haber gelince geri çıkar
@@ -274,7 +291,7 @@ final class RobotAvatar: ObservableObject {
         }
         if let x = defaults.object(forKey: "avatarX") as? Double, let y = defaults.object(forKey: "avatarY") as? Double {
             let p = CGPoint(x: x, y: y)
-            return RobotAvatar.clamp(p, to: RobotAvatar.screen(containing: p)?.visibleFrame ?? RobotAvatar.fallbackFrame)
+            return RobotAvatar.clampFree(p, on: RobotAvatar.screen(containing: p))
         }
         let frame = (NSScreen.main ?? NSScreen.screens.first)?.visibleFrame ?? RobotAvatar.fallbackFrame
         return RobotAvatar.cornerPoint(.bottomRight, in: frame)
@@ -291,8 +308,7 @@ final class RobotAvatar: ObservableObject {
         if locked {
             // Kilitliyken yerinde kalır; sadece ekran söküldüyse görünür bir yere taşınır, iki ekrana taşıyorsa içeri alınır
             if !NSScreen.screens.contains(where: { $0.frame.contains(head) }) { moveTo(homePoint); return }
-            let frame = RobotAvatar.screen(containing: head)?.visibleFrame ?? RobotAvatar.fallbackFrame
-            let p = RobotAvatar.clamp(head, to: frame)
+            let p = RobotAvatar.clampFree(head, on: RobotAvatar.screen(containing: head))
             if hypot(p.x - head.x, p.y - head.y) > 0.5 { moveTo(p) }
             return
         }
@@ -363,8 +379,10 @@ final class RobotAvatar: ObservableObject {
             return
         }
 
+        // Menü çubuğunun üstüne bırakıldıysa köşeye yapışmaz, orada kalır
+        let intoMenuBar = head.y + Layout.headSize.height / 2 > frame.maxY
         var nearest: (corner: Corner, distance: CGFloat)?
-        for corner in Corner.allCases {
+        for corner in Corner.allCases where !intoMenuBar {
             let p = RobotAvatar.cornerPoint(corner, in: frame)
             let d = hypot(p.x - head.x, p.y - head.y)
             if nearest == nil || d < nearest!.distance { nearest = (corner: corner, distance: d) }
@@ -373,7 +391,7 @@ final class RobotAvatar: ObservableObject {
             defaults.set(n.corner.rawValue, forKey: "avatarCorner")
             defaults.set(screen.map { RobotAvatar.displayID(of: $0) } ?? 0, forKey: "avatarScreen")
         } else {
-            let p = RobotAvatar.clamp(head, to: frame)
+            let p = RobotAvatar.clampFree(head, on: screen)
             defaults.removeObject(forKey: "avatarCorner")
             defaults.set(Double(p.x), forKey: "avatarX")
             defaults.set(Double(p.y), forKey: "avatarY")
@@ -417,6 +435,8 @@ final class RobotAvatar: ObservableObject {
 final class RobotPanel: NSPanel {
     override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
+    /// macOS pencereyi menü çubuğunun altına itmesin: robot menü çubuğunun üstüne de çıkabilir
+    override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect { frameRect }
 }
 
 /// Robotun üstüne tıklama ve sürükleme.
@@ -618,6 +638,9 @@ final class AvatarWindowController: NSObject {
     private func syncFrame() {
         let origin = avatar.windowOrigin
         if panel.frame.origin != origin { panel.setFrameOrigin(origin) }
+        // Menü çubuğunun üstündeyken onun da üstünde çizilsin
+        let level: NSWindow.Level = Preferences.alwaysOnTop || avatar.overMenuBar ? .statusBar : .normal
+        if panel.level != level { panel.level = level }
         // Fare kafanın ya da balonun üstünde değilse tıklamalar arkadaki pencerelere geçsin
         let mouse = NSEvent.mouseLocation
         let over = avatar.isDragging || avatar.headRect.contains(mouse) || (avatar.bubbleScreenRect?.contains(mouse) ?? false)

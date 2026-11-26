@@ -154,6 +154,28 @@ internal sealed class RobotAvatar
         return (Math.Min(Math.Max(x, w.Left + hw), w.Right - hw), Math.Min(Math.Max(y, w.Top + hw), w.Bottom - hw));
     }
 
+    /// <summary>Serbest konum: üstte görev çubuğu varsa onun da üstüne çıkabilir (kafanın tepesi ekranın tepesine kadar).</summary>
+    private static (double X, double Y) ClampFree(double x, double y, Native.Monitor m)
+    {
+        var (cx, cy) = Clamp(x, y, m);
+        if (y < cy)
+        {
+            var top = m.Bounds.Top + BaseHead / 2 * m.Scale * Prefs.RobotScale + 2 * m.Scale;
+            cy = Math.Min(cy, Math.Max(y, top));
+        }
+        return (cx, cy);
+    }
+
+    /// <summary>Kafa üstteki görev çubuğunun üstüne çıktı mı? (pencere en üstte durmalı)</summary>
+    public bool OverSystemBar
+    {
+        get
+        {
+            var m = MonitorFor(HeadX, HeadY);
+            return HeadY - HeadPx / 2 < m.Work.Top - 1;
+        }
+    }
+
     /// <summary>Ev konumu: kullanıcının bıraktığı köşe ya da nokta, hangi ekranda olursa.</summary>
     private (double X, double Y) HomePoint
     {
@@ -168,7 +190,7 @@ internal sealed class RobotAvatar
             }
             var px = Prefs.AvatarX;
             var py = Prefs.AvatarY;
-            if (!double.IsNaN(px) && !double.IsNaN(py)) return Clamp(px, py, MonitorFor(px, py));
+            if (!double.IsNaN(px) && !double.IsNaN(py)) return ClampFree(px, py, MonitorFor(px, py));
             return CornerPoint(Corner.BottomRight, Native.MonitorAt(0, 0));
         }
     }
@@ -190,7 +212,7 @@ internal sealed class RobotAvatar
             // Kilitliyken yerinde kalır; sadece ekran söküldüyse görünür bir yere taşınır, iki ekrana taşıyorsa içeri alınır
             var m = MonitorFor(HeadX, HeadY);
             if (!m.Bounds.Contains((int)HeadX, (int)HeadY)) { MoveTo(HomePoint); return; }
-            var (cx, cy) = Clamp(HeadX, HeadY, m);
+            var (cx, cy) = ClampFree(HeadX, HeadY, m);
             if (Math.Abs(cx - HeadX) > 0.5 || Math.Abs(cy - HeadY) > 0.5) MoveTo((cx, cy));
             return;
         }
@@ -286,9 +308,11 @@ internal sealed class RobotAvatar
             UserMoved?.Invoke();
             return;
         }
+        // Üstteki görev çubuğunun üstüne bırakıldıysa köşeye yapışmaz, orada kalır
+        var intoBar = HeadY - HeadPx / 2 < m.Work.Top;
         Corner? nearest = null;
         var best = double.MaxValue;
-        foreach (var c in Enum.GetValues<Corner>())
+        foreach (var c in intoBar ? Array.Empty<Corner>() : Enum.GetValues<Corner>())
         {
             var (px, py) = CornerPoint(c, m);
             var d = Math.Sqrt((px - HeadX) * (px - HeadX) + (py - HeadY) * (py - HeadY));
@@ -301,7 +325,7 @@ internal sealed class RobotAvatar
         }
         else
         {
-            var (x, y) = Clamp(HeadX, HeadY, m);
+            var (x, y) = ClampFree(HeadX, HeadY, m);
             Prefs.AvatarCorner = null;
             Prefs.AvatarX = x;
             Prefs.AvatarY = y;

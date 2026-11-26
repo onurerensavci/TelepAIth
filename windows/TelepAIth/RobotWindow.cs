@@ -20,6 +20,7 @@ internal sealed class RobotWindow : Window
     private readonly RobotView _view;
     private IntPtr _hwnd;
     private (int X, int Y, int W, int H) _lastRect;
+    private bool _lastTop;
     private bool _menuOpen;
 
     // Fare
@@ -114,10 +115,13 @@ internal sealed class RobotWindow : Window
     {
         if (_hwnd == IntPtr.Zero) return;
         var r = _avatar.WindowRect;
-        if (!force && r == _lastRect) return;
+        // Üstteki görev çubuğunun üstündeyken onun da üstünde dursun
+        var top = Prefs.AlwaysOnTop || _avatar.OverSystemBar;
+        if (!force && r == _lastRect && top == _lastTop) return;
         _lastRect = r;
+        _lastTop = top;
         const uint SWP_NOACTIVATE = 0x0010, SWP_NOOWNERZORDER = 0x0200;
-        var after = Prefs.AlwaysOnTop ? Native.HWND_TOPMOST : Native.HWND_NOTOPMOST;
+        var after = top ? Native.HWND_TOPMOST : Native.HWND_NOTOPMOST;
         Native.SetWindowPos(_hwnd, after, r.X, r.Y, r.W, r.H, SWP_NOACTIVATE | SWP_NOOWNERZORDER);
     }
 
