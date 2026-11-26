@@ -723,6 +723,8 @@ internal sealed class RobotManager
     private void AnnounceProgress()
     {
         if (FocusMode.IsActive || _avatar == null) return;
+        // Seni bekleyen bir şey varken balonu kapatma: haber sonra söylenir
+        if (_avatar.Approval != null || _models.Values.Any(m => m.State is RobotState.Waiting or RobotState.Error)) return;
         var (achievements, level) = Progress.Shared.TakeNews();
         var lines = achievements.Take(2).Select(a => "🏅 " + L("Yeni başarım: ", "New achievement: ") + a.Title).ToList();
         if (level is { } lv)

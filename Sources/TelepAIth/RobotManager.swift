@@ -662,6 +662,8 @@ final class RobotManager {
     /// Yeni başarım ya da seviye: robot balonda söyler (bildirim atmaz). Odak modunda bekler.
     private func announceProgress() {
         guard !FocusMode.isActive, let avatar = avatar else { return }
+        // Seni bekleyen bir şey varken balonu kapatma: haber sonra söylenir
+        if avatar.approval != nil || models.values.contains(where: { $0.state == .waiting || $0.state == .error }) { return }
         let news = Progress.shared.takeNews()
         var lines: [String] = news.achievements.prefix(2).map { "🏅 " + loc("Yeni başarım: ", "New achievement: ") + $0.title }
         if let level = news.level {
