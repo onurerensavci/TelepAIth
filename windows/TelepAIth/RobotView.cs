@@ -628,10 +628,14 @@ internal sealed class RobotView : FrameworkElement
         }
         _hover += (hoverTarget - _hover) * Math.Min(1, dt * 8);
         var winter = WinterActive;
+        // Efektler (güneş, gökkuşağı…): robot ses çıkaran bir an yaşayınca canlanır
+        var effect = Effects.Current() is { } fxId && fxId != "winter" ? fxId : null;
+        var energy = effect == null ? 0 : Effects.Energy(DateTime.Now, state.IsWorking());
         var face = new FaceCtx(state, mood, model.PreviousState, model.PreviousMood, blend, idle, glyph, prevGlyph, lookU, lookV, _hover, winter);
 
         // Gölge
         dc.DrawEllipse(B(Colors.Black, 0.14), null, new Point(50, 96), Math.Max(24, 58 - lift * 1.5) / 2, 3);
+        if (effect != null && Effects.IsBackground(effect)) DrawEffect(dc, effect, time, energy);
         // Kullanım sınırları: ayaklarının dibinde iki küçük halka (solda oturum, sağda hafta)
         foreach (var w in _avatar.Usage)
         {
@@ -670,6 +674,7 @@ internal sealed class RobotView : FrameworkElement
         if (state == RobotState.Sleeping) DrawZzz(dc, time);
 
         if (winter) DrawSnow(dc, time);
+        if (effect != null && !Effects.IsBackground(effect)) DrawEffect(dc, effect, time, energy);
 
         if (IsNudging(model, time))
         {
@@ -847,6 +852,199 @@ internal sealed class RobotView : FrameworkElement
         }
     }
 
+    // MARK: Efektler (Mac'te EffectView.swift, aynı şekiller; kafa alanında, -20…120 × -25…125)
+
+    private static double Fade(double y) => Math.Max(0, Math.Min(1, Math.Min((115 - y) / 30, (y + 25) / 12)));
+
+    private static Pen RoundPen(Color c, double a, double w) =>
+        new(B(c, Math.Clamp(a, 0, 1)), w) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round, LineJoin = PenLineJoin.Round };
+
+    private static StreamGeometry Poly(IEnumerable<Point> points)
+    {
+        var g = new StreamGeometry();
+        using (var ctx = g.Open())
+        {
+            var first = true;
+            foreach (var p in points)
+            {
+                if (first) { ctx.BeginFigure(p, false, false); first = false; }
+                else ctx.LineTo(p, true, true);
+            }
+        }
+        g.Freeze();
+        return g;
+    }
+
+    private static void DrawEffect(DrawingContext dc, string id, double t, double e)
+    {
+        const double Tau = Math.PI * 2;
+        switch (id)
+        {
+            case "sun":
+            {
+                double cx = 50, cy = 46, r = 62 + 6 * e;
+                var glow = new RadialGradientBrush
+                {
+                    MappingMode = BrushMappingMode.Absolute, Center = new Point(cx, cy), GradientOrigin = new Point(cx, cy), RadiusX = r, RadiusY = r,
+                };
+                glow.GradientStops.Add(new GradientStop(Color.FromArgb((byte)(255 * Math.Min(1, 0.42 + 0.3 * e)), 255, 219, 89), 30 / r));
+                glow.GradientStops.Add(new GradientStop(Color.FromArgb(0, 255, 191, 76), 1));
+                dc.DrawEllipse(glow, null, new Point(cx, cy), r, r);
+                for (var i = 0; i < 12; i++)
+                {
+                    var a = t * 0.25 % Tau + i * Tau / 12;
+                    double r1 = 46, r2 = 55 + 6 * e + 2.5 * Math.Sin(t * 2 % Tau + i);
+                    dc.DrawLine(RoundPen(C(1, 0.8, 0.3), 0.45 + 0.35 * e, i % 2 == 1 ? 2 : 3),
+                        new Point(cx + Math.Cos(a) * r1, cy + Math.Sin(a) * r1), new Point(cx + Math.Cos(a) * r2, cy + Math.Sin(a) * r2));
+                }
+                break;
+            }
+            case "rainbow":
+            {
+                (double R, double G, double B)[] cols = { (1, 0.35, 0.35), (1, 0.62, 0.25), (1, 0.88, 0.3), (0.4, 0.85, 0.45), (0.35, 0.65, 1), (0.65, 0.45, 1) };
+                for (var i = 0; i < cols.Length; i++)
+                {
+                    var r = 58 - i * 3.2 + 2 * e;
+                    var arc = Poly(Enumerable.Range(0, 33).Select(s =>
+                    {
+                        var a = Math.PI * (1.04 + 0.92 * s / 32.0);
+                        return new Point(50 + Math.Cos(a) * r, 64 + Math.Sin(a) * r);
+                    }));
+                    var k = cols[i];
+                    dc.DrawGeometry(null, RoundPen(C(k.R, k.G, k.B), (0.5 + 0.35 * e) * (0.85 + 0.15 * Math.Sin(t * 2 % Tau + i)), 3.2), arc);
+                }
+                break;
+            }
+            case "aurora":
+            {
+                (double R, double G, double B)[] cols = { (0.3, 1, 0.6), (0.3, 0.85, 1), (0.75, 0.45, 1) };
+                for (var k = 0; k < 3; k++)
+                {
+                    var kk = k;
+                    var band = Poly(Enumerable.Range(0, 35).Select(j =>
+                    {
+                        var x = -18.0 + j * 4;
+                        return new Point(x, 4 + kk * 7 + Math.Sin(x * 0.06 + t * (0.8 + 0.25 * kk) % Tau + kk * 1.3) * (4 + 5 * e));
+                    }));
+                    var c = C(cols[k].R, cols[k].G, cols[k].B);
+                    dc.DrawGeometry(null, RoundPen(c, 0.13 * (1 + 0.9 * e), 11 + 4 * e), band);
+                    dc.DrawGeometry(null, RoundPen(c, 0.32 * (1 + 0.9 * e), 4 + 2 * e), band);
+                }
+                break;
+            }
+            case "stars":
+                for (var i = 0; i < 9; i++)
+                {
+                    var a = (i * 40 + 10) * Math.PI / 180;
+                    var r = 57 + i % 3 * 4;
+                    double x = 50 + Math.Cos(a) * r, y = 48 + Math.Sin(a) * r * 0.92;
+                    var s = 0.5 + 0.5 * Math.Sin(t * (1.5 + i * 0.3) % Tau + i * 2);
+                    var size = (1.8 + 1.6 * s) * (1 + 0.7 * e);
+                    var g = new StreamGeometry();
+                    using (var ctx = g.Open())
+                    {
+                        var mid = new Point(x, y);
+                        ctx.BeginFigure(new Point(x, y - size), true, true);
+                        ctx.QuadraticBezierTo(mid, new Point(x + size, y), true, true);
+                        ctx.QuadraticBezierTo(mid, new Point(x, y + size), true, true);
+                        ctx.QuadraticBezierTo(mid, new Point(x - size, y), true, true);
+                        ctx.QuadraticBezierTo(mid, new Point(x, y - size), true, true);
+                    }
+                    dc.DrawGeometry(B(C(1, 0.95, 0.7), 0.35 + 0.65 * s), null, g);
+                }
+                break;
+            case "hearts":
+                for (var i = 0; i < 7; i++)
+                {
+                    var ph = (t * 0.13 + i / 7.0) % 1;
+                    double y = 108 - ph * 125, x = 8 + i * 37 % 84 + Math.Sin(t * 1.2 % Tau + i) * 6;
+                    var s = (3 + 1.2 * (i % 3)) * (1 + 0.6 * e);
+                    var g = new StreamGeometry();
+                    using (var ctx = g.Open())
+                    {
+                        ctx.BeginFigure(new Point(x, y + s * 0.9), true, true);
+                        ctx.BezierTo(new Point(x - s * 1.4, y - s * 0.1), new Point(x - s * 0.7, y - s * 1.1), new Point(x, y - s * 0.35), true, true);
+                        ctx.BezierTo(new Point(x + s * 0.7, y - s * 1.1), new Point(x + s * 1.4, y - s * 0.1), new Point(x, y + s * 0.9), true, true);
+                    }
+                    dc.DrawGeometry(B(C(1, 0.42, 0.62), Math.Clamp(Math.Sin(ph * Math.PI) * (0.55 + 0.4 * e), 0, 1)), null, g);
+                }
+                break;
+            case "bubbles":
+                for (var i = 0; i < 8; i++)
+                {
+                    var ph = (t * 0.11 + i / 8.0) % 1;
+                    double y = 108 - ph * 125, x = 6 + i * 41 % 88 + Math.Sin(t * 1.5 % Tau + i * 2) * 5;
+                    var r = (1.8 + i % 3) * (1 + 0.5 * e);
+                    var a = Math.Clamp(Math.Sin(ph * Math.PI) * (0.55 + 0.4 * e), 0, 1);
+                    dc.DrawEllipse(B(C(0.7, 0.9, 1), a * 0.18), new Pen(B(C(0.85, 0.95, 1), a), 0.8), new Point(x, y), r, r);
+                    dc.DrawEllipse(B(Colors.White, a * 0.9), null, new Point(x - r * 0.35, y - r * 0.35), r * 0.25, r * 0.25);
+                }
+                break;
+            case "fireflies":
+                for (var i = 0; i < 8; i++)
+                {
+                    var x = 50 + Math.Cos(t * 0.4 * (1 + i % 3 * 0.3) % Tau + i * 1.7) * 56;
+                    var y = 50 + Math.Sin(t * 0.5 * (1 + i % 2 * 0.4) % Tau + i * 2.3) * 50;
+                    var b = 0.5 + 0.5 * Math.Sin(t * 3 % Tau + i * 1.3);
+                    dc.DrawEllipse(B(C(0.8, 1, 0.4), Math.Min(1, 0.18 * b * (1 + 1.2 * e))), null, new Point(x, y), 4 + 2 * e, 4 + 2 * e);
+                    dc.DrawEllipse(B(C(0.9, 1, 0.55), Math.Min(1, 0.45 + 0.55 * b)), null, new Point(x, y), 1.2 + 0.5 * e, 1.2 + 0.5 * e);
+                }
+                break;
+            case "rain":
+                for (var i = 0; i < 14; i++)
+                {
+                    var y = (t * 75 + i * 29) % 140 - 25;
+                    var x = i * 41 % 130 - 15 - (y + 25) * 0.18;
+                    var len = 5 + 3 * e;
+                    dc.DrawLine(RoundPen(C(0.6, 0.8, 1), (0.45 + 0.35 * e) * Fade(y), 1.1), new Point(x, y), new Point(x - len * 0.18, y + len));
+                }
+                break;
+            case "leaves":
+            {
+                (double R, double G, double B)[] cols = { (0.95, 0.5, 0.2), (0.85, 0.3, 0.2), (0.95, 0.75, 0.25) };
+                for (var i = 0; i < 8; i++)
+                {
+                    var y = (t * (10 + i % 3 * 3) + i * 43) % 140 - 25;
+                    var x = i * 47 % 130 - 15 + Math.Sin(t * 1.1 % Tau + i) * 8 * (1 + e);
+                    var rot = Math.Sin(t * 1.5 % Tau + i) * 0.8 + i;
+                    var s = 1 + 0.4 * e;
+                    var g = new StreamGeometry();
+                    using (var ctx = g.Open())
+                    {
+                        ctx.BeginFigure(new Point(-3.2 * s, 0), true, true);
+                        ctx.QuadraticBezierTo(new Point(0, -2.4 * s), new Point(3.2 * s, 0), true, true);
+                        ctx.QuadraticBezierTo(new Point(0, 2.4 * s), new Point(-3.2 * s, 0), true, true);
+                    }
+                    var k = cols[i % 3];
+                    dc.PushTransform(new TranslateTransform(x, y));
+                    dc.PushTransform(new RotateTransform(rot * 180 / Math.PI));
+                    dc.DrawGeometry(B(C(k.R, k.G, k.B), 0.85 * Fade(y)), null, g);
+                    dc.Pop();
+                    dc.Pop();
+                }
+                break;
+            }
+            case "confetti":
+            {
+                (double R, double G, double B)[] cols = { (1, 0.4, 0.45), (1, 0.8, 0.3), (0.4, 0.8, 1), (0.5, 0.9, 0.5), (0.8, 0.5, 1) };
+                for (var i = 0; i < 14; i++)
+                {
+                    var y = (t * (18 + i % 4 * 4) + i * 31) % 140 - 25;
+                    var x = i * 59 % 130 - 15 + Math.Sin(t * 2 % Tau + i) * 4;
+                    var rot = (t * (2 + i % 3) + i) % Tau;
+                    var s = 1 + 0.5 * e;
+                    var k = cols[i % 5];
+                    dc.PushTransform(new TranslateTransform(x, y));
+                    dc.PushTransform(new RotateTransform(rot * 180 / Math.PI));
+                    dc.DrawRectangle(B(C(k.R, k.G, k.B), 0.9 * Fade(y)), null, new Rect(-1.3 * s, -0.7 * s, 2.6 * s, 1.4 * s));
+                    dc.Pop();
+                    dc.Pop();
+                }
+                break;
+            }
+        }
+    }
+
     // MARK: Kış kostümü
 
     private static void DrawSnow(DrawingContext dc, double time)
@@ -861,12 +1059,7 @@ internal sealed class RobotView : FrameworkElement
         }
     }
 
-    public static bool WinterActive => Prefs.Costume switch
-    {
-        "winter" => true,
-        "off" => false,
-        _ => DateTime.Now is { Month: 12 } or { Month: 1, Day: <= 6 },
-    };
+    public static bool WinterActive => Effects.Current() == "winter";
 
     // MARK: Nokta matris gözler (her göz 14 × 18 nokta)
 

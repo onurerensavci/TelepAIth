@@ -159,6 +159,7 @@ public sealed class RobotModel
     /// <summary>Robotun kısa sesi: genel ayar açık ve bu tür olayın sesi açıksa (Ses sekmesi)</summary>
     private static void Play(string name, string kind)
     {
+        Effects.Kick(Effects.Strength(name));
         if (!Prefs.Sounds || !Prefs.SoundOn(kind) || FocusMode.IsActive) return;
         PlaySound?.Invoke(name);
     }

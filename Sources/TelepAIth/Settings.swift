@@ -69,16 +69,52 @@ final class SettingsModel: ObservableObject {
 struct SettingsView: View {
     @ObservedObject var model: SettingsModel
 
+    @State private var page = 0
+
+    /// Kenar çubuğundaki sayfalar (Windows'taki ayarlarla aynı sıra; yeni macOS'ta sekmeler "»" içine saklanıyordu)
+    private var pages: [(title: String, icon: String)] {
+        [(loc("Genel", "General"), "gearshape"),
+         (loc("Bildirimler", "Notifications"), "bell"),
+         (loc("Ses", "Sound"), "speaker.wave.2"),
+         (loc("Odak ve özet", "Focus & summary"), "moon"),
+         (loc("Bağlantılar", "Connections"), "link")]
+    }
+
     var body: some View {
-        TabView {
-            general.tabItem { Label(loc("Genel", "General"), systemImage: "gearshape") }
-            notifications.tabItem { Label(loc("Bildirimler", "Notifications"), systemImage: "bell") }
-            focus.tabItem { Label(loc("Odak ve özet", "Focus & summary"), systemImage: "moon") }
-            connections.tabItem { Label(loc("Bağlantılar", "Connections"), systemImage: "link") }
-            sound.tabItem { Label(loc("Ses", "Sound"), systemImage: "speaker.wave.2") }
+        HStack(spacing: 0) {
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach(Array(pages.enumerated()), id: \.offset) { i, p in
+                    Button {
+                        page = i
+                    } label: {
+                        Label(p.title, systemImage: p.icon)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.vertical, 6)
+                            .padding(.horizontal, 10)
+                            .foregroundColor(page == i ? .white : .primary)
+                            .background(RoundedRectangle(cornerRadius: 7).fill(page == i ? Color.accentColor : Color.clear))
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+                Spacer()
+                Text("\(AppInfo.name) \(Updater.shared.currentVersion)").font(.caption).foregroundColor(.secondary).padding(.leading, 10)
+            }
+            .padding(12)
+            .frame(width: 190)
+            Divider()
+            Group {
+                switch page {
+                case 1: notifications
+                case 2: sound
+                case 3: focus
+                case 4: connections
+                default: general
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .padding(16)
-        .frame(width: 560, height: 470)
+        .frame(width: 720, height: 520)
         .id(model.revision >= 0 ? Language.current.rawValue : "")   // dil değişince yeniden çiz
     }
 
@@ -101,15 +137,24 @@ struct SettingsView: View {
                         Text(loc(option.1, option.2) + " (%\(Int(option.0 * 100)))").tag(option.0)
                     }
                 }
-                Picker(loc("Kostüm", "Costume"), selection: Binding(get: {
-                    ["winter", "off"].contains(Preferences.costume) ? Preferences.costume : "auto"
+                Picker(selection: Binding(get: {
+                    Preferences.costume == "off" || Effects.all.contains { $0.id == Preferences.costume } ? Preferences.costume : "auto"
                 }, set: { value in
                     Preferences.costume = value
                     model.changed()
                 })) {
-                    Text(loc("Otomatik (Aralık – 6 Ocak)", "Automatic (Dec – Jan 6)")).tag("auto")
-                    Text(loc("Kış", "Winter")).tag("winter")
+                    Text(loc("Otomatik (kışın kar, Aralık – 6 Ocak)", "Automatic (snow in winter, Dec – Jan 6)")).tag("auto")
                     Text(loc("Kapalı", "Off")).tag("off")
+                    Divider()
+                    ForEach(Effects.all) { effect in
+                        Text(effect.name).tag(effect.id)
+                    }
+                } label: {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(loc("Efektler", "Effects"))
+                        Text(loc("Bitince, beklerken, hata verince canlanır", "Comes alive when done, waiting or on errors"))
+                            .font(.caption).foregroundColor(.secondary)
+                    }
                 }
                 Toggle(loc("Mac açılınca başlasın", "Open at login"),
                        isOn: model.toggle({ LaunchAtLogin.isEnabled || LaunchAtLogin.needsApproval }, { LaunchAtLogin.set($0) }))
@@ -363,7 +408,7 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
     func show(host: SettingsHost) {
         if window == nil {
             let model = SettingsModel(host: host)
-            let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 560, height: 470),
+            let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 720, height: 520),
                              styleMask: [.titled, .closable, .miniaturizable],
                              backing: .buffered, defer: false)
             w.isReleasedWhenClosed = false

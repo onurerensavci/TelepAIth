@@ -375,9 +375,9 @@ internal static class SettingsWindow
     {
         ("", () => L("Genel", "General")),
         ("", () => L("Bildirimler", "Notifications")),
+        ("\uE767", () => L("Ses", "Sound")),
         ("", () => L("Odak ve özet", "Focus & summary")),
         ("", () => L("Bağlantılar", "Connections")),
-        ("\uE767", () => L("Ses", "Sound")),
     };
 
     private static void Rebuild(ISettingsHost host)
@@ -421,9 +421,9 @@ internal static class SettingsWindow
             content.Content = i switch
             {
                 1 => Notifications(host),
-                2 => Focus(host),
-                3 => Connections(host),
-                4 => Sound(host),
+                2 => Sound(host),
+                3 => Focus(host),
+                4 => Connections(host),
                 _ => General(host),
             };
         }
@@ -449,9 +449,10 @@ internal static class SettingsWindow
             Ui.PickerCard(L("Robot boyutu", "Robot size"), L("Robot ve balonu bu oranda büyür", "Scales the robot and its bubble"),
                 new[] { (0.75, L("Küçük (%75)", "Small (75%)")), (1.0, L("Normal (%100)", "Normal (100%)")), (1.3, L("Büyük (%130)", "Large (130%)")), (1.6, L("Çok büyük (%160)", "Extra large (160%)")) },
                 new[] { 0.75, 1.0, 1.3, 1.6 }.OrderBy(v => Math.Abs(v - Prefs.RobotScale)).First(), v => m.SetRobotScale(v), ""),
-            Ui.PickerCard(L("Kostüm", "Costume"), L("Kışın bere takar, etrafında kar yağar", "Wears a beanie with falling snow in winter"),
-                new[] { ("auto", L("Otomatik (Aralık – 6 Ocak)", "Automatic (Dec – Jan 6)")), ("winter", L("Kış", "Winter")), ("off", L("Kapalı", "Off")) },
-                Prefs.Costume is "winter" or "off" ? Prefs.Costume : "auto", v => Prefs.Costume = v, ""),
+            Ui.PickerCard(L("Efektler", "Effects"), L("Robotun çevresinde; bitince, beklerken, hata verince canlanır", "Around the robot; comes alive when done, waiting or on errors"),
+                new[] { ("auto", L("Otomatik (kışın kar, Aralık – 6 Ocak)", "Automatic (snow in winter, Dec – Jan 6)")), ("off", L("Kapalı", "Off")) }
+                    .Concat(Effects.All.Select(fx => (fx.Id, fx.Name()))),
+                Prefs.Costume == "off" || Effects.All.Any(fx => fx.Id == Prefs.Costume) ? Prefs.Costume : "auto", v => Prefs.Costume = v, ""),
             Ui.SwitchCard(L("Robotu göster", "Show the robot"), null, m.Visible, v => m.Visible = v, ""),
             Ui.SwitchCard(L("Her zaman üstte", "Always on top"), L("Diğer pencereler robotu örtmesin", "Other windows won't cover the robot"), Prefs.AlwaysOnTop, v => m.SetAlwaysOnTop(v), ""),
             Ui.SwitchCard(L("Kilitli", "Locked"), L("Yerinde kalsın, AI pencerelerine gitmesin", "Stay put, don't follow AI windows"), Prefs.RobotLocked, v => m.SetLocked(v), ""),

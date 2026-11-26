@@ -512,12 +512,22 @@ struct HeadFigure: View {
         let gaze = pointer?.sample(time: time, active: (pointer?.avatar?.gazeAllowed ?? false)
                                    && [.idle, .done, .error].contains(state) && model.mood == nil) ?? Gaze()
         let winter = Preferences.winterActive
+        // Efektler (güneş, gökkuşağı…): robot ses çıkaran bir an yaşayınca canlanır
+        let effect = Effects.current().flatMap { $0 == "winter" ? nil : $0 }
+        let energy = effect == nil ? 0 : Effects.energy(Date(timeIntervalSinceReferenceDate: time), working: state.isWorking)
 
         return ZStack {
-            Ellipse()
-                .fill(Color.black.opacity(0.14))
-                .frame(width: Swift.max(24, 58 - lift * 1.5), height: 6)
-                .position(x: 50, y: 96)
+            // Gölge ve arkadaki efekt (güneş, gökkuşağı, kuzey ışıkları)
+            ZStack {
+                Ellipse()
+                    .fill(Color.black.opacity(0.14))
+                    .frame(width: Swift.max(24, 58 - lift * 1.5), height: 6)
+                    .position(x: 50, y: 96)
+                if let effect = effect, Effects.isBackground(effect) {
+                    EffectView(id: effect, time: time, energy: energy)
+                }
+            }
+            .frame(width: 100, height: 100)
 
             // Kullanım sınırları: ayaklarının dibinde iki küçük halka (solda oturum, sağda hafta); yanındaki parça (kaktüs…)
             ZStack {
@@ -575,11 +585,18 @@ struct HeadFigure: View {
             if state == .sleeping {
                 ZzzView(time: time)
             }
-            if winter {
-                SnowView(time: time)
-                    .frame(width: 130, height: 140)
-                    .position(x: 50, y: 45)
+            // Öndeki efektler: kar, yıldız, kalp, yağmur…
+            ZStack {
+                if winter {
+                    SnowView(time: time)
+                        .frame(width: 130, height: 140)
+                        .position(x: 50, y: 45)
+                }
+                if let effect = effect, !Effects.isBackground(effect) {
+                    EffectView(id: effect, time: time, energy: energy)
+                }
             }
+            .frame(width: 100, height: 100)
             // Uzun süredir seni bekliyor: "!" rozeti
             if isNudging {
                 ZStack {

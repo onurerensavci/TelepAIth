@@ -764,7 +764,7 @@ internal sealed class RobotManager
                    && m.Mood == null && m.BubbleText == null && m.EyeGlyph(date) == '\0' && m.QuotaLeft == null
                    && (m.CelebrateStart is not { } cs || (date - cs).TotalSeconds > 3)
                    && _avatar.Minis.Count == 0 && _avatar.ChatList == null && _avatar.Extras.Count == 0 && _avatar.Approval == null
-                   && _avatar.Health == Health.Ok && !_avatar.Moving && !RobotView.WinterActive
+                   && _avatar.Health == Health.Ok && !_avatar.Moving && Effects.Current() == null
                    && (date - _avatar.CurrentSince).TotalSeconds > 1 && now - _pointerMovedAt > 1.5;
         var time = RobotView.Seconds(date);
         if (calm != _calm)

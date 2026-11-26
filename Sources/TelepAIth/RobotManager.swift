@@ -701,7 +701,7 @@ final class RobotManager {
         calmNow = calmNow && m.mood == nil && m.bubbleText == nil && m.eyeGlyph(at: date) == nil && m.quotaLeft == nil
         if let start = m.celebrateStart, date.timeIntervalSince(start) <= 3 { calmNow = false }
         calmNow = calmNow && avatar.minis.isEmpty && avatar.chatList == nil && avatar.extras.isEmpty && avatar.approval == nil
-        calmNow = calmNow && avatar.health == .ok && !avatar.isMoving && !Preferences.winterActive
+        calmNow = calmNow && avatar.health == .ok && !avatar.isMoving && Effects.current() == nil
         calmNow = calmNow && date.timeIntervalSince(avatar.currentSince) > 1 && time - pointerMovedAt > 1.5
         var calm = avatar.calm
         calm.reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion

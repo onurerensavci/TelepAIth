@@ -96,15 +96,7 @@ enum Preferences {
     static func setOutfit(_ slot: String, _ id: String?) { defaults.set(id ?? "", forKey: "outfit." + slot) }
 
     /// Kış kostümü şu an takılı mı?
-    static var winterActive: Bool {
-        switch costume {
-        case "winter": return true
-        case "off": return false
-        default:
-            let c = Calendar.current.dateComponents([.month, .day], from: Date())
-            return c.month == 12 || (c.month == 1 && (c.day ?? 99) <= 6)
-        }
-    }
+    static var winterActive: Bool { Effects.current() == "winter" }
 
     /// Claude Code izin isteyince robotun balonunda İzin ver / Reddet düğmeleri
     static var approveFromRobot: Bool {
