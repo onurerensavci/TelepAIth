@@ -138,9 +138,13 @@ internal sealed class RobotWindow : Window
         var r = _lastRect;
         var dpi = VisualTreeHelper.GetDpi(this).DpiScaleX;
         var local = new Point((c.X - r.X) / dpi, (c.Y - r.Y) / dpi);
-        var over = Contains(_view.HeadRect, local) || Contains(_view.BubbleRect, local) || _view.MiniAt(local) != null;
+        BubbleHovered = Contains(_view.BubbleRect, local);
+        var over = Contains(_view.HeadRect, local) || BubbleHovered || _view.MiniAt(local) != null;
         Native.SetClickThrough(_hwnd, !over);
     }
+
+    /// <summary>İmleç balonun (sohbet listesinin) üstünde mi: üstündeyken liste kapanmaz</summary>
+    public bool BubbleHovered { get; private set; }
 
     private static bool Contains(Rect r, Point p) => !r.IsEmpty && r.Contains(p);
 

@@ -376,22 +376,14 @@ internal sealed class RobotManager
                 break;
             default:
                 _avatar.Current.Wake();
-                // Sohbet listesi: açıksa kapat; çalışan/bekleyen/yeni biten sohbet varsa aç, yoksa son olaylar
+                // Tıklayınca her zaman sohbetler: açıksa kapat, değilse aç (sohbet yoksa "şu an sohbet yok" yazar)
                 if (_avatar.ChatList != null)
                 {
                     _avatar.ChatList = null;
                     break;
                 }
-                var rows = DisplayPicker.AllChatRows(AllModels, DateTime.Now);
-                if (rows.Count > 0)
-                {
-                    _avatar.ChatList = rows;
-                    _avatar.ChatListUntil = DateTime.Now.AddSeconds(10);
-                }
-                else
-                {
-                    _avatar.Current.ShowHistory();
-                }
+                _avatar.ChatList = DisplayPicker.AllChatRows(AllModels, DateTime.Now);
+                _avatar.ChatListUntil = DateTime.Now.AddSeconds(15);
                 break;
         }
     }
@@ -758,8 +750,9 @@ internal sealed class RobotManager
             // Açık sohbet listesi canlı kalsın (süreler ilerler), süresi dolunca kapansın
             if (_avatar.ChatList != null)
             {
-                var rows = DisplayPicker.AllChatRows(AllModels, date);
-                _avatar.ChatList = date > _avatar.ChatListUntil || rows.Count == 0 ? null : rows;
+                // Fare listenin üstündeyken kapanmasın
+                if (_window?.BubbleHovered == true && _avatar.ChatListUntil < date.AddSeconds(4)) _avatar.ChatListUntil = date.AddSeconds(4);
+                _avatar.ChatList = date > _avatar.ChatListUntil ? null : DisplayPicker.AllChatRows(AllModels, date);
             }
             _avatar.Extras = DisplayPicker.Extras(_avatar.Current, date);
             // Kullanım sınırları: halkalar, gözdeki "%", yenilenme bildirimi

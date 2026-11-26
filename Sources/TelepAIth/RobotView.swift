@@ -107,7 +107,7 @@ struct AvatarStage: View {
 
     @ViewBuilder
     private var bubble: some View {
-        if let rows = chatList, !rows.isEmpty {
+        if let rows = chatList {
             ChatListBubble(rows: rows, color: Color(nsColor: model.theme.color), tailOnTop: bubbleBelow, tailLeading: alignLeft,
                            usage: usage,
                            hoverIndex: { [weak avatar = pointer?.avatar] in avatar?.chatRowIndex(at: NSEvent.mouseLocation) })
@@ -367,7 +367,7 @@ struct ChatListBubble: View {
                     .font(.system(size: 10.5, weight: .bold))
                     .foregroundColor(.primary)
                 Spacer(minLength: 6)
-                Text(RobotModel.chatSummary(rows))
+                Text(rows.isEmpty ? "" : RobotModel.chatSummary(rows))
                     .font(.system(size: 9.5))
                     .foregroundColor(.secondary)
                     .lineLimit(1)
@@ -390,33 +390,69 @@ struct ChatListBubble: View {
                 .padding(.horizontal, 6)
                 .frame(height: 14)
             }
+            if rows.isEmpty {
+                // Hiç sohbet yok: boş liste yerine ne olacağını söyle
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(loc("Şu an sohbet yok", "No chats right now"))
+                        .font(.system(size: 10.5, weight: .medium)).foregroundColor(.primary)
+                    Text(loc("Bir sohbet çalışınca, seni bekleyince ya da bitince burada görünür.",
+                             "Chats show up here when they work, need you or finish."))
+                        .font(.system(size: 9.5)).foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(.horizontal, 6)
+                .padding(.vertical, 4)
+            }
             ForEach(Array(shown.enumerated()), id: \.element.sessionID) { index, row in
                 let aiColor = Color(nsColor: Themes.shared.theme(for: row.source).color)
+                let tone = ChatListBubble.toneColor(row.tone, ai: aiColor)
                 let hovered = hover == index
-                HStack(spacing: 6) {
+                let working = row.tone == "working"
+                HStack(spacing: 5) {
+                    // Hangi AI: solda ince şerit (Claude turuncu, GPT mavi)
+                    Capsule().fill(aiColor).frame(width: 3, height: 12)
                     ChatStateIcon(state: row.state, color: aiColor, time: time)
                         .frame(width: 12, height: 12)
                     Text(row.title)
                         .font(.system(size: 10.5, weight: row.unread ? .bold : .medium))
-                        .foregroundColor(.primary)
+                        .foregroundColor(row.tone == "seen" ? .secondary : .primary)
                         .lineLimit(1)
                         .truncationMode(.tail)
                     Spacer(minLength: 6)
-                    Text(row.time)
-                        .font(.system(size: 9.5))
-                        .foregroundColor(.secondary)
+                    // Durum ve süre, durumun renginde: "bekliyor · 2 dk", "6 sn", "5 dk önce"
+                    Text(row.label)
+                        .font(.system(size: 9.5, weight: row.tone == "seen" ? .regular : .semibold))
+                        .foregroundColor(row.tone == "seen" ? .secondary : tone)
                         .lineLimit(1)
                         .fixedSize()
                     // Bildirim gelmiş ama bakılmamış: mavi nokta (sohbete gidince söner)
-                    Circle()
-                        .fill(row.unread ? ChatListBubble.unreadColor : Color.clear)
-                        .frame(width: 7, height: 7)
+                    if row.unread {
+                        Circle().fill(ChatListBubble.unreadColor).frame(width: 6, height: 6)
+                    }
                 }
-                .opacity(hovered ? 0.82 : 1)
-                .padding(.horizontal, 6)
+                .padding(.horizontal, 5)
                 .frame(height: 20)
-                // AI renginde hafif zemin (Claude turuncu, GPT mavi); fare üstündeyken biraz koyulaşır
-                .background(RoundedRectangle(cornerRadius: 6).fill(aiColor.opacity(hovered ? 0.28 : 0.13)).padding(.vertical, 1))
+                // Renk kodu: turuncu seni bekliyor, AI rengi çalışıyor (üstünden ışık geçer), yeşil yeni bitti, kırmızı hata, gri bakılmış
+                .background(
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(tone.opacity((row.tone == "seen" ? 0.07 : 0.15) + (hovered ? 0.14 : 0)))
+                        if working {
+                            GeometryReader { g in
+                                let phase = (time * 0.55).truncatingRemainder(dividingBy: 1)
+                                LinearGradient(colors: [tone.opacity(0), tone.opacity(0.4), tone.opacity(0)], startPoint: .leading, endPoint: .trailing)
+                                    .frame(width: g.size.width * 0.45)
+                                    .offset(x: (phase * 1.45 - 0.45) * g.size.width)
+                            }
+                            .clipShape(RoundedRectangle(cornerRadius: 6))
+                        }
+                        if row.tone == "waiting" {
+                            RoundedRectangle(cornerRadius: 6)
+                                .stroke(tone.opacity(0.35 + 0.35 * (0.5 + 0.5 * sin(time * 4))), lineWidth: 1)
+                        }
+                    }
+                    .padding(.vertical, 1)
+                )
                 .contentShape(Rectangle())
                 .background(GeometryReader { g in
                     Color.clear.preference(key: ChatRowFramesKey.self, value: [index: g.frame(in: .named("avatar"))])
@@ -438,6 +474,17 @@ struct ChatListBubble: View {
     }
 
     static let unreadColor = Color(red: 0.04, green: 0.52, blue: 1.0)
+
+    /// Satırın renk kodu (Windows'ta ToneColor, aynı renkler)
+    static func toneColor(_ tone: String, ai: Color) -> Color {
+        switch tone {
+        case "waiting": return Color(red: 0.96, green: 0.55, blue: 0.1)
+        case "working": return ai
+        case "error": return Color(red: 0.9, green: 0.3, blue: 0.3)
+        case "fresh": return Color(red: 0.2, green: 0.72, blue: 0.4)
+        default: return Color.gray
+        }
+    }
 }
 
 /// Sohbetin durumu tek bakışta: dönen halka (çalışıyor, AI renginde), turuncu ! (seni bekliyor),

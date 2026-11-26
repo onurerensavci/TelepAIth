@@ -54,6 +54,19 @@ final class RobotModel: ObservableObject {
         var time = ""
         /// Bildirim gelmiş ama sohbete bakılmamış (listede nokta)
         var unread = false
+        /// Listede sağda: "bekliyor · 2 dk", "6 sn" (çalışıyor), "5 dk önce" (bitti), "hata · 5 dk önce"
+        var label: String {
+            if rank == 0 { return loc("bekliyor · ", "waiting · ") + time }
+            if state == .error { return loc("hata · ", "error · ") + time }
+            return time
+        }
+        /// Renk kodu: waiting (turuncu), working (AI rengi), error (kırmızı), fresh (yeşil: yeni bitti), seen (gri: bakılmış)
+        var tone: String {
+            if rank == 0 { return "waiting" }
+            if rank == 2 { return "working" }
+            if state == .error { return "error" }
+            return rank == 1 ? "fresh" : "seen"
+        }
     }
 
     /// Ön plandaki uygulamanın açık sohbeti ("app-{pid}-…") görülüyor sayılır
@@ -651,7 +664,7 @@ final class RobotModel: ObservableObject {
                 time = shortDuration(now.timeIntervalSince(at))
                 status = loc("çalışıyor · ", "working · ") + time
                 rank = 2
-            } else if (s.state == .done || s.state == .error) && age < 15 * 60 {
+            } else if (s.state == .done || s.state == .error) && age < 2 * 3600 {   // biten sohbetler 2 saat listede kalır
                 at = s.updated
                 let ago = shortDuration(age)
                 time = loc("\(ago) önce", "\(ago) ago")

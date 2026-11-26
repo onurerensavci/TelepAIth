@@ -132,7 +132,7 @@ internal sealed class RobotView : FrameworkElement
         // Balon
         BubbleRect = Rect.Empty;
         ChatRowRects.Clear();
-        if (_avatar.ChatList is { Count: > 0 } chats)
+        if (_avatar.ChatList is { } chats)
         {
             var r = DrawChatList(dc, chats, alignLeft, below, headY);
             BubbleRect = new Rect(r.X * scale, r.Y * scale, r.Width * scale, r.Height * scale);
@@ -348,7 +348,8 @@ internal sealed class RobotView : FrameworkElement
         var usage = _avatar.Usage;
         const double usageH = 14;
         var cardW = Math.Min(W - 2 * M, 250.0);
-        var cardH = padY + titleH + usage.Count * usageH + 3 + shown.Count * ChatRowH + (more > 0 ? moreH : 0) + padY - 2;
+        const double emptyH = 40;
+        var cardH = padY + titleH + usage.Count * usageH + 3 + (rows.Count == 0 ? emptyH : shown.Count * ChatRowH) + (more > 0 ? moreH : 0) + padY - 2;
         var cardX = alignLeft ? M : W - M - cardW;
         var cardY = below ? headY + Head + Gap + TailH : headY - Gap - TailH - cardH;
         var full = DrawCard(dc, new Rect(cardX, cardY, cardW, cardH), alignLeft, below, fill, accent);
@@ -358,7 +359,7 @@ internal sealed class RobotView : FrameworkElement
         var ty = cardY + padY;
         var header = new FormattedText(L("Sohbetler", "Chats"), CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, UiBoldText, 10.5, B(primary), dpi);
         dc.DrawText(header, new Point(tx, ty + (titleH - header.Height) / 2));
-        var summary = new FormattedText(DisplayPicker.ChatSummary(rows), CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, Ui, 9.5, B(secondary), dpi)
+        var summary = new FormattedText(rows.Count == 0 ? "" : DisplayPicker.ChatSummary(rows), CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, Ui, 9.5, B(secondary), dpi)
         {
             MaxTextWidth = Math.Max(20, cardW - 2 * padX - header.Width - 8), MaxLineCount = 1, Trimming = TextTrimming.CharacterEllipsis,
         };
@@ -381,33 +382,63 @@ internal sealed class RobotView : FrameworkElement
         var hover = Mouse.GetPosition(this);
         var time = Seconds(DateTime.Now);
         var y = uy + 3;
+        if (rows.Count == 0)
+        {
+            // Hiç sohbet yok: boş liste yerine ne olacağını söyle
+            var none = new FormattedText(L("Şu an sohbet yok", "No chats right now"), CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, UiSemi, 10.5, B(primary), dpi);
+            dc.DrawText(none, new Point(tx, y + 1));
+            var hint = new FormattedText(L("Bir sohbet çalışınca, seni bekleyince ya da bitince burada görünür.", "Chats show up here when they work, need you or finish."),
+                CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, Ui, 9.5, B(secondary), dpi)
+            {
+                MaxTextWidth = cardW - 2 * padX, MaxLineCount = 2, Trimming = TextTrimming.CharacterEllipsis,
+            };
+            dc.DrawText(hint, new Point(tx, y + 1 + none.Height));
+        }
         for (var i = 0; i < shown.Count; i++)
         {
             var row = shown[i];
             var rr = new Rect(cardX + 4, y, cardW - 8, ChatRowH);
             var screen = new Rect(rr.X * scale, rr.Y * scale, rr.Width * scale, rr.Height * scale);
             ChatRowRects.Add((i, screen));
-            // AI renginde hafif zemin (Claude turuncu, GPT mavi); fare üstündeyken biraz koyulaşır
             var aiColor = C(Themes.Shared.Theme(row.Source).Color);
+            var tone = ToneColor(row.Tone, aiColor, secondary);
+            var seen = row.Tone == "seen";
             var hovered = screen.Contains(hover);
-            dc.DrawRoundedRectangle(B(aiColor, hovered ? 0.28 : 0.13), null, new Rect(rr.X, rr.Y + 1, rr.Width, rr.Height - 2), 6, 6);
-            dc.PushOpacity(hovered ? 0.82 : 1);
-            var mid = y + ChatRowH / 2;
-            DrawChatStateIcon(dc, row.State, aiColor, new Point(tx + 5, mid), time, dpi);
-            // Sağda: süre ve okunmamış noktası (bildirim gelmiş ama bakılmamış)
-            var right = cardX + cardW - padX;
-            if (row.Unread) dc.DrawEllipse(B(Unread), null, new Point(right - 3.5, mid), 3.5, 3.5);
-            var timeText = new FormattedText(row.Time, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, Ui, 9.5, B(secondary), dpi);
-            var timeX = right - 11 - timeText.Width;
-            dc.DrawText(timeText, new Point(timeX, mid - timeText.Height / 2));
-            var name = new FormattedText(row.Title, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, row.Unread ? UiBoldText : UiSemi, 10.5, B(primary), dpi)
+            // Renk kodu: turuncu seni bekliyor, AI rengi çalışıyor (üstünden ışık geçer), yeşil yeni bitti, kırmızı hata, gri bakılmış
+            var box = new Rect(rr.X, rr.Y + 1, rr.Width, rr.Height - 2);
+            dc.DrawRoundedRectangle(B(tone, (seen ? 0.07 : 0.15) + (hovered ? 0.14 : 0)), null, box, 6, 6);
+            if (row.Tone == "working")
             {
-                MaxTextWidth = Math.Max(20, timeX - 6 - (tx + 14)),
+                var phase = time * 0.55 % 1;
+                var bandW = box.Width * 0.45;
+                var bx = box.X + (phase * 1.45 - 0.45) * box.Width;
+                var sweep = new LinearGradientBrush { MappingMode = BrushMappingMode.Absolute, StartPoint = new Point(bx, 0), EndPoint = new Point(bx + bandW, 0) };
+                sweep.GradientStops.Add(new GradientStop(Color.FromArgb(0, tone.R, tone.G, tone.B), 0));
+                sweep.GradientStops.Add(new GradientStop(Color.FromArgb(0x66, tone.R, tone.G, tone.B), 0.5));
+                sweep.GradientStops.Add(new GradientStop(Color.FromArgb(0, tone.R, tone.G, tone.B), 1));
+                dc.PushClip(new RectangleGeometry(box, 6, 6));
+                dc.DrawRectangle(sweep, null, new Rect(bx, box.Y, bandW, box.Height));
+                dc.Pop();
+            }
+            else if (row.Tone == "waiting")
+                dc.DrawRoundedRectangle(null, new Pen(B(tone, 0.35 + 0.35 * (0.5 + 0.5 * Math.Sin(time * 4))), 1), box, 6, 6);
+            var mid = y + ChatRowH / 2;
+            // Hangi AI: solda ince şerit (Claude turuncu, GPT mavi)
+            dc.DrawRoundedRectangle(B(aiColor), null, new Rect(tx - 1, mid - 6, 3, 12), 1.5, 1.5);
+            DrawChatStateIcon(dc, row.State, aiColor, new Point(tx + 10, mid), time, dpi);
+            // Sağda: durum ve süre (durumun renginde) ve okunmamış noktası (bildirim gelmiş ama bakılmamış)
+            var right = cardX + cardW - padX;
+            if (row.Unread) dc.DrawEllipse(B(Unread), null, new Point(right - 3, mid), 3, 3);
+            var timeText = new FormattedText(row.Label, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, seen ? Ui : UiSemi, 9.5, B(seen ? secondary : tone), dpi);
+            var timeX = right - (row.Unread ? 10 : 0) - timeText.Width;
+            dc.DrawText(timeText, new Point(timeX, mid - timeText.Height / 2));
+            var name = new FormattedText(row.Title, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, row.Unread ? UiBoldText : UiSemi, 10.5, B(seen ? secondary : primary), dpi)
+            {
+                MaxTextWidth = Math.Max(20, timeX - 6 - (tx + 19)),
                 MaxLineCount = 1,
                 Trimming = TextTrimming.CharacterEllipsis,
             };
-            dc.DrawText(name, new Point(tx + 14, mid - name.Height / 2));
-            dc.Pop();
+            dc.DrawText(name, new Point(tx + 19, mid - name.Height / 2));
             y += ChatRowH;
         }
         if (more > 0)
@@ -419,6 +450,16 @@ internal sealed class RobotView : FrameworkElement
     }
 
     private static readonly Color Unread = Color.FromRgb(0x0A, 0x84, 0xFF);
+
+    /// <summary>Satırın renk kodu (Mac'te ChatListBubble.toneColor, aynı renkler)</summary>
+    private static Color ToneColor(string tone, Color ai, Color gray) => tone switch
+    {
+        "waiting" => Color.FromRgb(0xF5, 0x8C, 0x1A),
+        "working" => ai,
+        "error" => Color.FromRgb(0xE6, 0x4D, 0x4D),
+        "fresh" => Color.FromRgb(0x33, 0xB8, 0x66),
+        _ => gray,
+    };
     private static readonly Typeface UiBoldText = new(new FontFamily("Segoe UI Variable Text, Segoe UI"), FontStyles.Normal, FontWeights.Bold, FontStretches.Normal);
 
     /// <summary>

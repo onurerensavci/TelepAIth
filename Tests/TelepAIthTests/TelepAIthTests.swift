@@ -295,7 +295,9 @@ final class TelepAIthTests: XCTestCase {
         XCTAssertEqual(seen[2].title, "Kod incelemesi")
         XCTAssertFalse(seen[2].unread)
         XCTAssertEqual(seen[2].state, .done)
-        XCTAssertFalse(RobotModel.chatRows([claude, gpt], now: t0.addingTimeInterval(70 + 16 * 60)).contains { $0.title == "Kod incelemesi" })
+        XCTAssertTrue(RobotModel.chatRows([claude, gpt], now: t0.addingTimeInterval(70 + 16 * 60)).contains { $0.title == "Kod incelemesi" })
+        XCTAssertFalse(RobotModel.chatRows([claude, gpt], now: t0.addingTimeInterval(70 + 121 * 60)).contains { $0.title == "Kod incelemesi" })
+        XCTAssertEqual(RobotModel.chatRows([claude, gpt], now: t0.addingTimeInterval(220)).first?.tone, "waiting")
         XCTAssertEqual(shortDuration(3960), loc("1 sa 6 dk", "1 h 6 min"))
         let items = [SidebarItem(name: "Tarif", help: "", url: "https://claude.ai/chat/aaa", rect: .zero)]
         XCTAssertEqual(SidebarChats.currentTitle(items, currentChat: "https://claude.ai/chat/aaa/"), "Tarif")

@@ -38,7 +38,15 @@ public sealed class RobotModel
     /// Unread: bildirim gelmiş ama sohbete bakılmamış (listede nokta).
     /// </summary>
     public sealed record ChatRow(string Source, string SessionId, string Title, RobotState State, string Status,
-                                 AppTarget? Target, int Rank, DateTime At, string Time = "", bool Unread = false);
+                                 AppTarget? Target, int Rank, DateTime At, string Time = "", bool Unread = false)
+    {
+        /// <summary>Listede sağda: "bekliyor · 2 dk", "6 sn" (çalışıyor), "5 dk önce" (bitti), "hata · 5 dk önce"</summary>
+        public string Label => Rank == 0 ? L("bekliyor · ", "waiting · ") + Time
+            : State == RobotState.Error ? L("hata · ", "error · ") + Time : Time;
+
+        /// <summary>Renk kodu: waiting (turuncu), working (AI rengi), error (kırmızı), fresh (yeşil: yeni bitti), seen (gri: bakılmış)</summary>
+        public string Tone => Rank == 0 ? "waiting" : Rank == 2 ? "working" : State == RobotState.Error ? "error" : Rank == 1 ? "fresh" : "seen";
+    }
 
     /// <summary>Ön plandaki uygulamanın açık sohbeti ("app-{pid}-…") görülüyor sayılır</summary>
     public void MarkSeenPrefix(string prefix, DateTime now)
@@ -641,7 +649,7 @@ public sealed class RobotModel
                 status = L("çalışıyor · ", "working · ") + time;
                 rank = 2;
             }
-            else if (s.State is RobotState.Done or RobotState.Error && age < 15 * 60)
+            else if (s.State is RobotState.Done or RobotState.Error && age < 2 * 3600)   // biten sohbetler 2 saat listede kalır
             {
                 at = s.Updated;
                 var ago = ShortDuration(age);

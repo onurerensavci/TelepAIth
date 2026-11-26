@@ -1,5 +1,16 @@
 [
  {
+  "version": "0.24.0",
+  "tr": [
+   "Robota tıklayınca her zaman Sohbetler açılır; renk kodlu: turuncu seni bekliyor, yeşil yeni bitti, kırmızı hata, çalışanın üstünden ışık geçer",
+   "Biten sohbetler listede 2 saat kalır; fare üstündeyken liste kapanmaz"
+  ],
+  "en": [
+   "Clicking the robot always opens Chats, colour-coded: orange needs you, green just finished, red error, a light sweeps over working ones",
+   "Finished chats stay listed for 2 hours; the list stays open while you hover it"
+  ]
+ },
+ {
   "version": "0.23.5",
   "tr": [
    "Sohbetler listesi temizlendi: sohbetin içindeki mesajlar ve düğmeler artık sohbet gibi görünmüyor"

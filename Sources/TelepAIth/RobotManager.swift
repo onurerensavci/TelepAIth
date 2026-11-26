@@ -513,18 +513,13 @@ final class RobotManager {
             if Preferences.watchApps && !AppWatcher.isTrusted { AppWatcher.resetAndRequestTrust() }
         case .ok:
             avatar.current.wake()
-            // Sohbet listesi: açıksa kapat; çalışan/bekleyen/yeni biten sohbet varsa aç, yoksa son olaylar
+            // Tıklayınca her zaman sohbetler: açıksa kapat, değilse aç (sohbet yoksa "şu an sohbet yok" yazar)
             if avatar.chatList != nil {
                 avatar.setChatList(nil)
                 return
             }
-            let rows = RobotModel.allChatRows(allModels)
-            if rows.isEmpty {
-                avatar.current.showHistory()
-            } else {
-                avatar.chatListUntil = Date().addingTimeInterval(10)
-                avatar.setChatList(rows)
-            }
+            avatar.chatListUntil = Date().addingTimeInterval(15)
+            avatar.setChatList(RobotModel.allChatRows(allModels))
         }
     }
 
@@ -685,8 +680,11 @@ final class RobotManager {
             avatar.setMinis(RobotModel.minis(allModels, current: avatar.current, now: date))
             // Açık sohbet listesi canlı kalsın (süreler ilerler), süresi dolunca kapansın
             if avatar.chatList != nil {
-                let rows = RobotModel.allChatRows(allModels, now: date)
-                avatar.setChatList(date > avatar.chatListUntil || rows.isEmpty ? nil : rows)
+                // Fare listenin üstündeyken kapanmasın
+                if avatar.bubbleScreenRect?.contains(NSEvent.mouseLocation) == true {
+                    avatar.chatListUntil = Swift.max(avatar.chatListUntil, date.addingTimeInterval(4))
+                }
+                avatar.setChatList(date > avatar.chatListUntil ? nil : RobotModel.allChatRows(allModels, now: date))
             }
             avatar.setExtras(RobotModel.extras(current: avatar.current, now: date))
             // Kullanım sınırları: halkalar, gözdeki "%", yenilenme bildirimi

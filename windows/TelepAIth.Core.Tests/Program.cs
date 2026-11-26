@@ -667,8 +667,14 @@ public static partial class Tests
         rows = DisplayPicker.ChatRows(new[] { claude, gpt }, t0.AddSeconds(220));
         A.Eq("Kod incelemesi", rows[2].Title);
         A.True(!rows[2].Unread && rows[2].State == RobotState.Done);
-        // 15 dk'dan eski bitenler listede yok
-        A.True(DisplayPicker.ChatRows(new[] { claude, gpt }, t0.AddSeconds(70 + 16 * 60)).All(r => r.Title != "Kod incelemesi"));
+        // Renk kodu ve sağdaki yazı
+        A.Eq("seen", rows[2].Tone);
+        A.Eq("waiting", rows[0].Tone);
+        A.True(rows[0].Label.StartsWith(Text.L("bekliyor · ", "waiting · ")), rows[0].Label);
+        A.Eq("working", rows[1].Tone);
+        // 2 saatten eski bitenler listede yok
+        A.True(DisplayPicker.ChatRows(new[] { claude, gpt }, t0.AddSeconds(70 + 16 * 60)).Any(r => r.Title == "Kod incelemesi"));
+        A.True(DisplayPicker.ChatRows(new[] { claude, gpt }, t0.AddSeconds(70 + 121 * 60)).All(r => r.Title != "Kod incelemesi"));
         A.Eq(Text.L("1 sa 6 dk", "1 h 6 min"), Text.ShortDuration(3960));
         A.Eq(Text.L("40 sn", "40 s"), Text.ShortDuration(40));
         // Yan menüdeki açık sohbetin adı
