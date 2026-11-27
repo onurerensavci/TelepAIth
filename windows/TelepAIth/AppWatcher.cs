@@ -338,12 +338,14 @@ internal sealed class AppWatcher
         if (parts.Length < 3 || parts[0] is not ("app" or "bg") || !int.TryParse(parts[1], out var pid)) return false;
         (string Title, string? Url)? chat = null;
         var isOpen = false;
+        var source = "";
         try
         {
             if (_trackers.TryGetValue(pid, out var tr))
             {
                 chat = tr.FindChat(sessionId);
                 isOpen = tr.SessionId == sessionId;
+                source = tr.Source;
             }
         }
         catch { }   // izleyici aynı anda güncelliyor olabilir
@@ -355,24 +357,43 @@ internal sealed class AppWatcher
         if (isOpen) { NoteOpenChat(Text.L("zaten açık sohbet, uygulama öne getirildi", "already the open chat, app brought forward")); return true; }
         if (chat is not { } c)
         {
-            NoteOpenChat(Text.L($"bu sohbetin adı bilinmiyor ({sessionId}), sadece uygulama öne geldi", $"chat name unknown ({sessionId}), only brought the app forward"));
+            NoteOpenChat(Text.L("bu sohbetin adı bilinmiyor, sadece uygulama öne geldi", "chat name unknown, only brought the app forward"), true);
             return true;
+        }
+        // Claude sohbeti: resmî bağlantı (claude://claude.ai/chat/<id>); yan menü kapalı ya da kaydırılmış olsa da açılır
+        if (source == "claude" && SidebarChats.DeepLink(c.Url) is { } link)
+        {
+            try
+            {
+                Process.Start(new ProcessStartInfo(link) { UseShellExecute = true })?.Dispose();
+                NoteOpenChat(Text.L($"açıldı (claude:// bağlantısı): {c.Title}", $"opened (claude:// link): {c.Title}"));
+                return true;
+            }
+            catch (Exception ex) { NoteOpenChat("claude:// " + ex.Message); }
         }
         System.Threading.Tasks.Task.Run(() =>
         {
-            try { NoteOpenChat(ClickSidebarLink(hwnd, c.Title, c.Url)); }
-            catch (Exception ex) { NoteOpenChat("hata: " + ex.Message); }
+            try
+            {
+                var (found, text) = ClickSidebarLink(hwnd, c.Title, c.Url);
+                NoteOpenChat(text, !found);
+            }
+            catch (Exception ex) { NoteOpenChat("hata: " + ex.Message, true); }
         });
         return true;
     }
 
+    /// <summary>Sohbet listeden açılamadı (yan menüde yok…): robot söylesin (UI iş parçacığında çağrılır)</summary>
+    public event Action<string>? OpenChatFailed;
+
     /// <summary>Listeden son sohbet açma denemesinin sonucu (teşhis için)</summary>
     private string _openChatInfo = "—";
 
-    private void NoteOpenChat(string text)
+    private void NoteOpenChat(string text, bool failed = false)
     {
         _openChatInfo = $"{DateTime.Now:HH:mm:ss} {text}";
         Log("open chat: " + text);
+        if (failed) System.Windows.Application.Current?.Dispatcher.BeginInvoke(() => OpenChatFailed?.Invoke(text));
     }
 
     /// <summary>Aynı sohbet adı mı? (büyük/küçük harf fark etmez; yan menü uzun adı kısaltıyorsa baştan eşleşme de sayılır)</summary>
@@ -387,8 +408,8 @@ internal sealed class AppWatcher
         return Math.Min(x.Length, y.Length) >= 8 && (x.StartsWith(y, StringComparison.Ordinal) || y.StartsWith(x, StringComparison.Ordinal));
     }
 
-    /// <summary>Yan menüde sohbete bas; sonucu döner (teşhis için)</summary>
-    private static string ClickSidebarLink(IntPtr hwnd, string title, string? url)
+    /// <summary>Yan menüde sohbete bas; bulunduysa Found = true, metin teşhis için</summary>
+    private static (bool Found, string Text) ClickSidebarLink(IntPtr hwnd, string title, string? url)
     {
         var root = AutomationElement.FromHandle(hwnd);
         var key = SidebarChats.NormalizeUrl(url);
@@ -402,26 +423,39 @@ internal sealed class AppWatcher
         }
         if (best == null)
         {
-            // Bağlantı yoksa (ör. düz liste) aynı adlı öğeye tıkla
+            // Bağlantı yoksa (ör. Code oturumları gibi düz liste) aynı adlı öğeye tıkla
             var named = root.FindFirst(TreeScope.Descendants, new PropertyCondition(AutomationElement.NameProperty, title));
-            if (named?.TryGetClickablePoint(out var pt) == true)
+            if (named == null) return (false, Text.L($"yan menüde bulunamadı: {title}", $"not found in the sidebar: {title}"));
+            ScrollIntoView(named);
+            if (named.TryGetClickablePoint(out var pt))
             {
                 Native.Click((int)pt.X, (int)pt.Y);
-                return Text.L($"aynı adlı öğeye tıklandı: {title}", $"clicked the item with that name: {title}");
+                return (true, Text.L($"aynı adlı öğeye tıklandı: {title}", $"clicked the item with that name: {title}"));
             }
-            return Text.L($"yan menüde bulunamadı: {title}", $"not found in the sidebar: {title}");
+            return (true, Text.L($"bulundu ama tıklanamadı: {title}", $"found but couldn't click: {title}"));
         }
+        ScrollIntoView(best);
         if (best.TryGetCurrentPattern(InvokePattern.Pattern, out var ip))
         {
             ((InvokePattern)ip).Invoke();
-            return Text.L($"açıldı (bağlantıya basıldı): {title}", $"opened (pressed link): {title}");
+            return (true, Text.L($"açıldı (bağlantıya basıldı): {title}", $"opened (pressed link): {title}"));
         }
         if (best.TryGetClickablePoint(out var p2))
         {
             Native.Click((int)p2.X, (int)p2.Y);
-            return Text.L($"bağlantıya tıklandı: {title}", $"clicked link: {title}");
+            return (true, Text.L($"bağlantıya tıklandı: {title}", $"clicked link: {title}"));
         }
-        return Text.L($"bağlantıya basılamadı: {title}", $"couldn't press link: {title}");
+        return (true, Text.L($"bağlantıya basılamadı: {title}", $"couldn't press link: {title}"));
+    }
+
+    /// <summary>Liste kaydırılmışsa öğeyi görünür yap</summary>
+    private static void ScrollIntoView(AutomationElement element)
+    {
+        try
+        {
+            if (element.TryGetCurrentPattern(ScrollItemPattern.Pattern, out var sp)) ((ScrollItemPattern)sp).ScrollIntoView();
+        }
+        catch { }
     }
 
     /// <summary>Teşhis: yan menüde durum gibi görünen öğeler ve ipucu/açıklaması olanlar (algılamayı ayarlamak için)</summary>

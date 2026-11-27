@@ -1,5 +1,18 @@
 [
  {
+  "version": "0.24.2",
+  "tr": [
+   "Listeden ya da bildirimden seçilen Claude sohbeti artık resmî claude:// bağlantısıyla doğrudan açılıyor",
+   "Code oturumları gibi bağlantısız sohbetlerde yan menüye basıp açıldığını kontrol ediyor; bulamazsa robot söylüyor",
+   "Açık sohbetin adı daha sık doğru çıkıyor (\"Açık sohbet\" yerine)"
+  ],
+  "en": [
+   "Claude chats picked from the list or a notification now open directly via the official claude:// link",
+   "For chats without a link (like Code sessions) it presses the sidebar and checks it opened; if it can't find it, the robot says so",
+   "The open chat's name shows up more often (instead of \"Open chat\")"
+  ]
+ },
+ {
   "version": "0.24.1",
   "tr": [
    "Güncellemeye basınca pencere açılmadan doğrudan güncelleniyor; robot açılınca neler geldiğini söylüyor"

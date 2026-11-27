@@ -138,5 +138,21 @@ final class RoomTests: XCTestCase {
         XCTAssertTrue(junk.isEmpty)
         XCTAssertEqual(SidebarChats.stripStatus("You said: merhaba"), "")
         XCTAssertEqual(SidebarChats.stripStatus("Copywriting fikirleri"), "Copywriting fikirleri")
+        // Claude sohbetleri resmî bağlantıyla açılır
+        XCTAssertEqual(SidebarChats.deepLink("https://claude.ai/chat/0b6a5e2c-1d2f-4c3b-9a8e-123456789abc?x=1")?.absoluteString,
+                       "claude://claude.ai/chat/0b6a5e2c-1d2f-4c3b-9a8e-123456789abc")
+        XCTAssertNil(SidebarChats.deepLink("https://claude.ai/recents"))
+        XCTAssertNil(SidebarChats.deepLink("https://chatgpt.com/c/0b6a5e2c-1d2f"))
+        // Açık sohbetin adı: adresi eşleşen bağlantı; yoksa seçili bağlantı; yoksa seçili satır (sekmeler sayılmaz)
+        let side = [
+            SidebarItem(name: "Chats", help: "", url: "https://claude.ai/recents", rect: CGRect(x: 0, y: 0, width: 100, height: 20), current: true),
+            SidebarItem(name: "Code", help: "", url: nil, rect: CGRect(x: 0, y: 30, width: 100, height: 20), current: true),
+            SidebarItem(name: "Video kurgusu", help: "", url: "https://claude.ai/chat/aaa", rect: CGRect(x: 0, y: 60, width: 100, height: 20)),
+        ]
+        XCTAssertEqual(SidebarChats.currentTitle(side, currentChat: "https://claude.ai/chat/aaa"), "Video kurgusu")
+        XCTAssertNil(SidebarChats.currentTitle(side, currentChat: nil))
+        let code = [SidebarItem(name: "Klasördeki üç versiyonu karşılaştır", help: "", url: nil,
+                                rect: CGRect(x: 0, y: 0, width: 200, height: 20), current: true)]
+        XCTAssertEqual(SidebarChats.currentTitle(code, currentChat: nil), "Klasördeki üç versiyonu karşılaştır")
     }
 }

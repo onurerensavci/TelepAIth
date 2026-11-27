@@ -98,6 +98,9 @@ internal sealed class RobotManager
         Notifier.OnClick = Activate;
 
         _watcher.EventFound += e => Application.Current.Dispatcher.BeginInvoke(() => Handle(e));
+        // Listeden seçilen sohbet açılamadıysa söyle (sessizce yanlış sohbette kalmasın)
+        _watcher.OpenChatFailed += _ => _avatar?.Current.Say(WithEmoji("🔎", L("Bu sohbeti uygulamanın yan menüsünde bulamadım, uygulamayı öne getirdim. Yan menü açık mı?",
+            "I couldn't find this chat in the app's sidebar, so I brought the app forward. Is the sidebar open?")), 7);
         // Claude/ChatGPT (yeniden) açıldı: robot uyansın ve söylesin
         _watcher.AppOpened += (source, name) => Application.Current.Dispatcher.BeginInvoke(() =>
         {

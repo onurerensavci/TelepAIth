@@ -622,7 +622,7 @@ public sealed class SidebarChats
             var title = StripStatus(it.Name);
             if (it.Url != null) visible.Add(KeyOf(it.Url, title));
             if (title.Length >= 2) visible.Add("t:" + title.ToLowerInvariant());
-            if (it.Current && it.Url != null) currentRows.Add(KeyOf(it.Url, title));
+            if (it.Current && (it.Url != null || title.Length >= 2)) currentRows.Add(KeyOf(it.Url, title));
         }
         if (currentKey != null) currentRows.Add(currentKey);
 
@@ -686,16 +686,52 @@ public sealed class SidebarChats
         return _known.TryGetValue(sessionId, out var k) ? k : null;
     }
 
-    /// <summary>Yan menüde açık sohbetin adı (seçili satır ya da adresi açık sohbetinkiyle aynı olan)</summary>
+    /// <summary>
+    /// Claude masaüstünün resmî bağlantısı: claude.ai/chat/&lt;id&gt; → claude://claude.ai/chat/&lt;id&gt;.
+    /// Uygulama bu bağlantıyla o sohbeti doğrudan açar (yan menüde aramaya gerek kalmaz). (Mac'te deepLink)
+    /// </summary>
+    public static string? DeepLink(string? url)
+    {
+        if (url == null || !Uri.TryCreate(url, UriKind.Absolute, out var u)) return null;
+        var host = u.Host.ToLowerInvariant();
+        if (host != "claude.ai" && !host.EndsWith(".claude.ai", StringComparison.Ordinal)) return null;
+        var parts = u.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length < 2) return null;
+        var kind = parts[0].ToLowerInvariant();
+        if (kind is not ("chat" or "project")) return null;
+        var id = parts[1];
+        if (id.Length < 8 || !id.All(c => Uri.IsHexDigit(c) || c == '-')) return null;
+        return $"claude://claude.ai/{kind}/{id}";
+    }
+
+    /// <summary>Yan menüdeki gezinme sekmeleri (seçili olsalar da sohbet adı değildir)</summary>
+    private static readonly HashSet<string> NavWords = new()
+    {
+        "chat", "chats", "code", "cowork", "projects", "artifacts", "recents", "home", "search", "new chat", "settings",
+        "sohbet", "sohbetler", "kod", "projeler", "son kullanılanlar", "ana sayfa", "ara", "yeni sohbet", "ayarlar",
+    };
+
+    /// <summary>
+    /// Yan menüde açık sohbetin adı: önce adresi açık sohbetinkiyle aynı olan bağlantı, sonra seçili bağlantı,
+    /// en son seçili satır (Code oturumları gibi bağlantısız listeler). Gezinme sekmeleri ("Chats", "Code") sayılmaz.
+    /// </summary>
     public static string? CurrentTitle(IReadOnlyList<SidebarItem> items, string? currentChat)
     {
         var key = NormalizeUrl(currentChat);
-        foreach (var it in items)
+        // Sohbet adresi (claude.ai/chat/…, chatgpt.com/c/…) taşıyan bağlantının adı, "Kod" gibi sekme adlarına benzese de sohbet adıdır
+        static bool IsChatLink(string? url) => NormalizeUrl(url) is { } u && (u.Contains("/chat/") || u.Contains("/c/"));
+        string? Usable(SidebarItem it, int min)
         {
             var title = StripStatus(it.Name);
-            if (title.Length < 2) continue;
-            if ((it.Current && it.Url != null) || (key != null && it.Url != null && NormalizeUrl(it.Url) == key)) return title;
+            return title.Length >= min && (IsChatLink(it.Url) || !NavWords.Contains(title.Trim().ToLowerInvariant().TrimEnd('.', '…', ' '))) ? title : null;
         }
+        if (key != null)
+            foreach (var it in items)
+                if (it.Url != null && NormalizeUrl(it.Url) == key && StripStatus(it.Name) is { Length: >= 2 } t) return t;
+        foreach (var it in items)
+            if (it.Current && it.Url != null && Usable(it, 2) is { } t) return t;
+        foreach (var it in items)
+            if (it.Current && it.Url == null && Usable(it, 4) is { } t) return t;
         return null;
     }
 

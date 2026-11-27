@@ -172,5 +172,21 @@ public static partial class Tests
         A.Eq(0, junk.Count);
         A.Eq("", SidebarChats.StripStatus("You said: merhaba"));
         A.Eq("Copywriting fikirleri", SidebarChats.StripStatus("Copywriting fikirleri"));
+        // Claude sohbetleri resmî bağlantıyla açılır
+        A.Eq("claude://claude.ai/chat/0b6a5e2c-1d2f-4c3b-9a8e-123456789abc", SidebarChats.DeepLink("https://claude.ai/chat/0b6a5e2c-1d2f-4c3b-9a8e-123456789abc?x=1"));
+        A.True(SidebarChats.DeepLink("https://claude.ai/recents") == null);
+        A.True(SidebarChats.DeepLink("https://chatgpt.com/c/0b6a5e2c-1d2f") == null);
+        A.True(SidebarChats.DeepLink(null) == null);
+        // Açık sohbetin adı: adresi eşleşen bağlantı; yoksa seçili bağlantı; yoksa seçili satır (sekmeler sayılmaz)
+        var side = new[]
+        {
+            new SidebarItem("Chats", "", "https://claude.ai/recents", new RectD(0, 0, 100, 20), true),
+            new SidebarItem("Code", "", null, new RectD(0, 30, 100, 20), true),
+            new SidebarItem("Video kurgusu", "", "https://claude.ai/chat/aaa", new RectD(0, 60, 100, 20)),
+        };
+        A.Eq("Video kurgusu", SidebarChats.CurrentTitle(side, "https://claude.ai/chat/aaa"));
+        A.True(SidebarChats.CurrentTitle(side, null) == null);
+        var code = new[] { new SidebarItem("Klasördeki üç versiyonu karşılaştır", "", null, new RectD(0, 0, 200, 20), true) };
+        A.Eq("Klasördeki üç versiyonu karşılaştır", SidebarChats.CurrentTitle(code, null));
     }
 }

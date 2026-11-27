@@ -123,6 +123,24 @@ final class SidebarChats {
         return (host + path).lowercased()
     }
 
+    /// Claude masaüstünün resmî bağlantısı: claude.ai/chat/<id> → claude://claude.ai/chat/<id>.
+    /// Uygulama bu bağlantıyla o sohbeti doğrudan açar (yan menüde aramaya gerek kalmaz). (Windows'ta DeepLink)
+    static func deepLink(_ url: String?) -> URL? {
+        guard let url = url, let u = URL(string: url), let host = u.host?.lowercased(),
+              host == "claude.ai" || host.hasSuffix(".claude.ai") else { return nil }
+        let parts = u.path.split(separator: "/").map(String.init)
+        guard parts.count >= 2, ["chat", "project"].contains(parts[0].lowercased()) else { return nil }
+        let id = parts[1]
+        guard id.count >= 8, id.allSatisfy({ $0.isHexDigit || $0 == "-" }) else { return nil }
+        return URL(string: "claude://claude.ai/\(parts[0].lowercased())/\(id)")
+    }
+
+    /// Yan menüdeki gezinme sekmeleri (seçili olsalar da sohbet adı değildir)
+    private static let navWords: Set<String> = [
+        "chat", "chats", "code", "cowork", "projects", "artifacts", "recents", "home", "search", "new chat", "settings",
+        "sohbet", "sohbetler", "kod", "projeler", "son kullanılanlar", "ana sayfa", "ara", "yeni sohbet", "ayarlar",
+    ]
+
     private static func key(url: String?, title: String) -> String {
         normalizeURL(url) ?? "t:" + title.lowercased()
     }
@@ -200,7 +218,7 @@ final class SidebarChats {
             let title = SidebarChats.stripStatus(it.name)
             if it.url != nil { visible.insert(SidebarChats.key(url: it.url, title: title)) }
             if title.count >= 2 { visible.insert("t:" + title.lowercased()) }
-            if it.current && it.url != nil { currentRows.insert(SidebarChats.key(url: it.url, title: title)) }
+            if it.current && (it.url != nil || title.count >= 2) { currentRows.insert(SidebarChats.key(url: it.url, title: title)) }
         }
         if let k = currentKey { currentRows.insert(k) }
 
@@ -255,14 +273,28 @@ final class SidebarChats {
         return known[sessionID]
     }
 
-    /// Yan menüde açık sohbetin adı (seçili satır ya da adresi açık sohbetinkiyle aynı olan)
+    /// Yan menüde açık sohbetin adı: önce adresi açık sohbetinkiyle aynı olan bağlantı, sonra seçili bağlantı,
+    /// en son seçili satır (Code oturumları gibi bağlantısız listeler). Gezinme sekmeleri ("Chats", "Code") sayılmaz.
     static func currentTitle(_ items: [SidebarItem], currentChat: String?) -> String? {
         let key = normalizeURL(currentChat)
-        for it in items {
-            let title = stripStatus(it.name)
-            guard title.count >= 2, let url = it.url else { continue }
-            if it.current || (key != nil && normalizeURL(url) == key) { return title }
+        // Sohbet adresi (claude.ai/chat/…, chatgpt.com/c/…) taşıyan bağlantının adı, "Kod" gibi sekme adlarına benzese de sohbet adıdır
+        func isChatLink(_ url: String?) -> Bool {
+            guard let u = normalizeURL(url) else { return false }
+            return u.contains("/chat/") || u.contains("/c/")
         }
+        func usable(_ it: SidebarItem, min: Int) -> String? {
+            let title = stripStatus(it.name)
+            guard title.count >= min, isChatLink(it.url) || !navWords.contains(normalized(title)) else { return nil }
+            return title
+        }
+        if let key = key {
+            for it in items where it.url != nil && normalizeURL(it.url) == key {
+                let title = stripStatus(it.name)
+                if title.count >= 2 { return title }
+            }
+        }
+        for it in items where it.current && it.url != nil { if let t = usable(it, min: 2) { return t } }
+        for it in items where it.current && it.url == nil { if let t = usable(it, min: 4) { return t } }
         return nil
     }
 

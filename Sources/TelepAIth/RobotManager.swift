@@ -136,6 +136,11 @@ final class RobotManager {
         Notifier.shared.onOpenChat = { [weak self] source, session, target in self?.openChat(source: source, sessionID: session, target: target) }
 
         watcher.onEvent = { [weak self] event in self?.handle(event) }
+        // Listeden seçilen sohbet açılamadıysa söyle (sessizce yanlış sohbette kalmasın)
+        watcher.onOpenChatFailed = { [weak self] _ in
+            self?.avatar?.current.say(withEmoji("🔎", loc("Bu sohbeti uygulamanın yan menüsünde bulamadım, uygulamayı öne getirdim. Yan menü açık mı?",
+                                                          "I couldn't find this chat in the app's sidebar, so I brought the app forward. Is the sidebar open?")), for: 7)
+        }
         // Claude/ChatGPT (yeniden) açıldı: robot uyansın ve söylesin
         watcher.onAppOpened = { [weak self] source, name in
             guard let self = self else { return }

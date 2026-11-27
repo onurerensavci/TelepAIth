@@ -689,50 +689,130 @@ final class AppWatcher {
 
     /// Listeden seçilen sohbeti aç: uygulamayı öne getir; açık sohbet değilse yan menüde o sohbetin bağlantısını bul ve bas.
     /// false: oturum bir masaüstü uygulamasının değil ya da uygulama kapalı. (Windows'ta AppWatcher.OpenChat)
+    /// Listeden ya da bildirimden seçilen sohbeti aç. Sıra:
+    /// 1) zaten açık sohbetse uygulamayı öne getir;
+    /// 2) Claude sohbetiyse resmî bağlantıyla (claude://claude.ai/chat/<id>) doğrudan aç;
+    /// 3) değilse yan menüde bul, görünür yap, bas ve gerçekten açıldı mı bak; açılmadıysa ortasına tıkla;
+    ///    yan menü kapalıysa açmayı dene. Hiç bulunamazsa robot söyler (onOpenChatFailed).
     func openChat(_ sessionID: String) -> Bool {
         let parts = sessionID.split(separator: "-")
         guard parts.count >= 3, parts[0] == "app" || parts[0] == "bg", let pid = Int32(parts[1]),
               let app = NSRunningApplication(processIdentifier: pid), !app.isTerminated else { return false }
+        app.unhide()
         app.activate(options: [.activateAllWindows])
+        let bundleURL = app.bundleURL
         queue.async {
             // Sonucu teşhise yaz (tutmazsa nerede takıldığı görünsün)
-            func note(_ text: String) {
+            func note(_ text: String, failed: Bool = false) {
                 self.states[pid]?.openChatInfo = "\(AppWatcher.clock.string(from: Date())) \(text)"
                 AppWatcher.log("sohbet açma: " + text)
+                if failed { DispatchQueue.main.async { self.onOpenChatFailed?(text) } }
             }
             guard let st = self.states[pid] else { return }
             if st.session(pid) == sessionID { note(loc("zaten açık sohbet, uygulama öne getirildi", "already the open chat, app brought forward")); return }
             guard let chat = st.knownChats[sessionID] ?? st.background?.find(sessionID) else {
-                note(loc("bu sohbetin adı bilinmiyor (\(sessionID)), sadece uygulama öne geldi",
-                         "chat name unknown (\(sessionID)), only brought the app forward"))
+                note(loc("bu sohbetin adı bilinmiyor, sadece uygulama öne geldi", "chat name unknown, only brought the app forward"), failed: true)
                 return
             }
-            // Uygulama öne gelsin, sonra bas
-            Thread.sleep(forTimeInterval: 0.25)
-            let axApp = AXUIElementCreateApplication(pid)
-            AXUIElementSetMessagingTimeout(axApp, 1.0)
-            guard let window = AppWatcher.windows(of: axApp).first, let wf = AppWatcher.frame(window) else {
-                note(loc("pencere bulunamadı", "window not found"))
+            // Claude sohbeti: resmî bağlantı (en sağlam yol; yan menü kapalı ya da kaydırılmış olsa da açılır)
+            if st.source == "claude", let link = SidebarChats.deepLink(chat.url) {
+                DispatchQueue.main.async {
+                    if let bundleURL = bundleURL {
+                        NSWorkspace.shared.open([link], withApplicationAt: bundleURL, configuration: NSWorkspace.OpenConfiguration())
+                    } else {
+                        NSWorkspace.shared.open(link)
+                    }
+                }
+                note(loc("açıldı (claude:// bağlantısı): \(chat.title)", "opened (claude:// link): \(chat.title)"))
                 return
             }
-            let zone = CGRect(x: wf.minX, y: wf.minY, width: wf.width * 0.4, height: wf.height)
-            guard let hit = AppWatcher.findSidebarLink(window, zone: zone, title: chat.title, url: chat.url) else {
-                note(loc("yan menüde bulunamadı: \(chat.title)", "not found in the sidebar: \(chat.title)"))
-                return
-            }
-            let (element, isLink) = hit
-            if isLink {
-                let result = AXUIElementPerformAction(element, kAXPressAction as CFString)
-                if result == .success { note(loc("açıldı (bağlantıya basıldı): \(chat.title)", "opened (pressed link): \(chat.title)")); return }
-                note(loc("bağlantıya basılamadı (\(result.rawValue)), tıklanıyor: \(chat.title)", "couldn't press link (\(result.rawValue)), clicking: \(chat.title)"))
-            }
-            // Basılamadıysa (bağlantı değil ya da reddetti): ortasına tıkla, fare yerine dönsün
-            if let f = AppWatcher.frame(element) {
-                AppWatcher.click(at: CGPoint(x: f.midX, y: f.midY))
-                if !isLink { note(loc("aynı adlı öğeye tıklandı: \(chat.title)", "clicked the item with that name: \(chat.title)")) }
-            }
+            // Uygulama öne gelsin, sonra yan menüde bas
+            Thread.sleep(forTimeInterval: 0.3)
+            let result = AppWatcher.openInSidebar(pid: pid, title: chat.title, url: chat.url)
+            note(result.text, failed: !result.found)
         }
         return true
+    }
+
+    /// Sohbet listeden açılamadı (yan menüde yok…): robot söylesin
+    var onOpenChatFailed: ((String) -> Void)?
+
+    private static let openSidebarLabels = ["open sidebar", "expand sidebar", "show sidebar",
+                                            "kenar çubuğunu aç", "kenar çubuğunu göster", "yan menüyü aç", "yan menüyü göster"]
+
+    /// Yan menüde sohbeti bulup açar; bulunduysa found = true
+    private static func openInSidebar(pid: pid_t, title: String, url: String?) -> (found: Bool, text: String) {
+        let axApp = AXUIElementCreateApplication(pid)
+        AXUIElementSetMessagingTimeout(axApp, 1.0)
+        func search() -> (AXUIElement, Bool, AXUIElement)? {
+            for window in windows(of: axApp) {
+                guard let wf = frame(window), wf.width >= 300 else { continue }
+                let zone = CGRect(x: wf.minX, y: wf.minY, width: wf.width * 0.45, height: wf.height)
+                if let hit = findSidebarLink(window, zone: zone, title: title, url: url) { return (hit.0, hit.1, window) }
+            }
+            return nil
+        }
+        var hit = search()
+        // Yan menü kapalıysa açmayı dene, sonra yeniden ara
+        if hit == nil, let button = windows(of: axApp).lazy.compactMap({ findButton($0, labels: openSidebarLabels) }).first {
+            AXUIElementPerformAction(button, kAXPressAction as CFString)
+            Thread.sleep(forTimeInterval: 0.5)
+            hit = search()
+        }
+        guard let (element, isLink, window) = hit else {
+            return (false, loc("yan menüde bulunamadı: \(title)", "not found in the sidebar: \(title)"))
+        }
+        // Liste kaydırılmışsa önce görünür yap
+        AXUIElementPerformAction(element, "AXScrollToVisible" as CFString)
+        if isLink, AXUIElementPerformAction(element, kAXPressAction as CFString) == .success {
+            Thread.sleep(forTimeInterval: 0.6)
+            if opened(element, window: window, url: url) { return (true, loc("açıldı (bağlantıya basıldı): \(title)", "opened (pressed link): \(title)")) }
+        }
+        // Basılamadı ya da açılmadı: ortasına tıkla (fare yerine döner)
+        guard let f = frame(element) else { return (true, loc("bulundu ama tıklanamadı: \(title)", "found but couldn't click: \(title)")) }
+        click(at: CGPoint(x: f.midX, y: f.midY))
+        Thread.sleep(forTimeInterval: 0.6)
+        return (true, opened(element, window: window, url: url)
+            ? loc("açıldı (tıklandı): \(title)", "opened (clicked): \(title)")
+            : loc("tıklandı, açıldığı doğrulanamadı: \(title)", "clicked, couldn't confirm it opened: \(title)"))
+    }
+
+    /// Bastıktan sonra sohbet gerçekten açıldı mı? (satır seçili oldu ya da sayfanın adresi o sohbetinki)
+    private static func opened(_ element: AXUIElement, window: AXUIElement, url: String?) -> Bool {
+        let aria = string(element, "AXARIACurrent") ?? ""
+        if (!aria.isEmpty && aria != "false") || (value(element, kAXSelectedAttribute) as? Bool) == true { return true }
+        guard let key = SidebarChats.normalizeURL(url) else { return false }
+        return SidebarChats.normalizeURL(pageURL(window)) == key
+    }
+
+    /// Penceredeki web sayfasının adresi (Electron uygulamaları: AXWebArea'nın AXURL'si)
+    private static func pageURL(_ window: AXUIElement) -> String? {
+        var queue: [(AXUIElement, Int)] = [(window, 0)]
+        var visited = 0
+        while !queue.isEmpty, visited < 600 {
+            let (element, depth) = queue.removeFirst()
+            visited += 1
+            if string(element, kAXRoleAttribute) == "AXWebArea", let u = value(element, "AXURL") as? URL { return u.absoluteString }
+            guard depth < 12, let kids = children(element) else { continue }
+            queue.append(contentsOf: kids.map { ($0, depth + 1) })
+        }
+        return nil
+    }
+
+    /// Adı verilen yazılardan biri olan düğme (ör. "Open sidebar")
+    private static func findButton(_ root: AXUIElement, labels: [String]) -> AXUIElement? {
+        var stack: [(AXUIElement, Int)] = [(root, 0)]
+        var visited = 0
+        while visited < 3000, let (element, depth) = stack.popLast() {
+            visited += 1
+            if string(element, kAXRoleAttribute) == kAXButtonRole {
+                let l = label(of: element).trimmingCharacters(in: .whitespaces).lowercased()
+                if labels.contains(l) { return element }
+            }
+            guard depth < 40, let kids = children(element) else { continue }
+            for child in kids { stack.append((child, depth + 1)) }
+        }
+        return nil
     }
 
     /// Algılama günlüğüne bir satır (Yardım → Algılama günlüğünü aç)
@@ -827,7 +907,9 @@ final class AppWatcher {
                 let aria = string(element, "AXARIACurrent") ?? ""
                 let current = (!aria.isEmpty && aria != "false") || (value(element, kAXSelectedAttribute) as? Bool) == true
                 if !name.isEmpty || !help.isEmpty || link != nil {
-                    items.append(SidebarItem(name: name, help: help, url: link, rect: f, current: current && role == "AXLink"))
+                    // Seçili satır: bağlantı (sohbet) ya da bağlantısız liste satırı (Code oturumu); sekmeler sayılmaz
+                    items.append(SidebarItem(name: name, help: help, url: link, rect: f,
+                                             current: current && role != "AXRadioButton" && role != "AXTab" && role != kAXStaticTextRole))
                 }
             }
             if role == kAXImageRole || role == kAXStaticTextRole { continue }
