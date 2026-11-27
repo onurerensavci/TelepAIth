@@ -450,11 +450,11 @@ final class AppController: NSObject {
                 let alert = NSAlert()
                 alert.messageText = loc("Anlatıcı Claude masaüstüne eklendi", "Narrator added to Claude desktop")
                 let trText = "1) Claude uygulamasını kapatıp yeniden aç.\n"
-                    + "2) Claude'un ne zaman haber vereceğini bilmesi için bu talimatı Claude → Ayarlar → Profil'deki tercihlere ekle (aşağıdaki düğme kopyalar):\n\n"
+                    + "2) Claude'un ne zaman haber vereceğini bilmesi için bu talimatı Claude'da sol alttaki adına tıklayıp Settings → Your Claude → Instructions kutusuna yapıştır (aşağıdaki düğme kopyalar):\n\n"
                     + NarratorInstaller.suggestedInstruction
                     + "\n\nClaude Code için Terminal'de bir kere:\n" + NarratorInstaller.claudeCodeCommand
                 let enText = "1) Quit and reopen the Claude app.\n"
-                    + "2) Add this to Claude → Settings → Profile preferences so Claude knows when to report (the button copies it):\n\n"
+                    + "2) So Claude knows when to report, paste this in Claude: click your name in the lower left → Settings → Your Claude → Instructions (the button copies it):\n\n"
                     + NarratorInstaller.suggestedInstruction
                     + "\n\nFor Claude Code, run once in Terminal:\n" + NarratorInstaller.claudeCodeCommand
                 alert.informativeText = loc(trText, enText)

@@ -105,7 +105,7 @@
 | **Claude ve ChatGPT uygulamaları** | Masaüstü uygulamalarını ekrandan izler | Erişilebilirlik izni ister, varsayılan açık |
 | **Claude Code** | `~/.claude/settings.json`'a hook ekler | Yeni açılan oturumlar haber verir |
 | **Codex** | `~/.codex/hooks.json`'a hook ekler | Codex'te bir kere `/hooks` yazıp onayla |
-| **Anlatıcı** | Claude masaüstüne `telepaith_say` aracını ekler | Claude'u yeniden başlat, açılan penceredeki talimatı profil tercihlerine ekle |
+| **Anlatıcı** | Claude masaüstüne `telepaith_say` aracını ekler | Claude'u yeniden başlat, açılan penceredeki talimatı Claude → Settings → Your Claude → Instructions kutusuna yapıştır |
 | **ClaudeBar** | Kota uyarılarını alır | ClaudeBar → Webhooks → `http://localhost:19850/claudebar` (JSON) |
 
 Hook'lar ayar dosyalarının yedeğini alır, sadece kendi kayıtlarına dokunur ve olayı arka planda gönderir, yani Claude Code'u ya da Codex'i yavaşlatmaz. Ayarlar'dan kapatınca kaldırılır.

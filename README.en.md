@@ -105,7 +105,7 @@
 | **Claude and ChatGPT apps** | Watches the desktop apps on screen | Needs Accessibility permission, on by default |
 | **Claude Code** | Adds hooks to `~/.claude/settings.json` | New sessions start reporting |
 | **Codex** | Adds hooks to `~/.codex/hooks.json` | Type `/hooks` in Codex once and approve |
-| **Narrator** | Adds the `telepaith_say` tool to Claude desktop | Restart Claude, add the shown instruction to your profile preferences |
+| **Narrator** | Adds the `telepaith_say` tool to Claude desktop | Restart Claude, paste the shown instruction into Claude → Settings → Your Claude → Instructions |
 | **ClaudeBar** | Receives quota alerts | ClaudeBar → Webhooks → `http://localhost:19850/claudebar` (JSON) |
 
 Hooks back up your settings files, only touch their own entries and send events in the background, so they don't slow Claude Code or Codex down. Turn them off in Settings to remove them.

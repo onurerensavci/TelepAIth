@@ -547,8 +547,8 @@ internal sealed class AppController : ISettingsHost
             {
                 NarratorInstaller.Install(Installer.HookExe);
                 var cmd = NarratorInstaller.ClaudeCodeCommand(Installer.HookExe);
-                var text = L("1) Claude uygulamasını kapatıp yeniden aç.\n2) Claude'un ne zaman haber vereceğini bilmesi için bu talimatı Claude → Ayarlar → Profil'deki tercihlere ekle (Evet'e basınca panoya kopyalanır):\n\n",
-                               "1) Quit and reopen the Claude app.\n2) Add this to Claude → Settings → Profile preferences so Claude knows when to report (press Yes to copy it):\n\n")
+                var text = L("1) Claude uygulamasını kapatıp yeniden aç.\n2) Claude'un ne zaman haber vereceğini bilmesi için bu talimatı Claude'da sol alttaki adına tıklayıp Settings → Your Claude → Instructions kutusuna yapıştır (Evet'e basınca panoya kopyalanır):\n\n",
+                               "1) Quit and reopen the Claude app.\n2) So Claude knows when to report, paste this in Claude: click your name in the lower left → Settings → Your Claude → Instructions (press Yes to copy it):\n\n")
                            + NarratorInstaller.SuggestedInstruction
                            + L("\n\nClaude Code için terminalde bir kere:\n", "\n\nFor Claude Code, run once in a terminal:\n") + cmd;
                 if (MessageBox.Show(text, L("Anlatıcı eklendi", "Narrator added"), MessageBoxButton.YesNo) == MessageBoxResult.Yes)

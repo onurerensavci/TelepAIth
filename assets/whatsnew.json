@@ -1,5 +1,14 @@
 [
  {
+  "version": "0.25.4",
+  "tr": [
+   "Anlatıcı penceresi talimatın Claude'da nereye yapıştırılacağını doğru gösteriyor (Settings → Your Claude → Instructions)"
+  ],
+  "en": [
+   "The narrator window shows where to paste the instruction in Claude correctly (Settings → Your Claude → Instructions)"
+  ]
+ },
+ {
   "version": "0.25.3",
   "tr": [
    "Claude'da arkada çalışan sohbetler artık listede görünüyor (Claude durumu adın sonuna \"Running\" diye ekliyordu, robot bunu tanımıyordu)",
