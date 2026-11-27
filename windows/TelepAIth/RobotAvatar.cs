@@ -20,7 +20,8 @@ public sealed record ApprovalPrompt(int Id, bool HasAlways, bool CanAllow = true
 internal sealed class RobotAvatar
 {
     // %100 boyuttaki ölçüler (DIP) — Mac'tekiyle aynı
-    public const double BaseWindowW = 280, BaseWindowH = 250, BaseHead = 100, BaseMargin = 16, EdgeInset = 14;
+    /// <summary>Robotun penceresi: kafa ve balon (sohbet listesinde 6 satır sığsın diye 340 yüksek; boş kısmı tıklamaları geçirir)</summary>
+    public const double BaseWindowW = 280, BaseWindowH = 340, BaseHead = 100, BaseMargin = 16, EdgeInset = 14;
     private const double SnapDistance = 260, DockOffsetX = 95, DockOffsetY = 100;
 
     public RobotModel Current { get; private set; }
@@ -33,8 +34,31 @@ internal sealed class RobotAvatar
     public bool IsDragging { get; private set; }
     public List<RobotModel.MiniSession> Minis { get; set; } = new();
     /// <summary>Kafaya tıklayınca açılan sohbet listesi (null: kapalı) ve ne zamana kadar açık kalacağı</summary>
-    public List<RobotModel.ChatRow>? ChatList { get; set; }
+    public List<RobotModel.ChatRow>? ChatList
+    {
+        get => _chatList;
+        set
+        {
+            _chatList = value;
+            if (value == null) ChatScroll = 0;
+            // Liste kısaldıysa kaydırma taşmasın
+            ChatScroll = Math.Min(ChatScroll, Math.Max(0, (value?.Count ?? 0) - ChatListVisible));
+        }
+    }
+    private List<RobotModel.ChatRow>? _chatList;
     public DateTime ChatListUntil { get; set; }
+    /// <summary>Balonda aynı anda görünen satır sayısı; fazlası fare tekerleğiyle kaydırılır</summary>
+    public const int ChatListVisible = 6;
+    /// <summary>Listede en üstte görünen satır</summary>
+    public int ChatScroll { get; set; }
+
+    /// <summary>Fare tekerleği: listeyi satır satır kaydır (açık kalma süresi de uzar)</summary>
+    public void ScrollChatList(int steps)
+    {
+        if (_chatList is not { } rows || rows.Count <= ChatListVisible || steps == 0) return;
+        ChatScroll = Math.Clamp(ChatScroll + steps, 0, rows.Count - ChatListVisible);
+        if (ChatListUntil < DateTime.Now.AddSeconds(8)) ChatListUntil = DateTime.Now.AddSeconds(8);
+    }
     /// <summary>Kafadaki küçük ışıklar: kafalarda görünmeyen diğer çalışan/bekleyen sohbetler (bekleyenler önce)</summary>
     public List<RobotState> Extras
     {

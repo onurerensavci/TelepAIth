@@ -14,7 +14,7 @@ using static TelepAIth.Core.Text;
 namespace TelepAIth;
 
 /// <summary>
-/// Robotun çizimi. Her şey %100 boyutta 280 × 250 birimlik alanda çizilir, ayardaki robot boyutuyla ölçeklenir
+/// Robotun çizimi. Her şey %100 boyutta 280 × 340 birimlik alanda çizilir, ayardaki robot boyutuyla ölçeklenir
 /// (ekranın DPI'ını WPF zaten uygular). Mac'teki SwiftUI çizimiyle aynı ölçüler.
 /// </summary>
 internal sealed class RobotView : FrameworkElement
@@ -317,7 +317,7 @@ internal sealed class RobotView : FrameworkElement
 
     // MARK: Sohbet listesi (kafaya tıklayınca)
 
-    private const int ChatListMax = 4;
+    private const int ChatListMax = RobotAvatar.ChatListVisible;
     private const double ChatRowH = 20;
 
     /// <summary>Listedeki satırların yeri (DIP) — tıklama için</summary>
@@ -341,15 +341,18 @@ internal sealed class RobotView : FrameworkElement
         var secondary = dark ? Color.FromRgb(0xA8, 0xA5, 0xB8) : Color.FromRgb(0x77, 0x74, 0x86);
         var accent = C(_avatar.Current.Theme.Color);
         const double padX = 10, padY = 7, titleH = 15;
-        // Sığmayan varsa son satır "+2 sohbet daha" olur
-        var shown = rows.Take(rows.Count > ChatListMax ? ChatListMax - 1 : ChatListMax).ToList();
-        var more = rows.Count - shown.Count;
-        const double moreH = 14;
+        // 6 satır görünür; fazlası kaydırılır (üstte/altta "▲ 2 sohbet daha · kaydır" işareti)
+        var start = Math.Clamp(_avatar.ChatScroll, 0, Math.Max(0, rows.Count - ChatListMax));
+        var shown = rows.Skip(start).Take(ChatListMax).ToList();
+        var above = start;
+        var more = rows.Count - start - shown.Count;
+        const double moreH = 13;
         var usage = _avatar.Usage;
         const double usageH = 14;
         var cardW = Math.Min(W - 2 * M, 250.0);
         const double emptyH = 40;
-        var cardH = padY + titleH + usage.Count * usageH + 3 + (rows.Count == 0 ? emptyH : shown.Count * ChatRowH) + (more > 0 ? moreH : 0) + padY - 2;
+        var cardH = padY + titleH + usage.Count * usageH + 3 + (rows.Count == 0 ? emptyH : shown.Count * ChatRowH)
+                    + (above > 0 ? moreH : 0) + (more > 0 ? moreH : 0) + padY - 2;
         var cardX = alignLeft ? M : W - M - cardW;
         var cardY = below ? headY + Head + Gap + TailH : headY - Gap - TailH - cardH;
         var full = DrawCard(dc, new Rect(cardX, cardY, cardW, cardH), alignLeft, below, fill, accent);
@@ -394,12 +397,18 @@ internal sealed class RobotView : FrameworkElement
             };
             dc.DrawText(hint, new Point(tx, y + 1 + none.Height));
         }
+        if (above > 0)
+        {
+            var up = new FormattedText("▲ " + L($"{above} sohbet daha · kaydır", $"{above} more · scroll"), CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, Ui, 9.5, B(secondary), dpi);
+            dc.DrawText(up, new Point(tx, y));
+            y += moreH;
+        }
         for (var i = 0; i < shown.Count; i++)
         {
             var row = shown[i];
             var rr = new Rect(cardX + 4, y, cardW - 8, ChatRowH);
             var screen = new Rect(rr.X * scale, rr.Y * scale, rr.Width * scale, rr.Height * scale);
-            ChatRowRects.Add((i, screen));
+            ChatRowRects.Add((start + i, screen));   // listedeki gerçek sırası (tıklama için)
             var aiColor = C(Themes.Shared.Theme(row.Source).Color);
             var tone = ToneColor(row.Tone, aiColor, secondary);
             var seen = row.Tone == "seen";
@@ -443,8 +452,8 @@ internal sealed class RobotView : FrameworkElement
         }
         if (more > 0)
         {
-            var m = new FormattedText(L($"+{more} sohbet daha", $"+{more} more"), CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, Ui, 9.5, B(secondary), dpi);
-            dc.DrawText(m, new Point(tx, y + 2));
+            var m = new FormattedText("▼ " + L($"{more} sohbet daha · kaydır", $"{more} more · scroll"), CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, Ui, 9.5, B(secondary), dpi);
+            dc.DrawText(m, new Point(tx, y));
         }
         return full;
     }

@@ -47,9 +47,26 @@ final class RobotAvatar: ObservableObject {
     var chatListUntil: Date = .distantPast
     var chatRowFrames: [Int: CGRect] = [:]
 
+    /// Listede en üstte görünen satır (balonda 6 satır görünür, fazlası fare tekerleğiyle kaydırılır)
+    @Published var chatScroll = 0
+
     func setChatList(_ rows: [RobotModel.ChatRow]?) {
         if chatList != rows { chatList = rows }
-        if rows == nil { chatRowFrames = [:] }
+        if rows == nil { chatRowFrames = [:]; chatScroll = 0 }
+        // Liste kısaldıysa kaydırma taşmasın
+        let maxScroll = Swift.max(0, (rows?.count ?? 0) - ChatListBubble.maxRows)
+        if chatScroll > maxScroll { chatScroll = maxScroll }
+    }
+
+    /// Fare tekerleği: listeyi satır satır kaydır (açık kalma süresi de uzar)
+    func scrollChatList(by steps: Int) {
+        guard let rows = chatList, rows.count > ChatListBubble.maxRows, steps != 0 else { return }
+        let next = Swift.min(Swift.max(0, chatScroll + steps), rows.count - ChatListBubble.maxRows)
+        if next != chatScroll {
+            chatScroll = next
+            chatRowFrames = [:]
+        }
+        chatListUntil = Swift.max(chatListUntil, Date().addingTimeInterval(8))
     }
 
     /// Ekrandaki bu noktada sohbet listesinin bir satırı var mı?
@@ -461,8 +478,11 @@ final class AvatarHostingView: NSHostingView<AvatarView> {
     /// Bu noktada sohbet listesinin bir satırı var mı?
     var chatRowAt: ((NSPoint) -> RobotModel.ChatRow?)?
     var onChatRow: ((RobotModel.ChatRow) -> Void)?
+    /// Balonun üstünde fare tekerleği: sohbet listesini kaydır (+1 aşağı, -1 yukarı)
+    var onChatScroll: ((Int) -> Void)?
 
     private var mouseStart: NSPoint = .zero
+    private var scrollAccum: CGFloat = 0
     private var dragging = false
     private var presses: [Date] = []
     private var swallowUp = false
@@ -522,6 +542,22 @@ final class AvatarHostingView: NSHostingView<AvatarView> {
 
     override func rightMouseDown(with event: NSEvent) {
         onRightClick?(event)
+    }
+
+    /// Fare tekerleği / iz paneli: balonun üstündeyken sohbet listesini satır satır kaydır
+    override func scrollWheel(with event: NSEvent) {
+        guard isOverBubble?(NSEvent.mouseLocation) == true, let scroll = onChatScroll else { return }
+        if event.hasPreciseScrollingDeltas {
+            // İz paneli: küçük adımları biriktir, her ~16 noktada bir satır
+            scrollAccum += event.scrollingDeltaY
+            while abs(scrollAccum) >= 16 {
+                scroll(scrollAccum > 0 ? -1 : 1)
+                scrollAccum += scrollAccum > 0 ? -16 : 16
+            }
+            if event.phase == .ended || event.momentumPhase == .ended { scrollAccum = 0 }
+        } else if event.scrollingDeltaY != 0 {
+            scroll(event.scrollingDeltaY > 0 ? -1 : 1)
+        }
     }
 }
 
@@ -599,6 +635,7 @@ final class AvatarWindowController: NSObject {
         host.onMiniClick = { [weak self] source in self?.onMiniClick?(source) }
         host.chatRowAt = { [weak self] point in self?.avatar.chatRow(at: point) }
         host.onChatRow = { [weak self] row in self?.onChatRow?(row) }
+        host.onChatScroll = { [weak self] steps in self?.avatar.scrollChatList(by: steps) }
         host.isOverBubble = { [weak self] point in
             guard let self = self, !self.avatar.headRect.contains(point) else { return false }
             return self.avatar.bubbleScreenRect?.contains(point) ?? false

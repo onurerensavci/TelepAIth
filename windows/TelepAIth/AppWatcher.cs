@@ -177,6 +177,7 @@ internal sealed class AppWatcher
                 e.AppProcess ??= app.Name;
                 EventFound?.Invoke(e);
             }
+            LogSidebar(app.Pid, app.Name, found, tracker);
             var took = Now - started;
             // Çalışırken ya da öndeyken sık, boştayken seyrek bak
             var busy = tracker.Generating || tracker.Approving || tracker.Background.Count > 0 || app.Pid == _foregroundPid;
@@ -494,6 +495,20 @@ internal sealed class AppWatcher
             if (element.TryGetCurrentPattern(ScrollItemPattern.Pattern, out var sp)) ((ScrollItemPattern)sp).ScrollIntoView();
         }
         catch { }
+    }
+
+    private readonly Dictionary<int, (string Text, double At)> _sidebarLogged = new();
+
+    /// <summary>Algılama günlüğüne: yan menüde ne görüldü (değişince, en fazla 30 sn'de bir; ilk taramada da)</summary>
+    private void LogSidebar(int pid, string name, FoundUi found, ChatAppTracker tracker)
+    {
+        if (!found.SidebarScanned) return;
+        var summary = string.Join(" | ", SidebarChats.Parse(found.Sidebar).Select(r => $"{r.Row.Title}={r.Row.State}{(r.Current ? "*" : "")}"));
+        var had = _sidebarLogged.TryGetValue(pid, out var last);
+        if (had && (last.Text == summary || Now - last.At < 30)) return;
+        _sidebarLogged[pid] = (summary, Now);
+        Log($"[{AppInfo.Version}] {name} yan menü ({(found.SidebarViaNav ? "nav" : "sol %40")}, {found.Sidebar.Count} öğe): " +
+            (summary.Length == 0 ? "durumlu sohbet yok" : summary) + " · açık: " + (SidebarChats.CurrentTitle(found.Sidebar, tracker.ChatKey) ?? "?"));
     }
 
     /// <summary>Teşhis: yan menüde durum gibi görünen öğeler ve ipucu/açıklaması olanlar (algılamayı ayarlamak için)</summary>

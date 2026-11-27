@@ -60,7 +60,8 @@ final class AppWatcher {
         var lastSidebarScan: TimeInterval = -100
         var sidebarInfo = "—"
         var lastSidebarLog: TimeInterval = -100
-        var lastSidebarLogged = ""
+        /// İlk taramada da yazılsın diye hiçbir özetle eşleşmeyen başlangıç değeri
+        var lastSidebarLogged = "\u{1}"
         /// Bu uygulamada açılmış sohbetler (oturum → ad, adres): listeden tıklayınca geri açabilmek için
         var knownChats: [String: (title: String, url: String?)] = [:]
         /// Listeden son sohbet açma denemesinin sonucu (teşhis için)
@@ -442,7 +443,7 @@ final class AppWatcher {
                 if summary != st.lastSidebarLogged && now - st.lastSidebarLog > 30 {
                     st.lastSidebarLog = now
                     st.lastSidebarLogged = summary
-                    AppWatcher.log("\(target.name) yan menü (\(viaNav ? "nav" : "sol %40"), \(items.count) öğe): " + (summary.isEmpty ? "durumlu sohbet yok" : summary)
+                    AppWatcher.log("[\(Updater.shared.currentVersion)] \(target.name) yan menü (\(viaNav ? "nav" : "sol %40"), \(items.count) öğe): " + (summary.isEmpty ? "durumlu sohbet yok" : summary)
                                    + " · açık: " + (SidebarChats.currentTitle(items, currentChat: st.chatKey) ?? "?"))
                 }
                 if let title = SidebarChats.currentTitle(items, currentChat: st.chatKey) {

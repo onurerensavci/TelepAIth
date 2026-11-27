@@ -14,7 +14,7 @@ struct AvatarView: View {
             AvatarStage(model: avatar.current, alignLeft: avatar.alignLeft, bubbleBelow: avatar.bubbleBelow,
                         health: avatar.health, locked: avatar.locked, minis: avatar.minis, focus: avatar.focus,
                         approval: avatar.approval, pointer: avatar.pointer, extras: avatar.extras,
-                        extrasPoppedAt: avatar.extrasPoppedAt, chatList: avatar.chatList,
+                        extrasPoppedAt: avatar.extrasPoppedAt, chatList: avatar.chatList, chatScroll: avatar.chatScroll,
                         usage: avatar.usage, paused: avatar.paused, calm: avatar.calm, outfit: avatar.outfit)
                 .id(avatar.current.source)
                 .transition(.scale(scale: 0.4).combined(with: .opacity))
@@ -79,6 +79,7 @@ struct AvatarStage: View {
     var extras: [RobotState] = []
     var extrasPoppedAt: Date = .distantPast
     var chatList: [RobotModel.ChatRow]? = nil
+    var chatScroll = 0
     /// Kullanım sınırları (halkalar, sohbet listesinin başı)
     var usage: [UsageWindow] = []
     /// Sakin çizim: hiçbir şey olmuyorken kafa yeniden çizilmez
@@ -109,7 +110,7 @@ struct AvatarStage: View {
     private var bubble: some View {
         if let rows = chatList {
             ChatListBubble(rows: rows, color: Color(nsColor: model.theme.color), tailOnTop: bubbleBelow, tailLeading: alignLeft,
-                           usage: usage,
+                           usage: usage, scroll: chatScroll,
                            hoverIndex: { [weak avatar = pointer?.avatar] in avatar?.chatRowIndex(at: NSEvent.mouseLocation) })
                 .background(GeometryReader { g in
                     Color.clear.preference(key: BubbleFrameKey.self, value: g.frame(in: .named("avatar")))
@@ -330,8 +331,11 @@ struct ChatListBubble: View {
     var usage: [UsageWindow] = []
     /// Farenin üstünde olduğu satır (koyulaşsın)
     var hoverIndex: () -> Int? = { nil }
+    /// En üstte görünen satır (fare tekerleğiyle kaydırılır)
+    var scroll = 0
 
-    static let maxRows = 4
+    /// Aynı anda görünen satır sayısı; fazlası balonun içinde kaydırılır
+    static let maxRows = 6
     private var fill: Color { Color(nsColor: .windowBackgroundColor).opacity(0.97) }
 
     var body: some View {
@@ -358,8 +362,11 @@ struct ChatListBubble: View {
     }
 
     private func cardContent(hover: Int?, time: TimeInterval) -> some View {
-        // Sığmayan varsa son satır "+2 sohbet daha" olur
-        let shown = Array(rows.prefix(rows.count > ChatListBubble.maxRows ? ChatListBubble.maxRows - 1 : ChatListBubble.maxRows))
+        // 6 satır görünür; fazlası kaydırılır (üstte/altta "▲ 2 sohbet daha" gibi işaret)
+        let start = Swift.min(Swift.max(0, scroll), Swift.max(0, rows.count - ChatListBubble.maxRows))
+        let shown = Array(rows.dropFirst(start).prefix(ChatListBubble.maxRows))
+        let above = start
+        let below = Swift.max(0, rows.count - start - shown.count)
         return VStack(alignment: .leading, spacing: 0) {
             // Başlık: "Sohbetler" ve özet ("1 bekliyor · 1 yeni · 2 çalışıyor")
             HStack(spacing: 4) {
@@ -403,7 +410,9 @@ struct ChatListBubble: View {
                 .padding(.horizontal, 6)
                 .padding(.vertical, 4)
             }
-            ForEach(Array(shown.enumerated()), id: \.element.sessionID) { index, row in
+            if above > 0 { moreLine("▲", above) }
+            ForEach(Array(shown.enumerated()), id: \.element.sessionID) { offset, row in
+                let index = start + offset   // listedeki gerçek sırası (tıklama ve fare üstü için)
                 let aiColor = Color(nsColor: Themes.shared.theme(for: row.source).color)
                 let tone = ChatListBubble.toneColor(row.tone, ai: aiColor)
                 let hovered = hover == index
@@ -458,13 +467,7 @@ struct ChatListBubble: View {
                     Color.clear.preference(key: ChatRowFramesKey.self, value: [index: g.frame(in: .named("avatar"))])
                 })
             }
-            if rows.count > shown.count {
-                Text(loc("+\(rows.count - shown.count) sohbet daha", "+\(rows.count - shown.count) more"))
-                    .font(.system(size: 9.5))
-                    .foregroundColor(.secondary)
-                    .padding(.leading, 6)
-                    .padding(.top, 2)
-            }
+            if below > 0 { moreLine("▼", below) }
         }
         .padding(.horizontal, 6)
         .padding(.vertical, 7)
@@ -474,6 +477,15 @@ struct ChatListBubble: View {
     }
 
     static let unreadColor = Color(red: 0.04, green: 0.52, blue: 1.0)
+
+    /// "▼ 3 sohbet daha · kaydır"
+    private func moreLine(_ arrow: String, _ count: Int) -> some View {
+        Text("\(arrow) " + loc("\(count) sohbet daha · kaydır", "\(count) more · scroll"))
+            .font(.system(size: 9.5))
+            .foregroundColor(.secondary)
+            .padding(.leading, 6)
+            .frame(height: 13)
+    }
 
     /// Satırın renk kodu (Windows'ta ToneColor, aynı renkler)
     static func toneColor(_ tone: String, ai: Color) -> Color {

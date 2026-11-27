@@ -75,7 +75,7 @@ internal sealed class RobotWindow : Window
         _view.MouseRightButtonUp += OnRightUp;
     }
 
-    private const int WM_MOUSEACTIVATE = 0x0021, MA_NOACTIVATE = 3, WM_DPICHANGED = 0x02E0;
+    private const int WM_MOUSEACTIVATE = 0x0021, MA_NOACTIVATE = 3, WM_DPICHANGED = 0x02E0, WM_MOUSEWHEEL = 0x020A;
 
     private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
     {
@@ -86,6 +86,19 @@ internal sealed class RobotWindow : Window
             return new IntPtr(MA_NOACTIVATE);
         }
         if (msg == WM_DPICHANGED) _lastRect = default;   // yeni ekranın ölçüsüyle yeniden yerleştir
+        // Balonun üstünde fare tekerleği: sohbet listesini satır satır kaydır
+        if (msg == WM_MOUSEWHEEL && _avatar.ChatList != null)
+        {
+            var delta = (short)((wParam.ToInt64() >> 16) & 0xFFFF);
+            var c = Native.Cursor();
+            var dpi = VisualTreeHelper.GetDpi(this).DpiScaleX;
+            var local = new Point((c.X - _lastRect.X) / dpi, (c.Y - _lastRect.Y) / dpi);
+            if (Contains(_view.BubbleRect, local) && delta != 0)
+            {
+                _avatar.ScrollChatList(delta > 0 ? -1 : 1);
+                handled = true;
+            }
+        }
         return IntPtr.Zero;
     }
 

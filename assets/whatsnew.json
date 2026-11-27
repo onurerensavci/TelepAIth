@@ -1,5 +1,16 @@
 [
  {
+  "version": "0.25.1",
+  "tr": [
+   "Sohbetler yine robotun balonunda; artık 6 satır görünüyor, fazlası balonun içinde fare tekerleğiyle kaydırılıyor",
+   "Algılama günlüğü yan menüde ne görüldüğünü her zaman yazıyor"
+  ],
+  "en": [
+   "Chats are back in the robot's bubble, now 6 rows at a time; scroll inside the bubble for the rest",
+   "The detection log always records what it saw in the sidebar"
+  ]
+ },
+ {
   "version": "0.25.0",
   "tr": [
    "Robota tıklayınca yanında Sohbetler paneli açılıyor: bütün sohbetler, kaydırılabilir, gruplu (Seni bekliyor · Yeni bitti · Çalışıyor · Bitti)",

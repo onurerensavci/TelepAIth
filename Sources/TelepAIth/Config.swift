@@ -17,7 +17,8 @@ enum AppInfo {
 
 enum Layout {
     // %100 boyuttaki ölçüler; robot bunlarla çizilip Preferences.robotScale kadar büyütülür/küçültülür
-    static let baseWindowSize = CGSize(width: 280, height: 250)
+    /// Robotun penceresi: kafa ve balon (sohbet listesinde 6 satır sığsın diye 340 yüksek; boş kısmı tıklamaları geçirir)
+    static let baseWindowSize = CGSize(width: 280, height: 340)
     static let baseHeadSize = CGSize(width: 100, height: 100)
     static let baseMargin: CGFloat = 16  // pencere kenarı ile kafa arası
     static let edgeInset: CGFloat = 14   // ekran köşesi ile kafa arası
