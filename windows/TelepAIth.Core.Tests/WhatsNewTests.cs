@@ -12,8 +12,9 @@ public static partial class Tests
         // Notlarda bölüm yoksa gömülü liste; o da yoksa boş
         A.Eq(WhatsNew.For("0.23.0")!.Tr[0], WhatsNew.Summary("0.23.0", "**Full Changelog**: https://x")[0]);
         A.True(WhatsNew.Summary("9.9.9", "**Full Changelog**: https://x").Count == 0);
-        A.True(WhatsNew.Bubble("0.23.0", new[] { "A" }).Contains("0.23.0'da neler var:\n• A"));
-        A.True(WhatsNew.AfterUpdate("0.23.0")!.StartsWith("🎁 0.23.0 geldi!"));
+        A.Eq("\n• A\n• B", WhatsNew.Bullets(new[] { "A", "B" }));
+        A.Eq("", WhatsNew.Bullets(Array.Empty<string>()));
+        A.True(WhatsNew.AfterUpdate("0.23.0")!.StartsWith("🎁 0.23.0 geldi! Neler var:\n• "));
         A.True(WhatsNew.AfterUpdate("0.0.1") == null);
     }
 }

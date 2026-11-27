@@ -687,7 +687,7 @@ final class AppController: NSObject {
     }
 
     @objc private func installUpdate() {
-        Updater.shared.promptInstall()
+        manager.showUpdate()
     }
 
     @objc private func checkForUpdates() {

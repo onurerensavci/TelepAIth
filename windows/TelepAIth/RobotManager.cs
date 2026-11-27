@@ -446,13 +446,12 @@ internal sealed class RobotManager
         if (health == Health.Update && !wasUpdate) AnnounceUpdate(text);
     }
 
-    /// <summary>Güncelleme: önce balonda kısaca ne geldiğini söyle, sonra kurulumu sor (robota ya da menüye tıklayınca)</summary>
+    /// <summary>Güncelle (robota ya da menüye tıklayınca): sormadan indirir ve yeniden başlatır; ilerlemeyi robot söyler</summary>
     public void ShowUpdate()
     {
-        if (Updater.Shared.Available is not { } rel) return;
+        if (Updater.Shared.Available == null) return;
         _avatar?.Unpeek();
-        _avatar?.Current.Say(WhatsNew.Bubble(rel.Version, WhatsNew.Summary(rel.Version, rel.Notes, 3)), 14);
-        Application.Current.Dispatcher.InvokeAsync(() => Updater.Shared.PromptInstall(), DispatcherPriority.Background);
+        Updater.Shared.InstallNow();
     }
 
     /// <summary>Otomatik efektte mevsim değişti: robot söyler ("🍂 Sonbahar geldi!"); ilk açılışta sessizce kaydeder</summary>
@@ -478,14 +477,16 @@ internal sealed class RobotManager
         var last = Prefs.LastRunVersion;
         Prefs.LastRunVersion = current;
         if (last == null || last == current || !VersionCompare.IsNewer(current, last) || WhatsNew.AfterUpdate(current) is not { } text) return;
-        _avatar.Current.Celebrate(text, 12);
+        _avatar.Current.Celebrate(text, 15);
     }
 
     private void AnnounceUpdate(string version)
     {
         _lastUpdateAnnounce = Now;
         var text = L($"Güncelleme var: {version}! Bana tıkla, kurayım.", $"Update available: {version}! Click me to install.");
-        _avatar?.Current.Say(WithEmoji("⬆️", text), 10);
+        // Balonda kısaca ne geldiği de yazar
+        var items = WhatsNew.Summary(version, Updater.Shared.Available?.Notes, 2);
+        _avatar?.Current.Say(WithEmoji("⬆️", text) + WhatsNew.Bullets(items), items.Count == 0 ? 10 : 14);
         Speech.Say(text, "summary");
     }
 

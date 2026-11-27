@@ -11,8 +11,9 @@ final class WhatsNewTests: XCTestCase {
         XCTAssertEqual(WhatsNew.summary("9.9.9", notes: notes), ["Bir", "İki"])
         XCTAssertEqual(WhatsNew.summary("0.23.0", notes: "**Full Changelog**: https://x").first, WhatsNew.entry(for: "0.23.0")?.tr.first)
         XCTAssertTrue(WhatsNew.summary("9.9.9", notes: "**Full Changelog**: https://x").isEmpty)
-        XCTAssertTrue(WhatsNew.bubble("0.23.0", ["A"]).contains("0.23.0'da neler var:\n• A"))
-        XCTAssertTrue(WhatsNew.afterUpdate("0.23.0")!.hasPrefix("🎁 0.23.0 geldi!"))
+        XCTAssertEqual(WhatsNew.bullets(["A", "B"]), "\n• A\n• B")
+        XCTAssertEqual(WhatsNew.bullets([]), "")
+        XCTAssertTrue(WhatsNew.afterUpdate("0.23.0")!.hasPrefix("🎁 0.23.0 geldi! Neler var:\n• "))
         XCTAssertNil(WhatsNew.afterUpdate("0.0.1"))
     }
 }

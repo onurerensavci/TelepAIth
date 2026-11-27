@@ -134,7 +134,7 @@ internal sealed class AppController : ISettingsHost
         if (health != Health.Ok)
             list.Add(new MenuEntry(health == Health.Broken ? Clip(htext, 70) : L($"Güncelleme var: {htext}", $"Update available: {htext}"), Enabled: false));
         if (Updater.Shared.Available is { } rel)
-            list.Add(new MenuEntry(L($"Güncelle: {rel.Version} hazır", $"Update: {rel.Version} is ready"), Updater.Shared.PromptInstall,
+            list.Add(new MenuEntry(L($"Güncelle: {rel.Version} hazır", $"Update: {rel.Version} is ready"), Manager.ShowUpdate,
                 Enabled: !Updater.Shared.IsBusy, Icon: "\uE896"));
         if (Notifier.SystemDisabled)
             list.Add(new MenuEntry(L("Bildirimler Windows'ta kapalı — aç…", "Notifications are off in Windows — turn on…"), Notifier.OpenSystemSettings, Icon: "\uE7BA"));
@@ -411,7 +411,7 @@ internal sealed class AppController : ISettingsHost
     private async void CheckUpdates()
     {
         var message = await Updater.Shared.CheckAsync(true);
-        if (Updater.Shared.Available != null) Updater.Shared.PromptInstall();
+        if (Updater.Shared.Available != null) Manager.ShowUpdate();
         else if (message != null) MessageBox.Show(message, AppInfo.Name);
         Changed();
     }

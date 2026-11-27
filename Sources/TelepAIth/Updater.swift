@@ -127,7 +127,7 @@ final class Updater {
         onChange?()
 
         if userInitiated {
-            promptInstall()
+            installNow()
         } else if isNew {
             Notifier.shared.notify(title: withEmoji("⬆️", loc("\(AppInfo.name) \(version) hazır", "\(AppInfo.name) \(version) is ready")),
                                    body: loc("Menü çubuğundaki ikondan güncelleyebilirsin.", "Update it from the menu bar icon."), kind: "summary")
@@ -151,26 +151,11 @@ final class Updater {
 
     // MARK: - Kurulum
 
-    func promptInstall() {
-        guard let release = available else { return }
-        NSApp.activate(ignoringOtherApps: true)
-        let alert = NSAlert()
-        alert.messageText = loc("\(AppInfo.name) \(release.version) hazır", "\(AppInfo.name) \(release.version) is ready")
-        var info = loc("Şu anki sürüm: ", "Current version: ") + currentVersion
-        if !release.notes.isEmpty {
-            info += "\n\n" + String(release.notes.prefix(700))
-        }
-        alert.informativeText = info
-        alert.addButton(withTitle: loc("Güncelle ve yeniden başlat", "Update and restart"))
-        alert.addButton(withTitle: loc("Sonra", "Later"))
-        if release.pageURL != nil { alert.addButton(withTitle: loc("Sürüm sayfası", "Release page")) }
-
-        let response = alert.runModal()
-        if response == .alertFirstButtonReturn {
-            install(release)
-        } else if response == .alertThirdButtonReturn, let page = release.pageURL {
-            NSWorkspace.shared.open(page)
-        }
+    /// Güncelle: pencere sormadan indirir, kurar ve yeniden başlatır (robot ilerlemeyi balonda söyler,
+    /// açılınca da ne geldiğini anlatır)
+    func installNow() {
+        guard let release = available, !isBusy else { return }
+        install(release)
     }
 
     private func install(_ release: Release) {
@@ -190,7 +175,7 @@ final class Updater {
 
         isBusy = true
         onChange?()
-        onProgress?(withEmoji("⬇️", loc("Güncelleme indiriliyor…", "Downloading the update…")))
+        onProgress?(withEmoji("⬇️", loc("\(release.version) indiriliyor…", "Downloading \(release.version)…")))
         let task = URLSession.shared.downloadTask(with: release.assetURL) { tempURL, _, error in
             // İndirilen dosya bu blok bitince silinir; hemen taşı.
             var zipURL: URL?
@@ -205,6 +190,7 @@ final class Updater {
             }
         }
         // İlerleme: "İndiriliyor %42 · 0.4 / 0.9 MB"
+        let version = release.version
         progressObservation = task.progress.observe(\.fractionCompleted) { [weak self] progress, _ in
             DispatchQueue.main.async {
                 guard let self = self, Date().timeIntervalSince(self.lastProgressReport) > 0.4 else { return }
@@ -212,7 +198,7 @@ final class Updater {
                 let done = Double(progress.completedUnitCount) / 1_048_576
                 let total = Double(progress.totalUnitCount) / 1_048_576
                 let size = total > 0 ? String(format: " · %.1f / %.1f MB", done, total) : ""
-                self.onProgress?(withEmoji("⬇️", loc("Güncelleme indiriliyor", "Downloading the update")
+                self.onProgress?(withEmoji("⬇️", loc("\(version) indiriliyor", "Downloading \(version)")
                     + " %\(Int(progress.fractionCompleted * 100))" + size))
             }
         }

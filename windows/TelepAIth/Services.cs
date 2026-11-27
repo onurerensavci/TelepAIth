@@ -391,15 +391,12 @@ internal sealed class Updater
 
     private void Report(string text) => System.Windows.Application.Current?.Dispatcher.BeginInvoke(() => Progress?.Invoke(text));
 
-    public void PromptInstall()
+    /// <summary>Güncelle: pencere sormadan indirir, kurar ve yeniden başlatır (robot ilerlemeyi balonda söyler,
+    /// açılınca da ne geldiğini anlatır)</summary>
+    public void InstallNow()
     {
         if (Available is not { } r || IsBusy) return;
-        var notes = r.Notes.Length > 600 ? r.Notes[..600] + "…" : r.Notes;
-        var answer = System.Windows.MessageBox.Show(
-            L($"TelepAIth {r.Version} hazır (şu an: {AppInfo.Version}).\n\n", $"TelepAIth {r.Version} is ready (current: {AppInfo.Version}).\n\n") + notes +
-            L("\n\nGüncelleyip yeniden başlatayım mı?", "\n\nUpdate and restart now?"),
-            AppInfo.Name, System.Windows.MessageBoxButton.YesNo, System.Windows.MessageBoxImage.Information);
-        if (answer == System.Windows.MessageBoxResult.Yes) _ = InstallAsync(r);
+        _ = InstallAsync(r);
     }
 
     private static string? LocalRuntime()
@@ -430,7 +427,7 @@ internal sealed class Updater
             var work = Path.Combine(Path.GetTempPath(), "TelepAIth-update-" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(work);
             var zip = Path.Combine(work, "update.zip");
-            Report("⬇️ " + L("Güncelleme indiriliyor…", "Downloading the update…"));
+            Report("⬇️ " + L($"{r.Version} indiriliyor…", $"Downloading {r.Version}…"));
             using (var res = await Http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead))
             {
                 res.EnsureSuccessStatusCode();
@@ -449,7 +446,7 @@ internal sealed class Updater
                     {
                         lastReport = DateTime.Now;
                         var pct = total > 0 ? $" %{done * 100 / total}" : "";
-                        Report("⬇️ " + L("Güncelleme indiriliyor", "Downloading the update") + pct + " · " + UpdatePlan.Progress(done, total));
+                        Report("⬇️ " + L($"{r.Version} indiriliyor", $"Downloading {r.Version}") + pct + " · " + UpdatePlan.Progress(done, total));
                     }
                 }
             }

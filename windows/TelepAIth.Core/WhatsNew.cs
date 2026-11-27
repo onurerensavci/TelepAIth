@@ -51,13 +51,12 @@ public static class WhatsNew
         return items.Take(max).ToList();
     }
 
-    /// <summary>Güncellemeye basınca balonda: "⬆️ 0.23.0'da neler var: • …"</summary>
-    public static string Bubble(string version, IReadOnlyList<string> items) =>
-        "⬆️ " + L($"{version}'da neler var:", $"What's new in {version}:") + (items.Count == 0 ? "" : "\n• " + string.Join("\n• ", items));
+    /// <summary>Balonda madde listesi: "\n• …\n• …" (boşsa boş)</summary>
+    public static string Bullets(IReadOnlyList<string> items) => items.Count == 0 ? "" : "\n• " + string.Join("\n• ", items);
 
-    /// <summary>Güncellemeden sonra robotun söylediği (ilk madde)</summary>
+    /// <summary>Güncellemeden sonra robotun söylediği: "🎁 0.24.0 geldi! Neler var:" ve ilk üç madde</summary>
     public static string? AfterUpdate(string version) =>
         For(version) is { Items.Count: > 0 } e
-            ? "🎁 " + L($"{version} geldi! Şuna bakabilirsin: ", $"{version} is here! Check this out: ") + e.Items[0]
+            ? "🎁 " + L($"{version} geldi! Neler var:", $"{version} is here! What's new:") + Bullets(e.Items.Take(3).ToList())
             : null;
 }

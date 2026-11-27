@@ -437,12 +437,11 @@ final class RobotManager {
         }
     }
 
-    /// Güncelleme: önce balonda kısaca ne geldiğini söyle, sonra kurulumu sor (robota ya da menüye tıklayınca)
+    /// Güncelle (robota ya da menüye tıklayınca): sormadan indirir ve yeniden başlatır; ilerlemeyi robot söyler
     func showUpdate() {
-        guard let release = Updater.shared.available else { return }
+        guard Updater.shared.available != nil else { return }
         avatar?.unpeek()
-        avatar?.current.say(WhatsNew.bubble(release.version, WhatsNew.summary(release.version, notes: release.notes, max: 3)), for: 14)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { Updater.shared.promptInstall() }
+        Updater.shared.installNow()
     }
 
     /// Otomatik efektte mevsim değişti: robot söyler ("🍂 Sonbahar geldi!"); ilk açılışta sessizce kaydeder
@@ -466,13 +465,15 @@ final class RobotManager {
         let last = Preferences.lastRunVersion
         Preferences.lastRunVersion = current
         guard let last = last, last != current, Updater.isNewer(current, than: last), let text = WhatsNew.afterUpdate(current) else { return }
-        avatar.current.celebrate(text, for: 12)
+        avatar.current.celebrate(text, for: 15)
     }
 
     private func announceUpdate(_ version: String) {
         lastUpdateAnnounce = CACurrentMediaTime()
         let text = loc("Güncelleme var: \(version)! Bana tıkla, kurayım.", "Update available: \(version)! Click me to install.")
-        avatar?.current.say(withEmoji("⬆️", text), for: 10)
+        // Balonda kısaca ne geldiği de yazar
+        let items = WhatsNew.summary(version, notes: Updater.shared.available?.notes, max: 2)
+        avatar?.current.say(withEmoji("⬆️", text) + WhatsNew.bullets(items), for: items.isEmpty ? 10 : 14)
         Speech.say(text, kind: "summary")
     }
 

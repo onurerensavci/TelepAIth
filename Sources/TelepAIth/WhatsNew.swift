@@ -44,14 +44,14 @@ enum WhatsNew {
         return Array(items.prefix(max))
     }
 
-    /// Güncellemeye basınca balonda: "⬆️ 0.23.0'da neler var: • …"
-    static func bubble(_ version: String, _ items: [String]) -> String {
-        "⬆️ " + loc("\(version)'da neler var:", "What's new in \(version):") + (items.isEmpty ? "" : "\n• " + items.joined(separator: "\n• "))
+    /// Balonda madde listesi: "\n• …\n• …" (boşsa boş)
+    static func bullets(_ items: [String]) -> String {
+        items.isEmpty ? "" : "\n• " + items.joined(separator: "\n• ")
     }
 
-    /// Güncellemeden sonra robotun söylediği (ilk madde)
+    /// Güncellemeden sonra robotun söylediği: "🎁 0.24.0 geldi! Neler var:" ve ilk üç madde
     static func afterUpdate(_ version: String) -> String? {
-        guard let e = entry(for: version), let first = e.items.first else { return nil }
-        return "🎁 " + loc("\(version) geldi! Şuna bakabilirsin: ", "\(version) is here! Check this out: ") + first
+        guard let e = entry(for: version), !e.items.isEmpty else { return nil }
+        return "🎁 " + loc("\(version) geldi! Neler var:", "\(version) is here! What's new:") + bullets(Array(e.items.prefix(3)))
     }
 }

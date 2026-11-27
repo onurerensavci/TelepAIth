@@ -1,5 +1,14 @@
 [
  {
+  "version": "0.24.1",
+  "tr": [
+   "Güncellemeye basınca pencere açılmadan doğrudan güncelleniyor; robot açılınca neler geldiğini söylüyor"
+  ],
+  "en": [
+   "Update installs right away without a dialog; the robot tells you what's new after it restarts"
+  ]
+ },
+ {
   "version": "0.24.0",
   "tr": [
    "Robota tıklayınca her zaman Sohbetler açılır; renk kodlu: turuncu seni bekliyor, yeşil yeni bitti, kırmızı hata, çalışanın üstünden ışık geçer",
