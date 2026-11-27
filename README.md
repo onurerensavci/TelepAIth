@@ -30,7 +30,7 @@
 - **Sohbet değiştirince** tıkladığın sohbete geçer, eskisini "bitti" sanmaz.
 - **Arkadaki sohbetler:** Claude'da başka bir sohbete geçsen de, arkada çalışmaya devam eden sohbetleri yan menüdeki durum noktasından görür: robot çalışıyor görünür, bitince ya da cevabını bekleyince haber verir (yan menü açıkken).
 - **Ekranı okunamayan uygulamalar** (ör. Mac'te ChatGPT): robot önce uygulamadan ekranını açmasını ister; yine okuyamazsa çalışıp çalışmadığını işlemci kullanımından tahmin eder (Teşhis'te "işlemciden tahmini" yazar).
-- **İki AI birden:** büyük kafada biri görünürken öteki (ör. Claude büyükse ChatGPT) yanında tek bir minik kafa olur; seni bekliyorsa üstünde turuncu bir nokta yanar. Büyük kafadaki AI'ın başka sohbetleri de çalışıyorsa robotun yüzünde, ekranın altında o AI'ın renginde küçük ışıklar yanar (Claude turuncu, GPT mavi); seni bekleyen hızlı yanıp söner (en fazla 4).
+- **İki AI birden:** büyük kafada biri görünürken öteki (ör. Claude büyükse ChatGPT) yanında tek bir minik kafa olur; seni bekliyorsa üstünde turuncu bir nokta yanar. Büyük kafadaki AI'ın başka sohbetleri de çalışıyorsa robotun yüzünde, ekranın altında o AI'ın renginde küçük bir rozet kaç sohbet olduğunu yazar (Claude turuncu, GPT mavi; 9'dan fazlası 9+); biri seni bekliyorsa rozet hızlı yanıp söner.
 - **Anlatıcı:** istersen Claude, ne yaptığını robota kendi ağzından söyler (küçük bir MCP aracı).
 - **Kota:** ClaudeBar kuruluysa kotan azalınca uyarır, robotun etrafındaki ince halka kalan kotayı gösterir.
 

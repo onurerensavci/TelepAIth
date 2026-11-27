@@ -1353,8 +1353,8 @@ final class PointerTracker {
 
 // MARK: - Diğer sohbetlerin ışıkları
 
-/// Kafalarda görünmeyen her sohbet için ekranın altında bir nokta (en fazla 4; Windows'takinin aynısı).
-/// Açık renkli yüzde kaybolmasın diye koyu tonlarda; yeni sohbet gelince kısa bir zıplamayla belirir.
+/// Kafalarda görünmeyen diğer sohbetler: ekranın altında AI'ın renginde tek rozet, içinde sayı ("3", 9'dan fazlaysa "9+").
+/// Biri seni bekliyorsa rozet hızlı yanıp söner; sayı artınca kısa bir zıplama yapar. (Windows'ta RobotView.DrawExtraLights)
 struct ExtraLightsView: View {
     let extras: [RobotState]
     let time: TimeInterval
@@ -1362,28 +1362,23 @@ struct ExtraLightsView: View {
     /// AI'ın rengi (Claude turuncu, GPT mavi)
     var color: Color = .orange
 
-    // Açık renkli yüzde çerçevesiz de seçilsin diye koyu tonlar
     var body: some View {
         Canvas { ctx, _ in
-            let n = Swift.min(4, extras.count)
-            guard n > 0 else { return }
-            let gap = 9.0, cy = 80.0
+            let label = RobotModel.extrasBadge(extras.count)
+            guard !label.isEmpty else { return }
+            let cy = 79.0, h = 11.0, w = label.count > 1 ? 17.0 : 11.0
             let bump = popAge >= 0 && popAge < 0.45 ? sin(popAge / 0.45 * .pi) : 0
+            let waiting = extras.contains(.waiting)
+            let pulse = waiting ? 0.3 + 0.7 * (0.5 + 0.5 * sin(time * 9)) : 0.85 + 0.15 * (0.5 + 0.5 * sin(time * 3.2))
             var c = ctx
             c.translateBy(x: 50, y: cy)
             c.scaleBy(x: 1 + 0.3 * bump, y: 1 + 0.3 * bump)
             c.translateBy(x: -50, y: -cy)
-            for i in 0..<n {
-                // AI'ın kendi renginde; seni bekleyen hızlı yanıp söner
-                let isWaiting = extras[i] == .waiting
-                let pulse = isWaiting ? 0.3 + 0.7 * (0.5 + 0.5 * sin(time * 9))
-                    : 0.65 + 0.35 * (0.5 + 0.5 * sin(time * 3.2 + Double(i) * 1.3))
-                let cx = 50 + (Double(i) - Double(n - 1) / 2) * gap
-                c.fill(Path(ellipseIn: CGRect(x: cx - 3.0, y: cy - 3.0, width: 6.0, height: 6.0)),
-                       with: .color(color.opacity(pulse)))
-                c.fill(Path(ellipseIn: CGRect(x: cx - 1.7, y: cy - 1.7, width: 1.8, height: 1.8)),
-                       with: .color(Color.white.opacity(0.55 * pulse)))
-            }
+            c.opacity = pulse
+            c.fill(Path(roundedRect: CGRect(x: 50 - w / 2, y: cy - h / 2, width: w, height: h), cornerRadius: h / 2),
+                   with: .color(color))
+            c.draw(Text(label).font(.system(size: 8.5, weight: .bold, design: .rounded)).foregroundColor(.white),
+                   at: CGPoint(x: 50, y: cy))
         }
         .frame(width: 100, height: 100)
         .allowsHitTesting(false)

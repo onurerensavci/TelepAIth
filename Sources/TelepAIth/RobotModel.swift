@@ -610,6 +610,9 @@ final class RobotModel: ObservableObject {
             .sorted { $0.priority > $1.priority }
     }
 
+    /// Çenedeki rozette yazan sayı: diğer sohbet yoksa boş, 9'dan fazlaysa "9+" (Windows'ta DisplayPicker.ExtrasBadge)
+    static func extrasBadge(_ count: Int) -> String { count <= 0 ? "" : count > 9 ? "9+" : String(count) }
+
     /// Minik kafalar: büyük kafada gösterilmeyen her AI için en fazla bir tane (Claude büyükse GPT, GPT büyükse Claude).
     /// O AI'ın birden çok sohbeti çalışıyorsa en acil olanı gösterilir. Gösterilen AI'ın diğer sohbetleri
     /// ayrı kafa olmaz: büyük kafanın "çalışıyor" hâlinde ve bildirimlerde görünür.

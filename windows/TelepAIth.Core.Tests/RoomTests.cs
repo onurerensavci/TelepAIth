@@ -172,6 +172,11 @@ public static partial class Tests
         A.Eq(0, junk.Count);
         A.Eq("", SidebarChats.StripStatus("You said: merhaba"));
         A.Eq("Copywriting fikirleri", SidebarChats.StripStatus("Copywriting fikirleri"));
+        // Çenedeki rozet: sayı, 9'dan fazlası "9+"
+        A.Eq("", DisplayPicker.ExtrasBadge(0));
+        A.Eq("1", DisplayPicker.ExtrasBadge(1));
+        A.Eq("9", DisplayPicker.ExtrasBadge(9));
+        A.Eq("9+", DisplayPicker.ExtrasBadge(12));
         // Claude'un biçimi: durum sadece boşlukla, büyük harfle eklenir (kullanıcının günlüğündeki gerçek adlar)
         A.Eq(RobotState.Running, SidebarChats.StatusOf("SCAM OR LEGIT video konsepti Running"));
         A.Eq(RobotState.Running, SidebarChats.StatusOf("TelepAIth Running Includes an artifact"));

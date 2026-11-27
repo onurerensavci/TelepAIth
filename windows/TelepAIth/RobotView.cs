@@ -714,7 +714,8 @@ internal sealed class RobotView : FrameworkElement
         else
             DrawFace(dc, time, eyeColor, face, C(baseColor));
         // Bu AI'ın diğer sohbetleri: ekranın altında AI renginde küçük ışıklar (bekleyen hızlı yanıp söner)
-        if (skin == null) DrawExtraLights(dc, _avatar.Extras, time, (DateTime.Now - _avatar.ExtrasPoppedAt).TotalSeconds, C(baseColor));
+        if (skin == null) DrawExtraLights(dc, _avatar.Extras, time, (DateTime.Now - _avatar.ExtrasPoppedAt).TotalSeconds, C(baseColor),
+                                          VisualTreeHelper.GetDpi(this).PixelsPerDip);
 
         dc.Pop();
 
@@ -1399,27 +1400,27 @@ internal sealed class RobotView : FrameworkElement
     private static readonly Color ExtraWorking = C(0.13, 0.47, 0.95);
     private static readonly Color ExtraWaiting = C(0.95, 0.45, 0.05);
 
+    private static readonly Typeface BadgeFace = new(new FontFamily("Segoe UI Variable Text, Segoe UI"), FontStyles.Normal, FontWeights.Bold, FontStretches.Normal);
+
     /// <summary>
-    /// Büyük kafadaki AI'ın diğer her sohbeti için ekranın altında bir nokta (en fazla 4), AI'ın renginde;
-    /// seni bekleyen hızlı yanıp söner, yeni sohbet gelince kısa bir zıplamayla belirir.
+    /// Büyük kafadaki AI'ın diğer sohbetleri: ekranın altında AI'ın renginde tek rozet, içinde sayı ("3", 9'dan fazlaysa "9+").
+    /// Biri seni bekliyorsa rozet hızlı yanıp söner; sayı artınca kısa bir zıplama yapar. (Mac'te ExtraLightsView)
     /// </summary>
-    private static void DrawExtraLights(DrawingContext dc, List<RobotState> extras, double time, double popAge, Color aiColor)
+    private static void DrawExtraLights(DrawingContext dc, List<RobotState> extras, double time, double popAge, Color aiColor, double dpi)
     {
-        var n = Math.Min(4, extras.Count);
-        if (n == 0) return;
-        const double gap = 9, cy = 80;
+        var label = DisplayPicker.ExtrasBadge(extras.Count);
+        if (label.Length == 0) return;
+        const double cy = 79, h = 11;
+        var w = label.Length > 1 ? 17.0 : 11.0;
         var bump = popAge is >= 0 and < 0.45 ? Math.Sin(popAge / 0.45 * Math.PI) : 0;
+        var waiting = extras.Any(s => s == RobotState.Waiting);
+        var pulse = waiting ? 0.3 + 0.7 * (0.5 + 0.5 * Math.Sin(time * 9)) : 0.85 + 0.15 * (0.5 + 0.5 * Math.Sin(time * 3.2));
         dc.PushTransform(new ScaleTransform(1 + 0.3 * bump, 1 + 0.3 * bump, 50, cy));
-        for (var i = 0; i < n; i++)
-        {
-            var waiting = extras[i] == RobotState.Waiting;
-            // AI'ın kendi renginde (Claude turuncu, GPT mavi); seni bekleyen hızlı yanıp söner
-            var color = aiColor;
-            var pulse = waiting ? 0.3 + 0.7 * (0.5 + 0.5 * Math.Sin(time * 9)) : 0.65 + 0.35 * (0.5 + 0.5 * Math.Sin(time * 3.2 + i * 1.3));
-            var center = new Point(50 + (i - (n - 1) / 2.0) * gap, cy);
-            dc.DrawEllipse(B(color, pulse), null, center, 3.0, 3.0);
-            dc.DrawEllipse(B(Colors.White, 0.55 * pulse), null, new Point(center.X - 0.8, center.Y - 0.8), 0.9, 0.9);
-        }
+        dc.PushOpacity(pulse);
+        dc.DrawRoundedRectangle(B(aiColor), null, new Rect(50 - w / 2, cy - h / 2, w, h), h / 2, h / 2);
+        var text = new FormattedText(label, CultureInfo.InvariantCulture, FlowDirection.LeftToRight, BadgeFace, 8.5, B(Colors.White), dpi);
+        dc.DrawText(text, new Point(50 - text.Width / 2, cy - text.Height / 2));
+        dc.Pop();
         dc.Pop();
     }
 

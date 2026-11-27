@@ -30,7 +30,7 @@
 - **Switching chats** follows the chat you clicked instead of calling the old one "done".
 - **Background chats:** when you move to another chat in Claude, chats still running in the background are picked up from the status dot in the sidebar: the robot shows as working, and you're told when they finish or need your answer (while the sidebar is open).
 - **Apps whose screen can't be read** (e.g. ChatGPT on Mac): the robot first asks the app to expose its screen; if it still can't read it, it guesses whether it's working from CPU usage (Diagnostics says "guessing from CPU").
-- **Two AIs at once:** while one is in the big head, the other (e.g. ChatGPT when Claude is shown) appears as a single mini head next to it, with an orange dot if it's waiting for you. If the AI in the big head has more chats running, small lights in its color glow under the robot's screen (Claude orange, GPT blue); one waiting for you blinks fast (up to 4).
+- **Two AIs at once:** while one is in the big head, the other (e.g. ChatGPT when Claude is shown) appears as a single mini head next to it, with an orange dot if it's waiting for you. If the AI in the big head has more chats running, a small badge in its color under the robot's screen shows how many (Claude orange, GPT blue; 9+ beyond nine); it blinks fast if one is waiting for you.
 - **Narrator:** optionally, Claude tells the robot what it's doing in its own words (a small MCP tool).
 - **Quota:** if ClaudeBar is installed, warns you when your quota runs low, and a thin ring around the robot shows what's left.
 

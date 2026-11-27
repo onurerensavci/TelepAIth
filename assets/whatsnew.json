@@ -1,5 +1,14 @@
 [
  {
+  "version": "0.25.5",
+  "tr": [
+   "Robotun çenesindeki noktaların yerine tek rozet: diğer sohbetlerin sayısını yazıyor (9'dan fazlası 9+), biri seni bekliyorsa yanıp sönüyor"
+  ],
+  "en": [
+   "The dots on the robot's chin are now a single badge with the number of other chats (9+ beyond nine); it blinks when one is waiting for you"
+  ]
+ },
+ {
   "version": "0.25.4",
   "tr": [
    "Anlatıcı penceresi talimatın Claude'da nereye yapıştırılacağını doğru gösteriyor (Settings → Your Claude → Instructions)"
