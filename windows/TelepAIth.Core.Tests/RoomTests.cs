@@ -172,6 +172,24 @@ public static partial class Tests
         A.Eq(0, junk.Count);
         A.Eq("", SidebarChats.StripStatus("You said: merhaba"));
         A.Eq("Copywriting fikirleri", SidebarChats.StripStatus("Copywriting fikirleri"));
+        // Claude'un biçimi: durum sadece boşlukla, büyük harfle eklenir (kullanıcının günlüğündeki gerçek adlar)
+        A.Eq(RobotState.Running, SidebarChats.StatusOf("SCAM OR LEGIT video konsepti Running"));
+        A.Eq(RobotState.Running, SidebarChats.StatusOf("TelepAIth Running Includes an artifact"));
+        A.Eq(RobotState.Waiting, SidebarChats.StatusOf("Spark Win Cash video Needs input"));
+        A.True(SidebarChats.StatusOf("marathon running") == null, "küçük harf: adın parçası");
+        A.True(SidebarChats.StatusOf("SCAM OR LEGIT video konsepti") == null);
+        A.Eq("SCAM OR LEGIT video konsepti", SidebarChats.StripStatus("SCAM OR LEGIT video konsepti Running"));
+        A.Eq("TelepAIth", SidebarChats.StripStatus("TelepAIth Running Includes an artifact"));
+        A.Eq("marathon running", SidebarChats.StripStatus("marathon running"));
+        var claudeRows = SidebarChats.Parse(new[]
+        {
+            new SidebarItem("SCAM OR LEGIT video konsepti Running", "", null, new RectD(10, 100, 240, 28)),
+            new SidebarItem("Spark Win Cash video", "", null, new RectD(10, 130, 240, 28)),
+            new SidebarItem("TelepAIth Running Includes an artifact", "", null, new RectD(10, 160, 240, 28)),
+        });
+        A.Eq(2, claudeRows.Count);
+        A.True(claudeRows.Any(r => r.Row.Title == "SCAM OR LEGIT video konsepti" && r.Row.State == RobotState.Running));
+        A.True(claudeRows.Any(r => r.Row.Title == "TelepAIth" && r.Row.State == RobotState.Running));
         // Claude'un adın sonuna eklediği işaretler temizlenir
         A.Eq("TelepAIth", SidebarChats.StripStatus("TelepAIth Includes an artifact"));
         A.Eq("Tarif", SidebarChats.StripStatus("Tarif, Starred · running"));

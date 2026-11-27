@@ -1,5 +1,16 @@
 [
  {
+  "version": "0.25.3",
+  "tr": [
+   "Claude'da arkada çalışan sohbetler artık listede görünüyor (Claude durumu adın sonuna \"Running\" diye ekliyordu, robot bunu tanımıyordu)",
+   "Sohbet adlarından \"Running\" eki de temizleniyor"
+  ],
+  "en": [
+   "Chats running in the background in Claude now show up in the list (Claude appends \"Running\" to the name, which the robot didn't recognize)",
+   "The \"Running\" suffix is removed from chat names"
+  ]
+ },
+ {
   "version": "0.25.2",
   "tr": [
    "Sohbet listesinde açık sohbetin gerçek adı hemen görünüyor (\"Açık sohbet\" yerine)",

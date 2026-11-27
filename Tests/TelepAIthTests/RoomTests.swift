@@ -138,6 +138,13 @@ final class RoomTests: XCTestCase {
         XCTAssertTrue(junk.isEmpty)
         XCTAssertEqual(SidebarChats.stripStatus("You said: merhaba"), "")
         XCTAssertEqual(SidebarChats.stripStatus("Copywriting fikirleri"), "Copywriting fikirleri")
+        // Claude'un biçimi: durum sadece boşlukla, büyük harfle eklenir (kullanıcının günlüğündeki gerçek adlar)
+        XCTAssertEqual(SidebarChats.statusOf("SCAM OR LEGIT video konsepti Running"), .running)
+        XCTAssertEqual(SidebarChats.statusOf("TelepAIth Running Includes an artifact"), .running)
+        XCTAssertEqual(SidebarChats.statusOf("Spark Win Cash video Needs input"), .waiting)
+        XCTAssertNil(SidebarChats.statusOf("marathon running"))
+        XCTAssertEqual(SidebarChats.stripStatus("SCAM OR LEGIT video konsepti Running"), "SCAM OR LEGIT video konsepti")
+        XCTAssertEqual(SidebarChats.stripStatus("TelepAIth Running Includes an artifact"), "TelepAIth")
         // Claude'un adın sonuna eklediği işaretler temizlenir
         XCTAssertEqual(SidebarChats.stripStatus("TelepAIth Includes an artifact"), "TelepAIth")
         XCTAssertEqual(SidebarChats.stripStatus("Tarif, Starred · running"), "Tarif")

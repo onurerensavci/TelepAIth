@@ -69,12 +69,30 @@ final class SidebarChats {
             || separators.contains { l.hasSuffix($0 + w) || l.hasPrefix(w + $0) }
     }
 
-    /// Durum yazısı mı? Tam eşleşme ya da "Başlık, running" / "Başlık · running" / "Başlık (running)" gibi sonek
+    /// Durum yazısı mı? Tam eşleşme ya da "Başlık, running" / "Başlık · running" / "Başlık (running)" gibi sonek,
+    /// ya da Claude'un biçimi: "Başlık Running" (sonda işaret olabilir: "Başlık Running Includes an artifact")
     static func statusOf(_ text: String?) -> RobotState? {
         guard let text = text, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
-        let l = normalized(text)
+        let l = normalized(stripDecorations(text))
         if waitingWords.contains(where: { matches(l, $0) }) { return .waiting }
         if workingWords.contains(where: { matches(l, $0) }) { return .running }
+        return spacedStatus(text)?.state
+    }
+
+    /// Claude'un biçimi: durum adın sonuna sadece bir boşlukla ve büyük harfle eklenir ("SCAM OR LEGIT video konsepti Running").
+    /// Yanlış alarm olmasın diye yalnızca büyük harfle başlayan durum sayılır ("marathon running" sayılmaz). (Windows'ta SpacedStatus)
+    static func spacedStatus(_ name: String) -> (state: RobotState, title: String)? {
+        var t = stripDecorations(name)
+        while let last = t.last, last == "." || last == "…" || last == " " { t.removeLast() }
+        let l = t.lowercased()
+        guard l.count == t.count else { return nil }
+        for (words, state) in [(waitingWords, RobotState.waiting), (workingWords, RobotState.running)] {
+            for w in words where l.hasSuffix(" " + w) && l.count > w.count + 1 {
+                guard t[t.index(t.endIndex, offsetBy: -w.count)].isUppercase else { continue }
+                let title = String(t.prefix(t.count - w.count - 1)).trimmingCharacters(in: .whitespaces)
+                if title.count >= 2 { return (state, title) }
+            }
+        }
         return nil
     }
 
@@ -138,6 +156,7 @@ final class SidebarChats {
                 if l.hasPrefix(w + sep) { return String(t.dropFirst(w.count + sep.count)).trimmingCharacters(in: .whitespaces) }
             }
         }
+        if let s = spacedStatus(t) { return s.title }
         return t
     }
 

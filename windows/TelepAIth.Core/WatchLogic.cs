@@ -488,9 +488,27 @@ public sealed class SidebarChats
     public static RobotState? StatusOf(string? text)
     {
         if (string.IsNullOrWhiteSpace(text)) return null;
-        var l = text.Trim().ToLowerInvariant().TrimEnd('.', '…', ' ');
+        var l = StripDecorations(text).ToLowerInvariant().TrimEnd('.', '…', ' ');
         foreach (var w in WaitingWords) if (Matches(l, w)) return RobotState.Waiting;
         foreach (var w in WorkingWords) if (Matches(l, w)) return RobotState.Running;
+        return SpacedStatus(text)?.State;
+    }
+
+    /// <summary>Claude'un biçimi: durum adın sonuna sadece bir boşlukla ve büyük harfle eklenir ("SCAM OR LEGIT video konsepti Running").
+    /// Yanlış alarm olmasın diye yalnızca büyük harfle başlayan durum sayılır ("marathon running" sayılmaz). (Mac'te spacedStatus)</summary>
+    public static (RobotState State, string Title)? SpacedStatus(string name)
+    {
+        var t = StripDecorations(name).TrimEnd('.', '…', ' ');
+        var l = t.ToLowerInvariant();
+        if (l.Length != t.Length) return null;
+        foreach (var (words, state) in new[] { (WaitingWords, RobotState.Waiting), (WorkingWords, RobotState.Running) })
+            foreach (var w in words)
+            {
+                if (!l.EndsWith(" " + w, StringComparison.Ordinal) || l.Length <= w.Length + 1) continue;
+                if (!char.IsUpper(t[t.Length - w.Length])) continue;
+                var title = t[..(t.Length - w.Length - 1)].Trim();
+                if (title.Length >= 2) return (state, title);
+            }
         return null;
     }
 
@@ -573,7 +591,7 @@ public sealed class SidebarChats
                 if (l.StartsWith(w + sep, StringComparison.Ordinal)) return t[(w.Length + sep.Length)..].Trim();
             }
         }
-        return t;
+        return SpacedStatus(t)?.Title ?? t;
     }
 
     /// <summary>Adres: sorgu ve son eğik çizgi olmadan (aynı sohbetin adresleri eşleşsin)</summary>
