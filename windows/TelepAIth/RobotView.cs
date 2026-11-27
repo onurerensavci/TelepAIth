@@ -714,8 +714,7 @@ internal sealed class RobotView : FrameworkElement
         else
             DrawFace(dc, time, eyeColor, face, C(baseColor));
         // Bu AI'ın diğer sohbetleri: ekranın altında AI renginde küçük ışıklar (bekleyen hızlı yanıp söner)
-        if (skin == null) DrawExtraLights(dc, _avatar.Extras, time, (DateTime.Now - _avatar.ExtrasPoppedAt).TotalSeconds, C(baseColor),
-                                          VisualTreeHelper.GetDpi(this).PixelsPerDip);
+        if (skin == null) DrawExtraLights(dc, _avatar.Extras, time, (DateTime.Now - _avatar.ExtrasPoppedAt).TotalSeconds, C(baseColor));
 
         dc.Pop();
 
@@ -1400,27 +1399,36 @@ internal sealed class RobotView : FrameworkElement
     private static readonly Color ExtraWorking = C(0.13, 0.47, 0.95);
     private static readonly Color ExtraWaiting = C(0.95, 0.45, 0.05);
 
-    private static readonly Typeface BadgeFace = new(new FontFamily("Segoe UI Variable Text, Segoe UI"), FontStyles.Normal, FontWeights.Bold, FontStretches.Normal);
-
     /// <summary>
-    /// Büyük kafadaki AI'ın diğer sohbetleri: ekranın altında AI'ın renginde tek rozet, içinde sayı ("3", 9'dan fazlaysa "9+").
-    /// Biri seni bekliyorsa rozet hızlı yanıp söner; sayı artınca kısa bir zıplama yapar. (Mac'te ExtraLightsView)
+    /// Büyük kafadaki AI'ın diğer her sohbeti için ekranın altında bir nokta (en fazla 4), AI'ın renginde;
+    /// 4'ten fazla sohbet varsa 4. noktanın üstünde "+" olur. Seni bekleyen hızlı yanıp söner,
+    /// yeni sohbet gelince kısa bir zıplamayla belirir. (Mac'te ExtraLightsView)
     /// </summary>
-    private static void DrawExtraLights(DrawingContext dc, List<RobotState> extras, double time, double popAge, Color aiColor, double dpi)
+    private static void DrawExtraLights(DrawingContext dc, List<RobotState> extras, double time, double popAge, Color aiColor)
     {
-        var label = DisplayPicker.ExtrasBadge(extras.Count);
-        if (label.Length == 0) return;
-        const double cy = 79, h = 11;
-        var w = label.Length > 1 ? 17.0 : 11.0;
+        var (n, plus) = DisplayPicker.ExtrasDots(extras.Count);
+        if (n == 0) return;
+        const double gap = 9, cy = 80;
         var bump = popAge is >= 0 and < 0.45 ? Math.Sin(popAge / 0.45 * Math.PI) : 0;
-        var waiting = extras.Any(s => s == RobotState.Waiting);
-        var pulse = waiting ? 0.3 + 0.7 * (0.5 + 0.5 * Math.Sin(time * 9)) : 0.85 + 0.15 * (0.5 + 0.5 * Math.Sin(time * 3.2));
         dc.PushTransform(new ScaleTransform(1 + 0.3 * bump, 1 + 0.3 * bump, 50, cy));
-        dc.PushOpacity(pulse);
-        dc.DrawRoundedRectangle(B(aiColor), null, new Rect(50 - w / 2, cy - h / 2, w, h), h / 2, h / 2);
-        var text = new FormattedText(label, CultureInfo.InvariantCulture, FlowDirection.LeftToRight, BadgeFace, 8.5, B(Colors.White), dpi);
-        dc.DrawText(text, new Point(50 - text.Width / 2, cy - text.Height / 2));
-        dc.Pop();
+        for (var i = 0; i < n; i++)
+        {
+            // Son noktada "+": 4'ten fazla sohbet var; o noktaya kalan sohbetlerden biri seni bekliyorsa o yanıp söner
+            var isPlus = plus && i == n - 1;
+            var waiting = isPlus ? extras.Skip(i).Any(s => s == RobotState.Waiting) : extras[i] == RobotState.Waiting;
+            var pulse = waiting ? 0.3 + 0.7 * (0.5 + 0.5 * Math.Sin(time * 9)) : 0.65 + 0.35 * (0.5 + 0.5 * Math.Sin(time * 3.2 + i * 1.3));
+            var center = new Point(50 + (i - (n - 1) / 2.0) * gap, cy);
+            if (isPlus)
+            {
+                dc.DrawEllipse(B(aiColor, Math.Max(pulse, 0.85)), null, center, 3.4, 3.4);
+                var pen = new Pen(B(Colors.White, 0.95), 1.0) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round };
+                dc.DrawLine(pen, new Point(center.X - 1.7, center.Y), new Point(center.X + 1.7, center.Y));
+                dc.DrawLine(pen, new Point(center.X, center.Y - 1.7), new Point(center.X, center.Y + 1.7));
+                continue;
+            }
+            dc.DrawEllipse(B(aiColor, pulse), null, center, 3.0, 3.0);
+            dc.DrawEllipse(B(Colors.White, 0.55 * pulse), null, new Point(center.X - 0.8, center.Y - 0.8), 0.9, 0.9);
+        }
         dc.Pop();
     }
 

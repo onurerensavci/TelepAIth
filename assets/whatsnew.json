@@ -1,5 +1,14 @@
 [
  {
+  "version": "0.25.6",
+  "tr": [
+   "Çenede yine noktalar: en fazla 4 nokta, daha fazla sohbet varsa 4. noktanın üstünde \"+\""
+  ],
+  "en": [
+   "Back to dots on the chin: up to 4, and the 4th gets a \"+\" when there are more chats"
+  ]
+ },
+ {
   "version": "0.25.5",
   "tr": [
    "Robotun çenesindeki noktaların yerine tek rozet: diğer sohbetlerin sayısını yazıyor (9'dan fazlası 9+), biri seni bekliyorsa yanıp sönüyor"

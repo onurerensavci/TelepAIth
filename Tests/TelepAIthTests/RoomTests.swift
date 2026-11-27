@@ -138,10 +138,11 @@ final class RoomTests: XCTestCase {
         XCTAssertTrue(junk.isEmpty)
         XCTAssertEqual(SidebarChats.stripStatus("You said: merhaba"), "")
         XCTAssertEqual(SidebarChats.stripStatus("Copywriting fikirleri"), "Copywriting fikirleri")
-        // Çenedeki rozet: sayı, 9'dan fazlası "9+"
-        XCTAssertEqual(RobotModel.extrasBadge(0), "")
-        XCTAssertEqual(RobotModel.extrasBadge(3), "3")
-        XCTAssertEqual(RobotModel.extrasBadge(12), "9+")
+        // Çenedeki noktalar: en fazla 4, fazlası varsa 4. noktada "+"
+        XCTAssertEqual(RobotModel.extrasDots(3).dots, 3)
+        XCTAssertFalse(RobotModel.extrasDots(4).plus)
+        XCTAssertEqual(RobotModel.extrasDots(7).dots, 4)
+        XCTAssertTrue(RobotModel.extrasDots(7).plus)
         // Claude'un biçimi: durum sadece boşlukla, büyük harfle eklenir (kullanıcının günlüğündeki gerçek adlar)
         XCTAssertEqual(SidebarChats.statusOf("SCAM OR LEGIT video konsepti Running"), .running)
         XCTAssertEqual(SidebarChats.statusOf("TelepAIth Running Includes an artifact"), .running)

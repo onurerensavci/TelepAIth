@@ -187,12 +187,17 @@ def head(x, y, s, state="idle", mood=None, who="claude", health="ok", look=0.0, 
     parts.append('<g fill="%s" opacity="0.09"><use href="#dimgrid"/></g>' % tint)
     parts.append('<g fill="%s">%s</g>' % (tint, "".join(glow)))
     parts.append('<g fill="%s">%s</g>' % (tint, "".join(lit)))
-    # Bu AI'ın diğer sohbetleri: ekranın altında AI renginde noktalar (en fazla 4)
+    # Bu AI'ın diğer sohbetleri: ekranın altında AI renginde noktalar (en fazla 4; fazlası varsa 4. noktada "+")
     n = min(4, lights)
     for i in range(n):
         lx = 50 + (i - (n - 1) / 2) * 9
-        parts.append('<circle cx="%.1f" cy="80" r="3" fill="%s" opacity="%.2f"/>'
-                     % (lx, {"claude": CLAUDE, "gpt": GPT}[who], 1 - 0.18 * (i % 2)))
+        color = {"claude": CLAUDE, "gpt": GPT}[who]
+        if lights > 4 and i == n - 1:
+            parts.append('<circle cx="%.1f" cy="80" r="3.4" fill="%s"/>' % (lx, color))
+            parts.append('<path d="M%.1f 80 h3.4 M%.1f 78.3 v3.4" stroke="#FFFFFF" stroke-width="1" stroke-linecap="round"/>'
+                         % (lx - 1.7, lx))
+            continue
+        parts.append('<circle cx="%.1f" cy="80" r="3" fill="%s" opacity="%.2f"/>' % (lx, color, 1 - 0.18 * (i % 2)))
         parts.append('<circle cx="%.1f" cy="79.2" r="0.9" fill="#FFFFFF" opacity="0.5"/>' % (lx - 0.8))
     if winter:
         # Bere: AI renginde kubbe, örgü çizgileri, beyaz kenar ve ponpon (sağlık ışığının yerine)
@@ -244,9 +249,10 @@ def mini_head(x, y, s, who="gpt", waiting=False):
     return "".join(p)
 
 
-def chat_list(x, y, s, title, rows, tail_x=None, tail_down=True):
-    """Kafaya tıklayınca açılan sohbet listesi (ChatListBubble ile aynı): satırlar AI renginde zeminli.
-    rows: (who, sohbet adı, durum yazısı, durum: working | waiting | done). Döner: (svg, genişlik, yükseklik)"""
+def chat_list(x, y, s, title, rows, tail_x=None, tail_down=True, summary=""):
+    """Kafaya tıklayınca açılan sohbet listesi (ChatListBubble ile aynı): solda AI şeridi ve durum simgesi,
+    satır zemini durumun renginde (turuncu bekliyor, AI rengi çalışıyor, yeşil yeni bitti, gri bakılmış).
+    rows: (who, sohbet adı, sağdaki yazı, ton: waiting | working | fresh | seen). Döner: (svg, genişlik, yükseklik)"""
     w, row_h, pad = 330, 20, 7
     h = pad + 16 + len(rows) * row_h + pad - 2
     tail_x = tail_x if tail_x is not None else w - 50
@@ -262,22 +268,46 @@ def chat_list(x, y, s, title, rows, tail_x=None, tail_down=True):
     else:
         p.append('<path d="M%.1f 0.5 l7 -8 l7 8 z" fill="#2B2A33" fill-opacity="0.97"/>' % (tail_x - 7))
     p.append("</g>")
-    p.append('<text x="12" y="%d" font-family="%s" font-size="10" font-weight="600" fill="#A8A5B8">%s</text>'
+    p.append('<text x="12" y="%d" font-family="%s" font-size="10.5" font-weight="700" fill="#FFFFFF">%s</text>'
              % (pad + 10, FONT, esc(title)))
-    status_color = {"working": "#3B8BF5", "waiting": "#F27A1A", "done": "#A8A5B8"}
-    for i, (who, name, status, kind) in enumerate(rows):
+    if summary:
+        p.append('<text x="%d" y="%d" text-anchor="end" font-family="%s" font-size="9.5" fill="#A8A5B8">%s</text>'
+                 % (w - 12, pad + 10, FONT, esc(summary)))
+    for i, (who, name, status, tone) in enumerate(rows):
         ry = pad + 16 + i * row_h
-        color = {"claude": CLAUDE, "gpt": GPT}[who]
-        p.append('<rect x="6" y="%.1f" width="%d" height="%d" rx="6" fill="%s" fill-opacity="0.16"/>'
-                 % (ry + 1, w - 12, row_h - 2, color))
-        p.append('<circle cx="15" cy="%.1f" r="3" fill="%s"/>' % (ry + row_h / 2, color))
-        room = w - 12 - text_width(status, 9.5) - 12 - 24
+        cy = ry + row_h / 2
+        ai = {"claude": CLAUDE, "gpt": GPT}[who]
+        tc = {"waiting": "#F58C1A", "working": ai, "fresh": "#33B866", "seen": "#8E8C99"}[tone]
+        p.append('<rect x="6" y="%.1f" width="%d" height="%d" rx="6" fill="%s" fill-opacity="%.2f"%s/>'
+                 % (ry + 1, w - 12, row_h - 2, tc, 0.07 if tone == "seen" else 0.16,
+                    ' stroke="%s" stroke-opacity="0.6"' % tc if tone == "waiting" else ""))
+        if tone == "working":   # üstünden geçen ışık
+            g = uid("sw")
+            p.append('<defs><linearGradient id="%s" x1="0" x2="1"><stop offset="0" stop-color="%s" stop-opacity="0"/>'
+                     '<stop offset="0.5" stop-color="%s" stop-opacity="0.38"/><stop offset="1" stop-color="%s" stop-opacity="0"/>'
+                     '</linearGradient></defs>' % (g, tc, tc, tc))
+            p.append('<rect x="%d" y="%.1f" width="120" height="%d" rx="6" fill="url(#%s)"/>' % (60 + 70 * (i % 2), ry + 1, row_h - 2, g))
+        p.append('<rect x="11" y="%.1f" width="3" height="12" rx="1.5" fill="%s"/>' % (cy - 6, ai))
+        ix = 23
+        if tone == "waiting":
+            p.append('<circle cx="%d" cy="%.1f" r="5.5" fill="#F58C1A"/>' % (ix, cy))
+            p.append('<text x="%d" y="%.1f" text-anchor="middle" font-family="%s" font-size="8.5" font-weight="900" fill="#FFFFFF">!</text>'
+                     % (ix, cy + 3, FONT))
+        elif tone == "working":
+            p.append('<circle cx="%d" cy="%.1f" r="4.6" fill="none" stroke="%s" stroke-opacity="0.25" stroke-width="2"/>' % (ix, cy, ai))
+            p.append('<path d="M%d %.1f a4.6 4.6 0 0 1 4.6 4.6" fill="none" stroke="%s" stroke-width="2" stroke-linecap="round"/>'
+                     % (ix, cy - 4.6, ai))
+        else:
+            p.append('<circle cx="%d" cy="%.1f" r="5.5" fill="#33B866"/>' % (ix, cy))
+            p.append('<path d="M%.1f %.1f l1.8 1.8 l3.2 -3.4" fill="none" stroke="#FFFFFF" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>'
+                     % (ix - 2.6, cy + 0.1))
+        room = w - 12 - text_width(status, 9.5) - 12 - 36
         while text_width(name, 10.5) > room and len(name) > 4:   # uygulamadaki gibi sığmayan ad "…" ile kısalır
             name = name[:-2].rstrip() + "…"
-        p.append('<text x="24" y="%.1f" font-family="%s" font-size="10.5" font-weight="600" fill="#FFFFFF">%s</text>'
-                 % (ry + 14, FONT, esc(name)))
-        p.append('<text x="%d" y="%.1f" text-anchor="end" font-family="%s" font-size="9.5" fill="%s">%s</text>'
-                 % (w - 12, ry + 14, FONT, status_color[kind], esc(status)))
+        p.append('<text x="34" y="%.1f" font-family="%s" font-size="10.5" font-weight="600" fill="%s">%s</text>'
+                 % (ry + 14, FONT, "#A8A5B8" if tone == "seen" else "#FFFFFF", esc(name)))
+        p.append('<text x="%d" y="%.1f" text-anchor="end" font-family="%s" font-size="9.5" font-weight="600" fill="%s">%s</text>'
+                 % (w - 12, ry + 14, FONT, tc, esc(status)))
     p.append("</g>")
     return "".join(p), w * s, (h + 8) * s
 
@@ -391,14 +421,16 @@ T = {
                    ("sleeping", None, "gpt", "💤 Uyuyor"), ("idle", "pleased", "gpt", "💙 Teşekkür edince"),
                    ("idle", "shocked", "gpt", "😮 BÜYÜK HARFLE"), ("idle", "dizzy", "gpt", "😵 Art arda tıklayınca"),
                    ("winter", None, "gpt", "❄️ Kışın bere takar")],
-        "chats_text": ["Hepsi bir bakışta", (CLAUDE, "Turuncu ışıklar: Claude'un diğer sohbetleri"),
+        "chats_text": ["Hepsi bir bakışta", (CLAUDE, "Turuncu noktalar: Claude'un diğer sohbetleri"),
                        (GPT, "Minik kafa: arkada çalışan öteki AI"),
-                       ("#9C86FF", "Robota tıkla: sohbetler, durum ve süre"),
-                       ("#9C86FF", "Satıra tıkla: o sohbete gider")],
-        "chats": ("Sohbetler · +1", [("claude", "Giriş ekranındaki hatayı düzelt", "çalışıyor · 3 dk", "working"),
-                                     ("claude", "Ödeme API'sine test yaz", "seni bekliyor · 1 dk", "waiting"),
-                                     ("gpt", "Yatırımcı sunumu taslağı", "çalışıyor · 40 sn", "working"),
-                                     ("claude", "Haftalık satış raporunu özetle", "bitti · 2 dk önce", "done")]),
+                       ("#F58C1A", "Turuncu bekliyor · yeşil yeni bitti"),
+                       ("#9C86FF", "Satıra tıkla: tam o sohbet açılır")],
+        "chats": ("Sohbetler", "1 bekliyor · 1 yeni · 2 çalışıyor",
+                  [("claude", "Ödeme API'sine test yaz", "bekliyor · 1 dk", "waiting"),
+                   ("claude", "Giriş ekranındaki hatayı düzelt", "3 dk", "working"),
+                   ("gpt", "Yatırımcı sunumu taslağı", "40 sn", "working"),
+                   ("claude", "Haftalık satış raporunu özetle", "2 dk önce", "fresh"),
+                   ("gpt", "Logo için renk önerileri", "25 dk önce", "seen")]),
         "health": [("ok", "Her şey yolunda"), ("update", "Güncelleme var"), ("broken", "Bir şey çalışmıyor")],
         "switch": [("claude", "Claude'a geçince"), ("gpt", "ChatGPT / Codex'e geçince")],
     },
@@ -415,14 +447,16 @@ T = {
                    ("sleeping", None, "gpt", "💤 Asleep"), ("idle", "pleased", "gpt", "💙 When you say thanks"),
                    ("idle", "shocked", "gpt", "😮 ALL CAPS"), ("idle", "dizzy", "gpt", "😵 Clicked too fast"),
                    ("winter", None, "gpt", "❄️ Beanie in winter")],
-        "chats_text": ["Everything at a glance", (CLAUDE, "Orange lights: Claude's other chats"),
+        "chats_text": ["Everything at a glance", (CLAUDE, "Orange dots: Claude's other chats"),
                        (GPT, "Mini head: the other AI, still working"),
-                       ("#9C86FF", "Click the robot: chats, state and time"),
-                       ("#9C86FF", "Click a row: jump to that chat")],
-        "chats": ("Chats · +1", [("claude", "Fix the login screen bug", "working · 3 min", "working"),
-                                 ("claude", "Write tests for the payment API", "waiting for you · 1 min", "waiting"),
-                                 ("gpt", "Draft the investor pitch deck", "working · 40 s", "working"),
-                                 ("claude", "Summarize the weekly sales report", "done · 2 min ago", "done")]),
+                       ("#F58C1A", "Orange needs you · green just finished"),
+                       ("#9C86FF", "Click a row: that exact chat opens")],
+        "chats": ("Chats", "1 waiting · 1 new · 2 working",
+                  [("claude", "Write tests for the payment API", "waiting · 1 min", "waiting"),
+                   ("claude", "Fix the login screen bug", "3 min", "working"),
+                   ("gpt", "Draft the investor pitch deck", "40 s", "working"),
+                   ("claude", "Summarize the weekly sales report", "2 min ago", "fresh"),
+                   ("gpt", "Color ideas for the logo", "25 min ago", "seen")]),
         "health": [("ok", "All good"), ("update", "Update available"), ("broken", "Something's broken")],
         "switch": [("claude", "In Claude"), ("gpt", "In ChatGPT / Codex")],
     },
@@ -543,9 +577,9 @@ def chats(lang):
     hx, hy = W - 70 - 100 * hs, 30
     b.append(head(hx, hy, hs, state="thinking", who="claude", lights=3))
     b.append(mini_head(hx - 44, hy + 100 * hs - 32, 1.45, who="gpt"))
-    title, rows = T[lang]["chats"]
+    title, summary, rows = T[lang]["chats"]
     cs = 1.3
-    svg_list, lw, lh = chat_list(0, 0, cs, title, rows, tail_x=330 - 52, tail_down=False)
+    svg_list, lw, lh = chat_list(0, 0, cs, title, rows, tail_x=330 - 52, tail_down=False, summary=summary)
     lx, ly = W - 40 - lw, hy + 100 * hs + 18
     b.append('<g transform="translate(%.1f %.1f)">%s</g>' % (lx, ly + 8 * cs, svg_list))
     # sol: kısa açıklama

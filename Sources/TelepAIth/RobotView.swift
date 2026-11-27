@@ -1353,8 +1353,8 @@ final class PointerTracker {
 
 // MARK: - Diğer sohbetlerin ışıkları
 
-/// Kafalarda görünmeyen diğer sohbetler: ekranın altında AI'ın renginde tek rozet, içinde sayı ("3", 9'dan fazlaysa "9+").
-/// Biri seni bekliyorsa rozet hızlı yanıp söner; sayı artınca kısa bir zıplama yapar. (Windows'ta RobotView.DrawExtraLights)
+/// Kafalarda görünmeyen her sohbet için ekranın altında bir nokta (en fazla 4; Windows'takinin aynısı).
+/// 4'ten fazla sohbet varsa 4. noktanın üstünde "+" olur. Seni bekleyen hızlı yanıp söner; yeni sohbet gelince kısa bir zıplamayla belirir.
 struct ExtraLightsView: View {
     let extras: [RobotState]
     let time: TimeInterval
@@ -1364,21 +1364,35 @@ struct ExtraLightsView: View {
 
     var body: some View {
         Canvas { ctx, _ in
-            let label = RobotModel.extrasBadge(extras.count)
-            guard !label.isEmpty else { return }
-            let cy = 79.0, h = 11.0, w = label.count > 1 ? 17.0 : 11.0
+            let (n, plus) = RobotModel.extrasDots(extras.count)
+            guard n > 0 else { return }
+            let gap = 9.0, cy = 80.0
             let bump = popAge >= 0 && popAge < 0.45 ? sin(popAge / 0.45 * .pi) : 0
-            let waiting = extras.contains(.waiting)
-            let pulse = waiting ? 0.3 + 0.7 * (0.5 + 0.5 * sin(time * 9)) : 0.85 + 0.15 * (0.5 + 0.5 * sin(time * 3.2))
             var c = ctx
             c.translateBy(x: 50, y: cy)
             c.scaleBy(x: 1 + 0.3 * bump, y: 1 + 0.3 * bump)
             c.translateBy(x: -50, y: -cy)
-            c.opacity = pulse
-            c.fill(Path(roundedRect: CGRect(x: 50 - w / 2, y: cy - h / 2, width: w, height: h), cornerRadius: h / 2),
-                   with: .color(color))
-            c.draw(Text(label).font(.system(size: 8.5, weight: .bold, design: .rounded)).foregroundColor(.white),
-                   at: CGPoint(x: 50, y: cy))
+            for i in 0..<n {
+                // Son noktada "+": 4'ten fazla sohbet var; kalanlardan biri seni bekliyorsa o yanıp söner
+                let isPlus = plus && i == n - 1
+                let isWaiting = isPlus ? extras.dropFirst(i).contains(.waiting) : extras[i] == .waiting
+                let pulse = isWaiting ? 0.3 + 0.7 * (0.5 + 0.5 * sin(time * 9))
+                    : 0.65 + 0.35 * (0.5 + 0.5 * sin(time * 3.2 + Double(i) * 1.3))
+                let cx = 50 + (Double(i) - Double(n - 1) / 2) * gap
+                if isPlus {
+                    c.fill(Path(ellipseIn: CGRect(x: cx - 3.4, y: cy - 3.4, width: 6.8, height: 6.8)),
+                           with: .color(color.opacity(Swift.max(pulse, 0.85))))
+                    var p = Path()
+                    p.move(to: CGPoint(x: cx - 1.7, y: cy)); p.addLine(to: CGPoint(x: cx + 1.7, y: cy))
+                    p.move(to: CGPoint(x: cx, y: cy - 1.7)); p.addLine(to: CGPoint(x: cx, y: cy + 1.7))
+                    c.stroke(p, with: .color(.white.opacity(0.95)), style: StrokeStyle(lineWidth: 1, lineCap: .round))
+                    continue
+                }
+                c.fill(Path(ellipseIn: CGRect(x: cx - 3.0, y: cy - 3.0, width: 6.0, height: 6.0)),
+                       with: .color(color.opacity(pulse)))
+                c.fill(Path(ellipseIn: CGRect(x: cx - 1.7, y: cy - 1.7, width: 1.8, height: 1.8)),
+                       with: .color(Color.white.opacity(0.55 * pulse)))
+            }
         }
         .frame(width: 100, height: 100)
         .allowsHitTesting(false)

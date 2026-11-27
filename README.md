@@ -28,14 +28,21 @@
 - **Claude Code ve Codex:** her adımı anında görür: dosya okuyor, arıyor, düzenliyor, komut çalıştırıyor, alt ajana iş veriyor…
 - **Claude ve ChatGPT uygulamaları:** ekrandaki Durdur / İzin ver düğmelerinden AI'ın çalıştığını, onay beklediğini ve bitirdiğini anlar. Ne aşamada olduğunu kısaca söyler: *bakıyor, çözüyor, anlıyor, bitiriyor*.
 - **Sohbet değiştirince** tıkladığın sohbete geçer, eskisini "bitti" sanmaz.
-- **Arkadaki sohbetler:** Claude'da başka bir sohbete geçsen de, arkada çalışmaya devam eden sohbetleri yan menüdeki durum noktasından görür: robot çalışıyor görünür, bitince ya da cevabını bekleyince haber verir (yan menü açıkken).
+- **Arkadaki sohbetler:** Claude'da başka bir sohbete geçsen de, arkada çalışmaya devam eden sohbetleri yan menüden görür: robot çalışıyor görünür, bitince ya da cevabını bekleyince haber verir (yan menü açıkken). Robot yan menüyü yapısından tanır; sohbetin içindeki mesajları okumaz, onlara tıklamaz.
 - **Ekranı okunamayan uygulamalar** (ör. Mac'te ChatGPT): robot önce uygulamadan ekranını açmasını ister; yine okuyamazsa çalışıp çalışmadığını işlemci kullanımından tahmin eder (Teşhis'te "işlemciden tahmini" yazar).
-- **İki AI birden:** büyük kafada biri görünürken öteki (ör. Claude büyükse ChatGPT) yanında tek bir minik kafa olur; seni bekliyorsa üstünde turuncu bir nokta yanar. Büyük kafadaki AI'ın başka sohbetleri de çalışıyorsa robotun yüzünde, ekranın altında o AI'ın renginde küçük bir rozet kaç sohbet olduğunu yazar (Claude turuncu, GPT mavi; 9'dan fazlası 9+); biri seni bekliyorsa rozet hızlı yanıp söner.
+- **İki AI birden:** büyük kafada biri görünürken öteki (ör. Claude büyükse ChatGPT) yanında tek bir minik kafa olur; seni bekliyorsa üstünde turuncu bir nokta yanar. Büyük kafadaki AI'ın başka sohbetleri de çalışıyorsa robotun yüzünde, ekranın altında o AI'ın renginde küçük ışıklar yanar (Claude turuncu, GPT mavi); seni bekleyen hızlı yanıp söner. En fazla 4 nokta görünür, daha fazla sohbet varsa 4. noktanın üstünde "+" olur.
 - **Anlatıcı:** istersen Claude, ne yaptığını robota kendi ağzından söyler (küçük bir MCP aracı).
 - **Kota:** ClaudeBar kuruluysa kotan azalınca uyarır, robotun etrafındaki ince halka kalan kotayı gösterir.
 
+**🗂️ Sohbetleri unutturmaz**
+- **Robota tıkla:** balonda Sohbetler listesi açılır: çalışan, seni bekleyen ve biten bütün sohbetler, Claude ve ChatGPT birlikte. Başlıkta özet yazar (*1 bekliyor · 1 yeni · 2 çalışıyor*).
+- **Renk kodu:** turuncu seni bekliyor, yeşil yeni bitti, kırmızı hata, gri baktığın bitmiş sohbet; çalışan satırın üstünden ışık geçer. Solda ince şerit hangi AI olduğunu gösterir (Claude turuncu, GPT mavi), sağda süre yazar (*bekliyor · 2 dk*, *40 sn*, *5 dk önce*).
+- **Satıra tıkla, tam o sohbet açılır:** Claude sohbetleri resmî `claude://` bağlantısıyla doğrudan açılır. Bağlantısı olmayanlarda robot yan menüde o sohbete basar ve açıldığını kontrol eder; bulamazsa söyler.
+- **Bir sürü sohbet:** 6 satır görünür, fazlası balonun içinde fare tekerleğiyle kaydırılır. Biten sohbetler 2 saat listede kalır. Fare listenin üstündeyken liste kapanmaz.
+- **Gerçek adlar:** açık sohbetin adı yan menüden hemen öğrenilir ("Açık sohbet" yazmaz); Claude'un eklediği *Running*, *Includes an artifact* gibi ekler temizlenir.
+
 <p align="center">
-  <img src="assets/readme/chats-tr.svg" alt="Birden fazla sohbet: büyük kafada Claude ve altında turuncu ışıklar, yanda ChatGPT'nin minik kafası, robota tıklayınca açılan sohbet listesi" width="100%">
+  <img src="assets/readme/chats-tr.svg" alt="Birden fazla sohbet: büyük kafada Claude ve altında turuncu noktalar, yanda ChatGPT'nin minik kafası, robota tıklayınca açılan renk kodlu sohbet listesi" width="100%">
 </p>
 
 **💬 Konuşur**
@@ -43,15 +50,15 @@
 - İş bitince tur özeti verir: *Tamamdır! · 2 dk · 12 araç · 4 düzenleme*.
 - Ruh hâlleri var: teşekkür edince gözleri kalp olur, BÜYÜK HARFLE yazınca şaşırır, `rm -rf` görünce korkar, testler geçince parti yapar, üst üste 3 hatada başı döner.
 - Gözleri konuşur: ? (soru soruyor), ! (onay bekliyor), ✓ (bitti) ve % (kota azaldı) yanar. Boştayken gözleriyle imleci izler, üstüne gelince gülümser; art arda tıklarsan başı döner.
-- Aralık – 6 Ocak arası bere takar, etrafında kar yağar (Ayarlar → Genel → Kostüm).
+- **Efektler:** robotun etrafında kar, güneş, gökkuşağı, kuzey ışıkları, yıldızlar, kalpler, baloncuklar, ateş böcekleri, yağmur, sonbahar yaprakları ya da konfeti (11 efekt). *Otomatik* seçiliyse mevsime göre değişir (kışın kar ve bere, baharda gökkuşağı, yazın güneş, sonbaharda yaprak); sohbette aşk geçerse kalpler, kutlamada konfeti çıkar. Robotun odası → Efektler.
 - Türkçe ya da İngilizce konuşur. İstersen sesli söyler, kısa sesler çalar.
 
 **🔔 Haber verir**
-- 20 saniyeden uzun süren iş bitince, AI senden onay ya da cevap beklerken ve hata olunca bildirim atar.
+- **Önce robot söyler:** iş bitince, AI senden onay ya da cevap beklerken ve hata olunca robot balonda söyler. İstersen Mac/Windows bildirimini de açarsın (Ayarlar → Bildirimler, varsayılan kapalı): seni bekleyen sohbetler, hatalar ve uyarılar bildirim olarak da gelir. Biten sohbetler bildirim atmaz, onu robot söyler.
+- **Ses ayarları:** Ayarlar → Ses'te hangi anlarda ses çıkacağını tek tek seçersin: iş bitince, seni bekleyince, hatırlatma, arkada çalışınca, hata, kullanım sınırı, akıllı uyarılar, günün özeti.
 - Sesler azdır: arkadaki sohbetler o uygulama öndeyken bildirim atmaz (robot balonda söyler); Mac'te bildirim sesi 10 saniyede en fazla bir kez çalar; işlemciden tahmin edilen "bitti" bildirim atmaz.
 - **Sessize al:** robota sağ tık → 🔇 *Sessize al*. Bildirimler sessiz gelir, robot ses çıkarmaz ve sesli söylemez; aynı yerden sesi geri açarsın.
-- **Bildirime ya da balona tıkla:** o işin penceresine gidersin: Claude, ChatGPT ya da Claude Code'un çalıştığı terminal.
-- **Robota tıkla:** çalışan, seni bekleyen ve yeni biten sohbetlerin listesi açılır: adı, durumu ve süresi (*çalışıyor · 3 dk*, *bitti · 5 dk önce*). Birine tıklayınca o sohbete gidersin.
+- **Bildirime ya da balona tıkla:** o sohbete gidersin: Claude, ChatGPT ya da Claude Code'un çalıştığı terminal.
 - **Israr eder:** AI 30 saniyeden uzun süre onayını beklerse robot arada bir sallanır, başında "!" çıkar; 2 dakika sonra bir kez daha hatırlatır.
 - **Odak modu:** toplantıdayken (Zoom/Teams öndeyken ya da mikrofon kullanımdayken) ya da elle açınca robot soluklaşır ve susar, sadece seni bekleyen şeyleri söyler.
 - **Günün özeti:** akşam "Claude: 14 iş, 2 sa 10 dk, 31 düzenleme" gibi kısa bir özet verir.
@@ -60,10 +67,11 @@
 - **Kullanım sınırları:** Claude Code'un oturum (5 saat) ve haftalık limiti robotun ayaklarının dibinde iki küçük halka olur; sohbet listesinin başında *Oturum %42 · 16:40'ta dolar* yazar. %80'de, %95'te ve limit yenilenince haber verir. Ayarlar → Kodlama ajanları → *Kullanım sınırları* (Claude Code'un durum satırını kullanır, seninki görünmeye devam eder).
 - **Akıllı uyarılar:** bir sohbet aynı adımda üst üste 3 kez başarısız olunca *takıldı gibi* der; iki sohbet aynı dosyayı düzenlerse uyarır; Claude `git push` yapınca o commit'in CI'sini izleyip *CI geçti* / *CI kırmızı* der (`gh` gerekir); tur bittiğinde 1,5 saattir commit'lenmemiş iş varsa bir kez hatırlatır.
 - **Pil dostu:** boştayken robot yavaşça durur ve yeniden çizilmez (sadece göz kırparken birkaç kare); bir şey olunca hemen canlanır. Sistemde *hareketi azalt* açıksa süzülmez.
-- **Robotun odası:** menüden ya da robota sağ tıklayıp *🏠 Robotun odası*. Solda robotun, seviyesi ve serisi; sağda dört sekme:
-  - **Gardırop:** bere, kep, kulaklık, taç, gözlükler, bıyık, papyon, yanında kaktüs ya da kahve… Parçalar seviye atladıkça ya da başarımla açılır, takınca robotun başında görünür.
+- **Robotun odası:** menüden ya da robota sağ tıklayıp *🏠 Robotun odası*. Solda robotun, seviyesi ve serisi; sağda beş sekme:
+  - **Gardırop:** 30 parça, 5 yuva: Baş, Gözlük, Yüz, Boyun ve Yanında. Her yuvadan istediğini seçip kendi kombinini yaparsın (kulaklık, bere, pilot gözlüğü, bıyık, atkı, yanında lastik ördek ya da roket…). Parçalar seviye atladıkça ya da başarımla açılır; her yuvada parıltılı, gizli bir efsanevi ödül var. Bir parça açılınca robot sevinir ve söyler.
+  - **Efektler:** robotun etrafındaki efekti seçersin ya da *Otomatik* bırakırsın.
   - **Başarımlar:** gerçek işle XP kazanır (tur, düzenleme, çalışılan dakika, aktif gün); *Geveze*, *Büyük gün*, *Gece kuşu*, *Takım lideri* gibi 31 başarım. Yenisi açılınca robot söyler.
-  - **Emek:** son 7 ya da 30 günde hangi AI ve hangi projede ne kadar çalışıldı: günlük grafik ve proje tablosu.
+  - **Emek:** son 7 gün, 30 gün ya da tüm zamanlarda hangi AI ve hangi projede ne kadar çalışıldı: günlük grafik ve proje tablosu.
   - **Kullanım:** oturum ve haftalık limit büyük halkalarla, bugün AI başına tur ve süre.
 - **Saklan:** robotu ekranın altına sürükle, sadece kafasının üstü görünsün. Tıklayınca ya da haber gelince geri çıkar.
 
@@ -71,9 +79,9 @@
 - Claude'a ya da ChatGPT'ye tıklayınca o pencerenin sağ-alt köşesine uçar, pencereyi taşırsan peşinden gelir. Başka uygulamalara geçince yerinde kalır.
 - AI hangi masaüstündeyse (Spaces) orada kalır.
 - Ekran köşelerine yapışır, monitörden monitöre taşınır.
-- **🔒 Kilit** ile olduğu yerde sabitlenir, **📌 Her zaman üstte** ile pencerelerin üstünde durur.
+- **🔒 Kilit** ile olduğu yerde sabitlenir, **📌 Her zaman üstte** ile pencerelerin üstünde durur. Menü çubuğunun (Windows'ta görev çubuğunun) üstüne de çıkabilir.
 - **Boyut:** Ayarlar → Genel → Robot boyutu: Küçük, Orta, Büyük, Çok büyük. Büyük monitörlerde işe yarar.
-- Kendini günceller: yeni sürüm çıkınca alnındaki ışık turuncu yanar, tıklarsan kurar.
+- **Kendini günceller:** yarım saatte bir yeni sürüm var mı diye bakar. Varsa alnındaki ışık turuncu yanar; robota tıklayınca ya da sağ tık → *⬆️ Güncelle* ile sormadan kurar, açılınca neyin yeni olduğunu söyler.
 
 <p align="center">
   <img src="assets/readme/switch-tr.svg" alt="Claude'a geçince gözler turuncu, ChatGPT ya da Codex'e geçince mavi" width="560">
@@ -97,7 +105,7 @@
    xattr -dr com.apple.quarantine /Applications/TelepAIth.app && open /Applications/TelepAIth.app
    ```
    </details>
-3. **Kurulum sihirbazı:** ilk açılışta çıkan pencere bildirim iznini, Erişilebilirlik iznini (Claude ve ChatGPT uygulamaları için) ve Claude Code / Codex bağlantısını adım adım kurar. Sonradan menü → **Kurulum sihirbazı…** ile yeniden açabilirsin.
+3. **Kurulum sihirbazı:** ilk açılışta çıkan pencere bildirim iznini, Erişilebilirlik iznini (Claude ve ChatGPT uygulamaları için) ve Claude Code / Codex bağlantısını adım adım kurar; bildirimleri, sesi, gardırobu ve efektleri de tanıtır. Sonradan menü → **Kurulum sihirbazı…** ile yeniden açabilirsin.
 4. **Bağlantılar** (menü → **Ayarlar… → Bağlantılar**):
 
 | Bağlantı | Ne yapar | Not |
@@ -114,7 +122,7 @@ Hook'lar ayar dosyalarının yedeğini alır, sadece kendi kayıtlarına dokunur
 
 ### Windows (deneysel)
 
-Windows 10 ve 11 için ilk deneme sürümü. Mac'tekinin aynısı: robot, Claude/ChatGPT masaüstü uygulamalarını izleme, pencereye uçma, odak modu, minik kafalar, günün özeti.
+Windows 10 ve 11 için ilk deneme sürümü. Mac'tekinin aynısı: robot, sohbet listesi, Claude/ChatGPT masaüstü uygulamalarını izleme, pencereye uçma, robotun odası ve efektler, odak modu, minik kafalar, günün özeti.
 
 1. **[Windows paketini indir](https://github.com/onurerensavci/TelepAIth/releases/latest/download/Windows-TelepAIth-x64.zip)**, zip'i bir klasöre çıkar, `TelepAIth.exe`'ye çift tıkla.
 2. Windows **"Bilgisayarınız korundu"** derse: **Ek bilgi → Yine de çalıştır**. (Uygulama imzalı değil, bu uyarı bir kere çıkar.)
@@ -127,11 +135,13 @@ Bir şey ters giderse robota sağ tıkla → **Hata bildir…**: teşhis raporuy
 
 | Hareket | Ne olur |
 |---|---|
-| **Tıkla** | Son 5 olayı gösterir. Işık turuncuysa güncellemeyi kurar, kırmızıysa neyin bozuk olduğunu söyler. |
+| **Tıkla** | Sohbetler listesini açar (bir daha tıklayınca kapanır). Işık turuncuysa güncellemeyi kurar, kırmızıysa neyin bozuk olduğunu söyler. |
+| **Listede satıra tıkla** | Tam o sohbeti açar. |
+| **Listede tekerlek** | 6'dan fazla sohbet varsa listeyi kaydırır. |
 | **Balona tıkla** | O işin penceresine gider (Claude, ChatGPT ya da terminal). |
 | **Çift tıkla** | O an gösterdiği AI'ın uygulamasını öne getirir. |
 | **Sürükle** | Taşır. Bir köşeye yaklaştırıp bırakınca oraya yapışır, başka monitöre de gider. |
-| **Sağ tık** | Son olaylar · 🔒 Kilitle · 📌 Her zaman üstte · 🌙 Odak modu · 📊 Bugünün özeti · Ayarlar · Teşhis · Hata bildir · Gizle |
+| **Sağ tık** | ⬆️ Güncelle (varsa) · 🔒 Kilitle · 🔇 Sessize al · 🌙 Odak modu · 📌 Her zaman üstte · 🏠 Robotun odası · 📊 Bugünün özeti · ⚙️ Ayarlar · 🔄 Güncellemeleri denetle · 🧰 Diğer (🕘 Son olaylar, 🩺 Teşhis, 🐞 Hata bildir, 🙈 Gizle) |
 
 **Alnındaki ışık:** 🟢 her şey yolunda · 🟠 güncelleme var · 🔴 bir şey çalışmıyor (tıkla, sebebini söylesin).
 

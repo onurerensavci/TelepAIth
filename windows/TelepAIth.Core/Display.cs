@@ -79,8 +79,8 @@ public static class DisplayPicker
     public static List<RobotState> Extras(RobotModel current, DateTime now) =>
         current.MiniSessions(current.BestSessionId, now).Select(x => x.State).OrderByDescending(s => s.Priority()).ToList();
 
-    /// <summary>Çenedeki rozette yazan sayı: diğer sohbet yoksa boş, 9'dan fazlaysa "9+" (Mac'te RobotModel.extrasBadge)</summary>
-    public static string ExtrasBadge(int count) => count <= 0 ? "" : count > 9 ? "9+" : count.ToString();
+    /// <summary>Çenedeki noktalar: en fazla 4; 4'ten fazla sohbet varsa 4. noktanın üstünde "+" (Mac'te RobotModel.extrasDots)</summary>
+    public static (int Dots, bool Plus) ExtrasDots(int count) => (Math.Clamp(count, 0, 4), count > 4);
 
     /// <summary>
     /// Minik kafalar: büyük kafada gösterilmeyen her AI için en fazla bir tane (Claude büyükse GPT, GPT büyükse Claude).
