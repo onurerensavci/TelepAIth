@@ -59,6 +59,8 @@ final class AppWatcher {
         var background: SidebarChats?
         var lastSidebarScan: TimeInterval = -100
         var sidebarInfo = "—"
+        var lastSidebarLog: TimeInterval = -100
+        var lastSidebarLogged = ""
         /// Bu uygulamada açılmış sohbetler (oturum → ad, adres): listeden tıklayınca geri açabilmek için
         var knownChats: [String: (title: String, url: String?)] = [:]
         /// Listeden son sohbet açma denemesinin sonucu (teşhis için)
@@ -429,11 +431,20 @@ final class AppWatcher {
                 st.lastSidebarScan = now
                 let zone = CGRect(x: wf.minX, y: wf.minY, width: wf.width * 0.4, height: wf.height)
                 var items: [SidebarItem] = []
-                AppWatcher.walkSidebar(main, zone: zone, budget: 5000, items: &items)
+                let viaNav = AppWatcher.walkSidebar(main, zone: zone, budget: 5000, items: &items)
                 let bg = st.background ?? SidebarChats(source: st.source, pid: target.pid)
                 st.background = bg
                 for e in bg.update(items, currentChat: st.chatKey, now: now) { emitMain(e) }
-                st.sidebarInfo = AppWatcher.sidebarInfo(items, background: bg)
+                st.sidebarInfo = (viaNav ? loc("gezinme bölümü", "nav section") : loc("gezinme bölümü yok, sol taraf", "no nav section, left side"))
+                    + " · " + AppWatcher.sidebarInfo(items, background: bg)
+                // Algılama günlüğüne: yan menüde ne görüldü (değişince, en fazla 30 sn'de bir)
+                let summary = SidebarChats.parse(items).map { "\($0.row.title)=\($0.row.state)\($0.current ? "*" : "")" }.joined(separator: " | ")
+                if summary != st.lastSidebarLogged && now - st.lastSidebarLog > 30 {
+                    st.lastSidebarLog = now
+                    st.lastSidebarLogged = summary
+                    AppWatcher.log("\(target.name) yan menü (\(viaNav ? "nav" : "sol %40"), \(items.count) öğe): " + (summary.isEmpty ? "durumlu sohbet yok" : summary)
+                                   + " · açık: " + (SidebarChats.currentTitle(items, currentChat: st.chatKey) ?? "?"))
+                }
                 if let title = SidebarChats.currentTitle(items, currentChat: st.chatKey) {
                     chatTitles[target.pid] = title
                     if st.knownChats.count > 300 { st.knownChats.removeAll() }
@@ -841,13 +852,18 @@ final class AppWatcher {
         let key = SidebarChats.normalizeURL(url)
         var byTitle: AXUIElement?
         var anyNamed: AXUIElement?
-        var stack: [(AXUIElement, Int)] = [(root, 0)]
+        var navNamed: AXUIElement?
+        // (öğe, derinlik, gezinme bölümünde mi); sohbet içeriği (<main>) hiç aranmaz: mesaja tıklanmasın
+        var stack: [(AXUIElement, Int, Bool)] = [(root, 0, false)]
         var visited = 0
         while visited < 6000, let item = stack.popLast() {
             visited += 1
             let element = item.0
             if let f = frame(element), f.width > 0, f.height > 0, !f.intersects(zone) { continue }
             let role = string(element, kAXRoleAttribute) ?? ""
+            let subrole = string(element, kAXSubroleAttribute) ?? ""
+            if SidebarChats.isMainContent(kind: subrole) { continue }
+            let inNav = item.2 || (role == kAXGroupRole && SidebarChats.isNavigation(kind: subrole, name: string(element, kAXDescriptionAttribute) ?? ""))
             let name = [string(element, kAXTitleAttribute), string(element, kAXDescriptionAttribute),
                         value(element, kAXValueAttribute) as? String]
                 .compactMap { $0 }.first { !$0.isEmpty } ?? ""
@@ -856,15 +872,15 @@ final class AppWatcher {
                 if let key = key, let link = (value(element, "AXURL") as? URL)?.absoluteString,
                    SidebarChats.normalizeURL(link) == key { return (element, true) }
                 if byTitle == nil && sameTitle { byTitle = element }
-            } else if anyNamed == nil && sameTitle && role != kAXWindowRole {
-                anyNamed = element
+            } else if sameTitle && role != kAXWindowRole {
+                if inNav { if navNamed == nil { navNamed = element } } else if anyNamed == nil { anyNamed = element }
             }
             if role == kAXImageRole || role == kAXStaticTextRole { continue }
             guard item.1 < 70, let kids = children(element) else { continue }
-            for child in kids { stack.append((child, item.1 + 1)) }
+            for child in kids { stack.append((child, item.1 + 1, inNav)) }
         }
         if let link = byTitle { return (link, true) }
-        if let named = anyNamed { return (named, false) }
+        if let named = navNamed ?? anyNamed { return (named, false) }
         return nil
     }
 
@@ -885,16 +901,24 @@ final class AppWatcher {
         return Swift.min(ax.count, by.count) >= 8 && (ax.hasPrefix(by) || by.hasPrefix(ax))
     }
 
-    /// Yan menüdeki öğeleri toplar (sohbet bağlantıları, durum noktaları): ad, ipucu, adres, seçili mi
-    private static func walkSidebar(_ root: AXUIElement, zone: CGRect, budget: Int, items: inout [SidebarItem]) {
-        var stack: [(AXUIElement, Int)] = [(root, 0)]
+    /// Yan menüdeki öğeleri toplar (sohbet bağlantıları, durum noktaları): ad, ipucu, adres, seçili mi.
+    /// Sayfanın gezinme bölümü (<nav>) bulunursa yalnızca onun içi sayılır; sohbet içeriği (<main>) hiç sayılmaz.
+    /// Dönüş: gezinme bölümü bulundu mu
+    @discardableResult
+    private static func walkSidebar(_ root: AXUIElement, zone: CGRect, budget: Int, items: inout [SidebarItem]) -> Bool {
+        var entries: [(item: SidebarItem, inNav: Bool, inMain: Bool)] = []
+        var stack: [(AXUIElement, Int, Bool, Bool)] = [(root, 0, false, false)]
         var visited = 0
-        while visited < budget, items.count < 1500, let item = stack.popLast() {
+        while visited < budget, entries.count < 1500, let item = stack.popLast() {
             visited += 1
             let element = item.0
             let f = frame(element)
             if let f = f, f.width > 0, f.height > 0, !f.intersects(zone) { continue }
             let role = string(element, kAXRoleAttribute) ?? ""
+            let subrole = string(element, kAXSubroleAttribute) ?? ""
+            let inMain = item.3 || SidebarChats.isMainContent(kind: subrole)
+            if inMain { continue }   // sohbetin kendisi: mesajlar, düğmeler asla sohbet listesi değildir
+            let inNav = item.2 || (role == kAXGroupRole && SidebarChats.isNavigation(kind: subrole, name: string(element, kAXDescriptionAttribute) ?? ""))
             if let f = f, f.width > 0, f.midX < zone.maxX, role != "AXWebArea", role != kAXWindowRole {
                 let title = string(element, kAXTitleAttribute) ?? ""
                 let desc = string(element, kAXDescriptionAttribute) ?? ""
@@ -908,14 +932,18 @@ final class AppWatcher {
                 let current = (!aria.isEmpty && aria != "false") || (value(element, kAXSelectedAttribute) as? Bool) == true
                 if !name.isEmpty || !help.isEmpty || link != nil {
                     // Seçili satır: bağlantı (sohbet) ya da bağlantısız liste satırı (Code oturumu); sekmeler sayılmaz
-                    items.append(SidebarItem(name: name, help: help, url: link, rect: f,
-                                             current: current && role != "AXRadioButton" && role != "AXTab" && role != kAXStaticTextRole))
+                    entries.append((SidebarItem(name: name, help: help, url: link, rect: f,
+                                                current: current && role != "AXRadioButton" && role != "AXTab" && role != kAXStaticTextRole),
+                                    inNav, false))
                 }
             }
             if role == kAXImageRole || role == kAXStaticTextRole { continue }
             guard item.1 < 70, let kids = children(element) else { continue }
-            for child in kids { stack.append((child, item.1 + 1)) }
+            for child in kids { stack.append((child, item.1 + 1, inNav, false)) }
         }
+        let picked = SidebarChats.pickSidebar(entries)
+        items.append(contentsOf: picked.items)
+        return picked.viaNav
     }
 
     /// Teşhis: yan menüde durum gibi görünen öğeler ve ipucu/açıklaması olanlar (algılamayı ayarlamak için)

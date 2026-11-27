@@ -186,6 +186,16 @@ public static partial class Tests
         };
         A.Eq("Video kurgusu", SidebarChats.CurrentTitle(side, "https://claude.ai/chat/aaa"));
         A.True(SidebarChats.CurrentTitle(side, null) == null);
+        // Gerçek hata (günlükten): Claude'un "…bekliyor" diye biten cevabı sohbet satırı sanılıyordu
+        var reply = new SidebarItem("içinde üç versiyonu kurdum: bir T, iki Spark. Hepsi 1080×1920, 30 fps, tam 60 sn. Render almadım, onay bekliyor", "", null, new RectD(300, 400, 500, 20));
+        A.Eq(0, SidebarChats.Parse(new[] { reply }).Count);   // uzun metin: mesaj, sohbet adı değil
+        var navRow = new SidebarItem("Spark videoları · running", "", null, new RectD(10, 100, 200, 20));
+        var picked = SidebarChats.PickSidebar(new[] { (navRow, true, false), (reply, false, true), (new SidebarItem("Sidebar", "", null, new RectD(0, 0, 10, 10)), false, false) });
+        A.True(picked.ViaNav && picked.Items.Count == 1 && picked.Items[0].Name == navRow.Name);
+        var noNav = SidebarChats.PickSidebar(new[] { (navRow, false, false), (reply, false, true) });
+        A.True(!noNav.ViaNav && noNav.Items.Count == 1);   // gezinme bölümü yoksa sohbet içeriği yine sayılmaz
+        A.True(SidebarChats.IsNavigation("AXLandmarkNavigation", "") && SidebarChats.IsNavigation("navigation", "") && SidebarChats.IsNavigation("", "Sidebar"));
+        A.True(!SidebarChats.IsNavigation("group", "Mesajlar") && SidebarChats.IsMainContent("AXLandmarkMain") && SidebarChats.IsMainContent("main"));
         var code = new[] { new SidebarItem("Klasördeki üç versiyonu karşılaştır", "", null, new RectD(0, 0, 200, 20), true) };
         A.Eq("Klasördeki üç versiyonu karşılaştır", SidebarChats.CurrentTitle(code, null));
     }

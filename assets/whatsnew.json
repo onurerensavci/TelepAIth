@@ -1,5 +1,14 @@
 [
  {
+  "version": "0.24.3",
+  "tr": [
+   "Sohbetler listesine artık Claude'un mesajları karışmıyor: robot yan menüyü yapısından tanıyor, sohbet içeriğini hiç okumuyor ve tıklamıyor"
+  ],
+  "en": [
+   "Claude's messages no longer leak into the chat list: the robot recognises the sidebar by its structure and never reads or clicks the conversation itself"
+  ]
+ },
+ {
   "version": "0.24.2",
   "tr": [
    "Listeden ya da bildirimden seçilen Claude sohbeti artık resmî claude:// bağlantısıyla doğrudan açılıyor",

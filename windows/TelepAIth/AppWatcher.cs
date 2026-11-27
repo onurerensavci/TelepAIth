@@ -258,26 +258,37 @@ internal sealed class AppWatcher
 
         var count = 0;
         RectD? composer = null;
-        var stack = new Stack<AutomationElement>();
-        stack.Push(root);
+        // Yan menü adayları: gezinme bölümünde mi (<nav>), sohbet içeriğinde mi (<main>)
+        var entries = new List<(SidebarItem Item, bool InNav, bool InMain)>();
+        var stack = new Stack<(AutomationElement El, bool InNav, bool InMain)>();
+        stack.Push((root, false, false));
         while (stack.Count > 0 && count < 6000)
         {
-            var el = stack.Pop();
+            var (el, parentNav, parentMain) = stack.Pop();
             count++;
             try
             {
-                Visit(el, found, ref composer, sidebar);
+                var kind = el.GetCachedPropertyValue(AutomationElement.LocalizedControlTypeProperty) as string ?? "";
+                var inMain = parentMain || SidebarChats.IsMainContent(kind);
+                var inNav = parentNav || (el.GetCachedPropertyValue(AutomationElement.ControlTypeProperty) == ControlType.Group
+                                          && SidebarChats.IsNavigation(kind, el.GetCachedPropertyValue(AutomationElement.NameProperty) as string ?? ""));
+                Visit(el, found, ref composer, sidebar, entries, inNav, inMain);
                 var children = el.CachedChildren;
-                for (var i = children.Count - 1; i >= 0; i--) stack.Push(children[i]);
+                for (var i = children.Count - 1; i >= 0; i--) stack.Push((children[i], inNav, inMain));
             }
             catch { }
         }
+        // Gezinme bölümü bulunduysa yalnızca onun içi, bulunamadıysa sohbet içeriği dışındakiler
+        var (sideItems, viaNav) = SidebarChats.PickSidebar(entries);
+        found.Sidebar.AddRange(sideItems);
+        found.SidebarViaNav = viaNav;
         found.Composer = composer;
         found.WindowsInfo = $"elements: {count}" + (count <= 3 ? " (erişilebilirlik ağacı boş görünüyor)" : "");
         return found;
     }
 
-    private static void Visit(AutomationElement el, FoundUi found, ref RectD? composer, RectD? sidebar)
+    private static void Visit(AutomationElement el, FoundUi found, ref RectD? composer, RectD? sidebar,
+                              List<(SidebarItem Item, bool InNav, bool InMain)> entries, bool inNav, bool inMain)
     {
         var type = el.GetCachedPropertyValue(AutomationElement.ControlTypeProperty) as ControlType;
         var name = el.GetCachedPropertyValue(AutomationElement.NameProperty) as string ?? "";
@@ -290,7 +301,7 @@ internal sealed class AppWatcher
             : (RectD?)null;
 
         // Yan menüdeki öğeler: arkada çalışan sohbetlerin durum noktaları burada
-        if (sidebar is { } zone && r is { } sr && sr.X + sr.Width / 2 < zone.MaxX && found.Sidebar.Count < 1500)
+        if (sidebar is { } zone && r is { } sr && sr.X + sr.Width / 2 < zone.MaxX && !inMain && entries.Count < 1500)
         {
             var help = string.Join(" ", new[]
             {
@@ -300,7 +311,7 @@ internal sealed class AppWatcher
             var link = type == ControlType.Hyperlink && el.GetCachedPropertyValue(ValuePattern.ValueProperty) is string href
                        && href.Contains("://", StringComparison.Ordinal) ? href : null;
             if (name.Length > 0 || help.Length > 0 || link != null)
-                found.Sidebar.Add(new SidebarItem(name, help, link, sr));
+                entries.Add((new SidebarItem(name, help, link, sr), inNav, inMain));
         }
 
         if (type == ControlType.Button || type == ControlType.SplitButton)
@@ -411,7 +422,10 @@ internal sealed class AppWatcher
     /// <summary>Yan menüde sohbete bas; bulunduysa Found = true, metin teşhis için</summary>
     private static (bool Found, string Text) ClickSidebarLink(IntPtr hwnd, string title, string? url)
     {
-        var root = AutomationElement.FromHandle(hwnd);
+        var window = AutomationElement.FromHandle(hwnd);
+        // Yan menü: sayfanın gezinme bölümü (<nav>); bulunamazsa bütün pencere (ama bağlantısız öğelerde sadece sol taraf)
+        var nav = FindNavigation(window);
+        var root = nav ?? window;
         var key = SidebarChats.NormalizeUrl(url);
         AutomationElement? best = null;
         var links = root.FindAll(TreeScope.Descendants, new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Hyperlink));
@@ -425,6 +439,13 @@ internal sealed class AppWatcher
         {
             // Bağlantı yoksa (ör. Code oturumları gibi düz liste) aynı adlı öğeye tıkla
             var named = root.FindFirst(TreeScope.Descendants, new PropertyCondition(AutomationElement.NameProperty, title));
+            if (named != null && nav == null)
+            {
+                // Gezinme bölümü yoksa sohbet içeriğindeki aynı yazıya tıklamamak için sadece pencerenin sol tarafı
+                var wr = window.Current.BoundingRectangle;
+                var nr = named.Current.BoundingRectangle;
+                if (wr.IsEmpty || nr.IsEmpty || nr.X + nr.Width / 2 > wr.X + wr.Width * 0.4) named = null;
+            }
             if (named == null) return (false, Text.L($"yan menüde bulunamadı: {title}", $"not found in the sidebar: {title}"));
             ScrollIntoView(named);
             if (named.TryGetClickablePoint(out var pt))
@@ -448,6 +469,23 @@ internal sealed class AppWatcher
         return (true, Text.L($"bağlantıya basılamadı: {title}", $"couldn't press link: {title}"));
     }
 
+    /// <summary>Sayfanın gezinme bölümü (yan menü): en uzun olanı</summary>
+    private static AutomationElement? FindNavigation(AutomationElement window)
+    {
+        try
+        {
+            AutomationElement? best = null;
+            var groups = window.FindAll(TreeScope.Descendants, new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Group));
+            foreach (AutomationElement g in groups)
+            {
+                if (!SidebarChats.IsNavigation(g.Current.LocalizedControlType ?? "", g.Current.Name ?? "")) continue;
+                if (best == null || g.Current.BoundingRectangle.Height > best.Current.BoundingRectangle.Height) best = g;
+            }
+            return best;
+        }
+        catch { return null; }
+    }
+
     /// <summary>Liste kaydırılmışsa öğeyi görünür yap</summary>
     private static void ScrollIntoView(AutomationElement element)
     {
@@ -465,7 +503,7 @@ internal sealed class AppWatcher
         var rows = SidebarChats.Parse(found.Sidebar);
         var hinted = found.Sidebar.Where(i => i.Help.Length > 0 || SidebarChats.StatusOf(i.Name) != null)
             .Take(12).Select(i => $"{Text.Clip(i.Name, 30)}{(i.Help.Length > 0 ? " {" + Text.Clip(i.Help, 30) + "}" : "")}");
-        return $"sidebar: {found.Sidebar.Count} öğe, {found.Sidebar.Count(i => i.Url != null)} bağlantı · " +
+        return $"sidebar ({(found.SidebarViaNav ? "nav" : "sol %40")}): {found.Sidebar.Count} öğe, {found.Sidebar.Count(i => i.Url != null)} bağlantı · " +
                $"durumlu: {string.Join(", ", rows.Select(r => $"{Text.Clip(r.Row.Title, 24)}={r.Row.State}{(r.Current ? "*" : "")}"))} · " +
                $"arkada izlenen: {tracker.Background.Count}\n  sidebar ipuçları: {string.Join(" | ", hinted)}";
     }

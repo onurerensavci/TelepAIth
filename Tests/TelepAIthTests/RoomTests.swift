@@ -151,6 +151,17 @@ final class RoomTests: XCTestCase {
         ]
         XCTAssertEqual(SidebarChats.currentTitle(side, currentChat: "https://claude.ai/chat/aaa"), "Video kurgusu")
         XCTAssertNil(SidebarChats.currentTitle(side, currentChat: nil))
+        // Gerçek hata (günlükten): Claude'un "…bekliyor" diye biten cevabı sohbet satırı sanılıyordu
+        let reply = SidebarItem(name: "içinde üç versiyonu kurdum: bir T, iki Spark. Hepsi 1080×1920, 30 fps, tam 60 sn. Render almadım, onay bekliyor",
+                                help: "", url: nil, rect: CGRect(x: 300, y: 400, width: 500, height: 20))
+        XCTAssertTrue(SidebarChats.parse([reply]).isEmpty)
+        let navRow = SidebarItem(name: "Spark videoları · running", help: "", url: nil, rect: CGRect(x: 10, y: 100, width: 200, height: 20))
+        let picked = SidebarChats.pickSidebar([(navRow, true, false), (reply, false, true)])
+        XCTAssertTrue(picked.viaNav && picked.items == [navRow])
+        let noNav = SidebarChats.pickSidebar([(navRow, false, false), (reply, false, true)])
+        XCTAssertTrue(!noNav.viaNav && noNav.items == [navRow])
+        XCTAssertTrue(SidebarChats.isNavigation(kind: "AXLandmarkNavigation", name: "") && SidebarChats.isNavigation(kind: "", name: "Sidebar"))
+        XCTAssertTrue(SidebarChats.isMainContent(kind: "AXLandmarkMain"))
         let code = [SidebarItem(name: "Klasördeki üç versiyonu karşılaştır", help: "", url: nil,
                                 rect: CGRect(x: 0, y: 0, width: 200, height: 20), current: true)]
         XCTAssertEqual(SidebarChats.currentTitle(code, currentChat: nil), "Klasördeki üç versiyonu karşılaştır")

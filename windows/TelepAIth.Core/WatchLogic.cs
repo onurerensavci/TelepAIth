@@ -29,6 +29,8 @@ public sealed class FoundUi
     public List<SidebarItem> Sidebar = new();
     /// <summary>Bu turda yan menü tarandı mı? (taranmadıysa arkadaki sohbetlerin durumu değişmez)</summary>
     public bool SidebarScanned;
+    /// <summary>Yan menü sayfanın gezinme bölümünden (&lt;nav&gt;) mi okundu (teşhis için)</summary>
+    public bool SidebarViaNav;
 
     public double? ComposerTop
     {
@@ -580,7 +582,8 @@ public sealed class SidebarChats
             }
             // Sohbet satırı bir bağlantıdır: adresi olmayan (sohbetin içindeki mesaj, düğme…) satır sayılmaz.
             // Tek istisna: durumu kendi adında taşıyan satır ("Tarif · running")
-            var ownName = StatusOf(item.Name) != null && StripStatus(item.Name).Length >= 2;
+            // (Bir sohbet adı kısadır: uzun metin bir mesajdır, sohbet satırı değil)
+            var ownName = StatusOf(item.Name) != null && StripStatus(item.Name).Length is >= 2 and <= 80;
             if (title.Length < 2 || (url == null && !ownName)) continue;
             var key = KeyOf(url, title);
             if (rows.TryGetValue(key, out var old) && old.Row.State.Priority() >= st.Value.Priority()) continue;
@@ -702,6 +705,30 @@ public sealed class SidebarChats
         var id = parts[1];
         if (id.Length < 8 || !id.All(c => Uri.IsHexDigit(c) || c == '-')) return null;
         return $"claude://claude.ai/{kind}/{id}";
+    }
+
+    /// <summary>
+    /// Gezinme bölümü mü? (sayfadaki &lt;nav&gt;: Mac'te alt rolü AXLandmarkNavigation, Windows'ta yerel türü "navigation";
+    /// ya da adı "Sidebar" olan grup). Yan menü budur; sohbet içeriği burada değildir. (Mac'te isNavigation)
+    /// </summary>
+    public static bool IsNavigation(string kind, string name)
+    {
+        var k = kind.Trim().ToLowerInvariant();
+        if (k is "axlandmarknavigation" or "navigation" or "gezinti" or "gezinme") return true;
+        return name.Trim().ToLowerInvariant().TrimEnd('.', '…', ' ') is "sidebar" or "kenar çubuğu" or "yan menü" or "yan çubuk";
+    }
+
+    /// <summary>Ana içerik bölümü mü? (&lt;main&gt;: sohbetin kendisi; buradaki yazılar asla sohbet listesi sayılmaz)</summary>
+    public static bool IsMainContent(string kind) => kind.Trim().ToLowerInvariant() is "axlandmarkmain" or "main" or "ana" or "ana içerik";
+
+    /// <summary>
+    /// Taranan öğelerden yan menüdekiler: gezinme bölümü bulunduysa yalnızca onun içindekiler,
+    /// bulunamadıysa ana içerik dışındakiler. ViaNav: gezinme bölümü bulundu mu (teşhis için)
+    /// </summary>
+    public static (List<SidebarItem> Items, bool ViaNav) PickSidebar(IReadOnlyList<(SidebarItem Item, bool InNav, bool InMain)> entries)
+    {
+        if (entries.Any(e => e.InNav)) return (entries.Where(e => e.InNav).Select(e => e.Item).ToList(), true);
+        return (entries.Where(e => !e.InMain).Select(e => e.Item).ToList(), false);
     }
 
     /// <summary>Yan menüdeki gezinme sekmeleri (seçili olsalar da sohbet adı değildir)</summary>

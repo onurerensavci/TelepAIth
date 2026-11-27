@@ -135,6 +135,28 @@ final class SidebarChats {
         return URL(string: "claude://claude.ai/\(parts[0].lowercased())/\(id)")
     }
 
+    // MARK: Yan menüyü yapısından tanıma
+
+    /// Gezinme bölümü mü? (sayfadaki <nav>: Mac'te alt rolü AXLandmarkNavigation, Windows'ta yerel türü "navigation";
+    /// ya da adı "Sidebar" olan grup). Yan menü budur; sohbet içeriği burada değildir. (Windows'ta IsNavigation)
+    static func isNavigation(kind: String, name: String) -> Bool {
+        let k = kind.lowercased()
+        if ["axlandmarknavigation", "navigation", "gezinti", "gezinme"].contains(k) { return true }
+        return ["sidebar", "kenar çubuğu", "yan menü", "yan çubuk"].contains(normalized(name))
+    }
+
+    /// Ana içerik bölümü mü? (<main>: sohbetin kendisi; buradaki yazılar asla sohbet listesi sayılmaz)
+    static func isMainContent(kind: String) -> Bool {
+        ["axlandmarkmain", "main", "ana", "ana içerik"].contains(kind.lowercased())
+    }
+
+    /// Taranan öğelerden yan menüdekiler: gezinme bölümü bulunduysa yalnızca onun içindekiler,
+    /// bulunamadıysa ana içerik dışındakiler. viaNav: gezinme bölümü bulundu mu (teşhis için)
+    static func pickSidebar(_ entries: [(item: SidebarItem, inNav: Bool, inMain: Bool)]) -> (items: [SidebarItem], viaNav: Bool) {
+        if entries.contains(where: { $0.inNav }) { return (entries.filter { $0.inNav }.map(\.item), true) }
+        return (entries.filter { !$0.inMain }.map(\.item), false)
+    }
+
     /// Yan menüdeki gezinme sekmeleri (seçili olsalar da sohbet adı değildir)
     private static let navWords: Set<String> = [
         "chat", "chats", "code", "cowork", "projects", "artifacts", "recents", "home", "search", "new chat", "settings",
@@ -179,7 +201,8 @@ final class SidebarChats {
             }
             // Sohbet satırı bir bağlantıdır: adresi olmayan (sohbetin içindeki mesaj, düğme…) satır sayılmaz.
             // Tek istisna: durumu kendi adında taşıyan satır ("Tarif · running")
-            let ownName = statusOf(item.name) != nil && stripStatus(item.name).count >= 2
+            // (Bir sohbet adı kısadır: uzun metin bir mesajdır, sohbet satırı değil)
+            let ownName = statusOf(item.name) != nil && (2...80).contains(stripStatus(item.name).count)
             guard title.count >= 2, url != nil || ownName else { continue }
             let k = key(url: url, title: title)
             if let old = rows[k], old.row.state.priority >= st.priority { continue }
