@@ -110,8 +110,9 @@ struct AvatarStage: View {
     private var bubble: some View {
         if let rows = chatList {
             ChatListBubble(rows: rows, color: Color(nsColor: model.theme.color), tailOnTop: bubbleBelow, tailLeading: alignLeft,
-                           usage: usage, scroll: chatScroll,
-                           hoverIndex: { [weak avatar = pointer?.avatar] in avatar?.chatRowIndex(at: NSEvent.mouseLocation) })
+                           usage: usage,
+                           hoverIndex: { [weak avatar = pointer?.avatar] in avatar?.chatRowIndex(at: NSEvent.mouseLocation) },
+                           scroll: chatScroll)
                 .background(GeometryReader { g in
                     Color.clear.preference(key: BubbleFrameKey.self, value: g.frame(in: .named("avatar")))
                 })
