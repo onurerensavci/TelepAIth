@@ -31,15 +31,16 @@ final class RoomTests: XCTestCase {
 
     func testLevelsGrow() {
         XCTAssertEqual(Levels.level(xp: 0), 1)
-        XCTAssertEqual(Levels.level(xp: 99), 1)
-        XCTAssertEqual(Levels.level(xp: 100), 2)
-        XCTAssertEqual(Levels.level(xp: 300), 3)
-        XCTAssertEqual(Levels.level(xp: 4500), 10)
-        XCTAssertEqual(Levels.level(xp: 4499), 9)
+        XCTAssertEqual(Levels.level(xp: 39), 1)
+        XCTAssertEqual(Levels.level(xp: 40), 2)
+        XCTAssertEqual(Levels.level(xp: 120), 3)
+        XCTAssertEqual(Levels.level(xp: 1800), 10)
+        XCTAssertEqual(Levels.level(xp: 1799), 9)
+        XCTAssertEqual(Levels.level(xp: 17400), 30)
         var p = ProgressData()
-        p.turns = 20
-        XCTAssertEqual(Levels.level(p), 2)
-        XCTAssertEqual(Levels.next(p).left, 100)
+        p.turns = 18
+        XCTAssertEqual(Levels.level(p), 3)
+        XCTAssertEqual(Levels.next(p).left, 60)
         XCTAssertEqual(Levels.next(p).fraction, 0.5, accuracy: 0.001)
     }
 

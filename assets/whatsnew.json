@@ -1,5 +1,16 @@
 [
  {
+  "version": "0.25.9",
+  "tr": [
+   "Seviye atlamak 2,5 kat kolay: 10. seviye yaklaşık bir haftada, son parçalar yaklaşık iki ayda geliyor",
+   "Topladığın puan aynı kalıyor; seviyen güncellemeden sonra hemen yükseliyor"
+  ],
+  "en": [
+   "Leveling up is 2.5× easier: level 10 in about a week, the last pieces in about two months",
+   "Your points stay the same, so your level jumps right after the update"
+  ]
+ },
+ {
   "version": "0.25.8",
   "tr": [
    "Gardıroba 5 yeni parça: çift anten, VR gözlüğü, neon maske, fotoğraf makinesi ve boombox (seviye 17, 19, 22, 24, 27)",

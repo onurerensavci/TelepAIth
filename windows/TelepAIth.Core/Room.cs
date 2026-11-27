@@ -351,12 +351,14 @@ public static class Levels
     public static long Xp(ProgressData p) =>
         p.Turns * 10L + p.Edits * 2L + (long)(p.Seconds / 60) + p.ActiveDays * 25L + p.CiPassed * 15L;
 
-    /// <summary>n. seviyeye çıkmak için gereken toplam XP: 50·n·(n−1) (2: 100, 3: 300, 10: 4500).</summary>
-    public static long Need(int level) => 50L * level * (level - 1);
+    /// <summary>n. seviyeye çıkmak için gereken toplam XP: 20·n·(n−1) (2: 40, 3: 120, 10: 1800, 30: 17400).
+    /// Normal bir gün ~300 XP: 10. seviye ~6 gün, 30. seviye ~2 ay. (Mac'te Levels.need)</summary>
+    public const long Step = 20;
+    public static long Need(int level) => Step * level * (level - 1);
 
     public static int Level(long xp)
     {
-        var n = (int)Math.Floor((1 + Math.Sqrt(1 + 8.0 * xp / 100)) / 2);
+        var n = (int)Math.Floor((1 + Math.Sqrt(1 + 4.0 * xp / Step)) / 2);
         while (Need(n + 1) <= xp) n++;
         while (n > 1 && Need(n) > xp) n--;
         return Math.Max(1, n);

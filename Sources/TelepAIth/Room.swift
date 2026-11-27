@@ -430,11 +430,13 @@ enum Levels {
         p.turns * 10 + p.edits * 2 + Int(p.seconds / 60) + p.activeDays * 25 + p.ciPassed * 15
     }
 
-    /// n. seviyeye çıkmak için gereken toplam XP: 50·n·(n−1) (2: 100, 3: 300, 10: 4500).
-    static func need(_ level: Int) -> Int { 50 * level * (level - 1) }
+    /// n. seviyeye çıkmak için gereken toplam XP: 20·n·(n−1) (2: 40, 3: 120, 10: 1800, 30: 17400).
+    /// Normal bir gün ~300 XP: 10. seviye ~6 gün, 30. seviye ~2 ay. (Windows'ta Levels.Need)
+    static let step = 20
+    static func need(_ level: Int) -> Int { step * level * (level - 1) }
 
     static func level(xp: Int) -> Int {
-        var n = Int(floor((1 + (1 + 8.0 * Double(xp) / 100).squareRoot()) / 2))
+        var n = Int(floor((1 + (1 + 4.0 * Double(xp) / Double(step)).squareRoot()) / 2))
         while need(n + 1) <= xp { n += 1 }
         while n > 1 && need(n) > xp { n -= 1 }
         return Swift.max(1, n)

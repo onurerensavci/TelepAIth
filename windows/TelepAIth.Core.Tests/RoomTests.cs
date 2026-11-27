@@ -29,14 +29,15 @@ public static partial class Tests
     public static void LevelsGrow()
     {
         A.Eq(1, Levels.Level(0));
-        A.Eq(1, Levels.Level(99));
-        A.Eq(2, Levels.Level(100));
-        A.Eq(3, Levels.Level(300));
-        A.Eq(10, Levels.Level(4500));
-        A.Eq(9, Levels.Level(4499));
-        var p = new ProgressData { Turns = 20 };   // 200 XP: seviye 2, sonrakine 100
-        A.Eq(2, Levels.Level(p));
-        A.Eq(100L, Levels.Next(p).Left);
+        A.Eq(1, Levels.Level(39));
+        A.Eq(2, Levels.Level(40));
+        A.Eq(3, Levels.Level(120));
+        A.Eq(10, Levels.Level(1800));
+        A.Eq(9, Levels.Level(1799));
+        A.Eq(30, Levels.Level(17400));
+        var p = new ProgressData { Turns = 18 };   // 180 XP: seviye 3 (120), sonrakine (240) 60
+        A.Eq(3, Levels.Level(p));
+        A.Eq(60L, Levels.Next(p).Left);
         A.Eq(0.5, Levels.Next(p).Fraction);
     }
 
