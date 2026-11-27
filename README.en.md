@@ -81,7 +81,7 @@
 - Snaps to screen corners and moves between monitors.
 - **🔒 Lock** pins it in place, **📌 Always on top** keeps it above every window. It can also sit over the menu bar (the taskbar on Windows).
 - **Size:** Settings → General → Robot size: Small, Medium, Large, Extra large. Handy on big monitors.
-- **Updates itself:** checks for a new version every half hour. When there is one, the light on its forehead turns orange; click the robot or right-click → *⬆️ Update* and it installs without asking, then tells you what's new.
+- **Updates itself:** checks for a new version every half hour. When there is one, the light on its forehead turns orange; click the robot or right-click → *⬆️ Update* and it installs without asking, then tells you what's new. Turn on Settings → General → *Install updates automatically* and the robot updates itself while no chat is working or waiting for you.
 
 <p align="center">
   <img src="assets/readme/switch-en.svg" alt="Eyes glow orange in Claude and blue in ChatGPT or Codex" width="560">

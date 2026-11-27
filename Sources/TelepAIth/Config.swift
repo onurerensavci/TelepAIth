@@ -208,6 +208,13 @@ enum Preferences {
     }
 
     /// AI uzun süre onay beklerse robot ısrar etsin (sallansın, 2 dakikada bir hatırlatsın).
+    /// Güncellemeleri otomatik kur: yeni sürüm hazır olunca, hiçbir sohbet çalışmıyor/beklemiyorken (2 dk sakin)
+    /// kendini günceller. Varsayılan kapalı: isteyen açar. (Windows'ta Prefs.AutoUpdate)
+    static var autoUpdate: Bool {
+        get { defaults.bool(forKey: "autoUpdate") }
+        set { defaults.set(newValue, forKey: "autoUpdate") }
+    }
+
     static var waitReminders: Bool {
         get { defaults.object(forKey: "waitReminders") as? Bool ?? true }
         set { defaults.set(newValue, forKey: "waitReminders") }

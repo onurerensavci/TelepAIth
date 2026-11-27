@@ -46,6 +46,12 @@ public static class DisplayPicker
     public static bool CanGaze(IEnumerable<RobotModel> models, DateTime now) =>
         models.All(m => (now - m.LastBusyAt).TotalSeconds >= GazeDelay);
 
+    /// <summary>Otomatik güncelleme için sakin mi: hiçbir AI'ın hiçbir sohbeti en az 2 dakikadır çalışmıyor / seni beklemiyor / hata vermiyor.
+    /// (Mac'te RobotModel.quietForUpdate)</summary>
+    public const double UpdateQuietSeconds = 120;
+    public static bool QuietForUpdate(IEnumerable<RobotModel> models, DateTime now) =>
+        models.All(m => (now - m.LastBusyAt).TotalSeconds >= UpdateQuietSeconds);
+
     /// <summary>
     /// Kafaya tıklayınca açılan sohbet listesi: tüm AI'lardan; seni bekleyenler, yeni bitenler (bakılmamış),
     /// çalışanlar, sonra bakılmış bitenler (en fazla max).

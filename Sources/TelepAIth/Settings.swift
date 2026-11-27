@@ -158,6 +158,13 @@ struct SettingsView: View {
                            Preferences.followAppWindow = value
                            model.host?.followSettingChanged()
                        }))
+                VStack(alignment: .leading, spacing: 2) {
+                    Toggle(loc("Güncellemeleri otomatik kur", "Install updates automatically"),
+                           isOn: model.toggle({ Preferences.autoUpdate }, { Preferences.autoUpdate = $0 }))
+                    Text(loc("Yeni sürüm çıkınca, hiçbir sohbet çalışmıyor ya da seni beklemiyorken kendini günceller ve neyin yeni olduğunu söyler.",
+                             "When a new version is out, it updates itself while no chat is working or waiting for you, then tells you what's new."))
+                        .font(.caption).foregroundColor(.secondary)
+                }
             }
             Section {
                 Toggle(loc("Aynı anda çalışan oturumları minik kafalarla göster", "Show other running sessions as mini heads"),

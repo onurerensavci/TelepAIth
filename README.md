@@ -81,7 +81,7 @@
 - Ekran köşelerine yapışır, monitörden monitöre taşınır.
 - **🔒 Kilit** ile olduğu yerde sabitlenir, **📌 Her zaman üstte** ile pencerelerin üstünde durur. Menü çubuğunun (Windows'ta görev çubuğunun) üstüne de çıkabilir.
 - **Boyut:** Ayarlar → Genel → Robot boyutu: Küçük, Orta, Büyük, Çok büyük. Büyük monitörlerde işe yarar.
-- **Kendini günceller:** yarım saatte bir yeni sürüm var mı diye bakar. Varsa alnındaki ışık turuncu yanar; robota tıklayınca ya da sağ tık → *⬆️ Güncelle* ile sormadan kurar, açılınca neyin yeni olduğunu söyler.
+- **Kendini günceller:** yarım saatte bir yeni sürüm var mı diye bakar. Varsa alnındaki ışık turuncu yanar; robota tıklayınca ya da sağ tık → *⬆️ Güncelle* ile sormadan kurar, açılınca neyin yeni olduğunu söyler. İstersen Ayarlar → Genel → *Güncellemeleri otomatik kur*'u aç: robot hiçbir sohbet çalışmıyor ya da seni beklemiyorken kendini günceller.
 
 <p align="center">
   <img src="assets/readme/switch-tr.svg" alt="Claude'a geçince gözler turuncu, ChatGPT ya da Codex'e geçince mavi" width="560">

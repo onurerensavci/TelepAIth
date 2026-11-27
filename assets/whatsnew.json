@@ -1,5 +1,14 @@
 [
  {
+  "version": "0.25.7",
+  "tr": [
+   "Yeni seçenek: Ayarlar → Genel → Güncellemeleri otomatik kur. Açıksa robot, hiçbir sohbet çalışmıyor ya da seni beklemiyorken kendini günceller"
+  ],
+  "en": [
+   "New option: Settings → General → Install updates automatically. When on, the robot updates itself while no chat is working or waiting for you"
+  ]
+ },
+ {
   "version": "0.25.6",
   "tr": [
    "Çenede yine noktalar: en fazla 4 nokta, daha fazla sohbet varsa 4. noktanın üstünde \"+\""

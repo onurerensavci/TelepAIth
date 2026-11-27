@@ -596,6 +596,13 @@ final class RobotModel: ObservableObject {
     /// Gözler imleci izlemeye başlamadan önce, son işin üstünden geçmesi gereken süre
     static let gazeDelay: TimeInterval = 20
 
+    /// Otomatik güncelleme için sakin mi: hiçbir AI'ın hiçbir sohbeti en az 2 dakikadır çalışmıyor / seni beklemiyor / hata vermiyor.
+    /// (Windows'ta DisplayPicker.QuietForUpdate)
+    static let updateQuietSeconds: TimeInterval = 120
+    static func quietForUpdate(_ models: [RobotModel], now: Date = Date()) -> Bool {
+        models.allSatisfy { now.timeIntervalSince($0.lastBusyAt) >= updateQuietSeconds }
+    }
+
     /// Gözler imleci izleyebilir mi? Hiçbir AI'ın hiçbir sohbeti çalışmıyor / seni beklemiyor olmalı ve
     /// son iş biteli en az 20 sn geçmiş olmalı. Çalışırken robot işine bakar.
     static func canGaze(_ models: [RobotModel], now: Date = Date()) -> Bool {

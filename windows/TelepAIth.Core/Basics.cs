@@ -285,6 +285,9 @@ public static class Prefs
     public static bool FollowAppWindow { get => GetBool("followAppWindow", true); set => Set("followAppWindow", value); }
     public static bool NotifyWhenFrontmost { get => GetBool("notifyWhenFrontmost", false); set => Set("notifyWhenFrontmost", value); }
     public static bool WaitReminders { get => GetBool("waitReminders", true); set => Set("waitReminders", value); }
+    /// <summary>Güncellemeleri otomatik kur: yeni sürüm hazır olunca, hiçbir sohbet çalışmıyor/beklemiyorken (2 dk sakin)
+    /// kendini günceller. Varsayılan kapalı: isteyen açar. (Mac'te Preferences.autoUpdate)</summary>
+    public static bool AutoUpdate { get => GetBool("autoUpdate", false); set => Set("autoUpdate", value); }
     public static bool MiniHeads { get => GetBool("miniHeads", true); set => Set("miniHeads", value); }
     public static double FocusUntil { get => GetDouble("focusUntil", 0); set => Set("focusUntil", value); }
     public static bool AutoFocusInMeetings { get => GetBool("autoFocusInMeetings", true); set => Set("autoFocusInMeetings", value); }

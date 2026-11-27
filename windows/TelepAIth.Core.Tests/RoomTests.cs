@@ -172,6 +172,14 @@ public static partial class Tests
         A.Eq(0, junk.Count);
         A.Eq("", SidebarChats.StripStatus("You said: merhaba"));
         A.Eq("Copywriting fikirleri", SidebarChats.StripStatus("Copywriting fikirleri"));
+        // Otomatik güncelleme: sohbet çalışırken değil, 2 dakikadır sakinken
+        var um = new RobotModel("claude");
+        var ut = DateTime.Now;
+        A.True(DisplayPicker.QuietForUpdate(new[] { um }, ut), "hiç sohbet yok: sakin");
+        um.Apply(new AgentEvent("claude", "term-9", EventKind.Tool, RobotState.Running, "npm test"));
+        um.Refresh(ut);
+        A.True(!DisplayPicker.QuietForUpdate(new[] { um }, ut), "çalışırken güncelleme yok");
+        A.True(DisplayPicker.QuietForUpdate(new[] { um }, ut.AddSeconds(121)), "2 dk sakin: güncellenebilir");
         // Çenedeki noktalar: en fazla 4, fazlası varsa 4. noktada "+"
         A.Eq((0, false), DisplayPicker.ExtrasDots(0));
         A.Eq((3, false), DisplayPicker.ExtrasDots(3));

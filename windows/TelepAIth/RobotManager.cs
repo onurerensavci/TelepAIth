@@ -22,6 +22,9 @@ internal sealed class RobotManager
     private readonly DispatcherTimer _timer = new(DispatcherPriority.Render) { Interval = TimeSpan.FromMilliseconds(33) };
     private readonly Stopwatch _clock = Stopwatch.StartNew();
     private double _lastTick, _lastForegroundCheck, _lastDockCheck, _lastMiniCheck, _lastSlowCheck, _lastUpdateAnnounce = -1e9;
+    // Otomatik güncelleme: en son ne zaman bakıldı ve hangi sürüm denendi (kurulum olmazsa aynı sürümü tekrar tekrar denemesin)
+    private double _lastAutoUpdateCheck;
+    private string? _autoUpdateTried;
     private bool _wasFocused = FocusMode.IsActive;
     private readonly AppWatcher _watcher = new();
     private readonly Dictionary<int, (int? Pid, DateTime At)> _ancestorCache = new();
@@ -488,7 +491,9 @@ internal sealed class RobotManager
     private void AnnounceUpdate(string version)
     {
         _lastUpdateAnnounce = Now;
-        var text = L($"Güncelleme var: {version}! Bana tıkla, kurayım.", $"Update available: {version}! Click me to install.");
+        var text = Prefs.AutoUpdate
+            ? L($"Güncelleme var: {version}! Sohbetler sakinleşince kendimi güncelleyeceğim.", $"Update available: {version}! I'll update myself once the chats are quiet.")
+            : L($"Güncelleme var: {version}! Bana tıkla, kurayım.", $"Update available: {version}! Click me to install.");
         // Balonda kısaca ne geldiği de yazar
         var items = WhatsNew.Summary(version, Updater.Shared.Available?.Notes, 2);
         _avatar?.Current.Say(WithEmoji("⬆️", text) + WhatsNew.Bullets(items), items.Count == 0 ? 10 : 14);
@@ -740,6 +745,20 @@ internal sealed class RobotManager
         // Güncelleme hâlâ bekliyorsa, robot boştayken arada bir hatırlatsın
         if (_avatar is { Health: Health.Update } a && now - _lastUpdateAnnounce > 30 * 60 && a.Current.State == RobotState.Idle)
             AnnounceUpdate(a.HealthText);
+        // Otomatik güncelleme: açıksa ve yeni sürüm hazırsa, hiçbir sohbet çalışmıyor / seni beklemiyorken
+        // (2 dakikadır sakin, açık onay sorusu yok) kendini günceller; açılınca neyin yeni olduğunu söyler
+        if (Prefs.AutoUpdate && now - _lastAutoUpdateCheck > 5)
+        {
+            _lastAutoUpdateCheck = now;
+            if (Updater.Shared.Available is { } release && release.Version != _autoUpdateTried && !Updater.Shared.IsBusy
+                && _approvals.Count == 0 && _avatar?.Approval == null && DisplayPicker.QuietForUpdate(_models.Values, date))
+            {
+                _autoUpdateTried = release.Version;
+                _avatar?.Current.Say(WithEmoji("⬆️", L($"Ortalık sakin, kendimi {release.Version} sürümüne güncelliyorum.",
+                                                       $"All quiet, updating myself to {release.Version}.")), 10);
+                Updater.Shared.InstallNow();
+            }
+        }
         // Bekleme hatırlatmaları gibi zamanlayıcı bildirimleri
         foreach (var m in _models.Values.Where(m => m.PendingNotices.Count > 0))
         {

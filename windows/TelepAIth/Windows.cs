@@ -458,7 +458,11 @@ internal static class SettingsWindow
             Ui.Section(L("Davranış", "Behaviour")),
             Ui.SwitchCard(L("Eyleme göre emojiler", "Emojis for each action"), null, Prefs.EmojiEnabled, v => Prefs.EmojiEnabled = v, ""),
             Ui.SwitchCard(L("Boştayken laf atsın", "Idle chatter"), L("Arada bir küçük şeyler söyler", "Says little things now and then"), Prefs.IdleChatter, v => Prefs.IdleChatter = v, ""),
-            Ui.SwitchCard(L("Windows açılınca başlasın", "Start with Windows"), null, Installer.AutostartEnabled, v => Installer.SetAutostart(v), ""));
+            Ui.SwitchCard(L("Windows açılınca başlasın", "Start with Windows"), null, Installer.AutostartEnabled, v => Installer.SetAutostart(v), ""),
+            Ui.SwitchCard(L("Güncellemeleri otomatik kur", "Install updates automatically"),
+                L("Yeni sürüm çıkınca, hiçbir sohbet çalışmıyor ya da seni beklemiyorken kendini günceller ve neyin yeni olduğunu söyler",
+                  "When a new version is out, it updates itself while no chat is working or waiting for you, then tells you what's new"),
+                Prefs.AutoUpdate, v => Prefs.AutoUpdate = v, ""));
     }
 
     private static UIElement Notifications(ISettingsHost host)

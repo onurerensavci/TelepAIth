@@ -32,6 +32,9 @@ final class RobotManager {
     private var lastTrustCheck = CACurrentMediaTime()
     private var wasTrusted = AppWatcher.isTrusted
     private var lastUpdateAnnounce: CFTimeInterval = 0
+    /// Otomatik güncelleme: en son ne zaman bakıldı ve hangi sürüm denendi (kurulum olmazsa aynı sürümü tekrar tekrar denemesin)
+    private var lastAutoUpdateCheck: CFTimeInterval = 0
+    private var autoUpdateTried: String?
     private var lastMiniCheck: CFTimeInterval = 0
     private var lastApprovalCheck: CFTimeInterval = 0
     private var lastSlowCheck: CFTimeInterval = 0
@@ -475,7 +478,9 @@ final class RobotManager {
 
     private func announceUpdate(_ version: String) {
         lastUpdateAnnounce = CACurrentMediaTime()
-        let text = loc("Güncelleme var: \(version)! Bana tıkla, kurayım.", "Update available: \(version)! Click me to install.")
+        let text = Preferences.autoUpdate
+            ? loc("Güncelleme var: \(version)! Sohbetler sakinleşince kendimi güncelleyeceğim.", "Update available: \(version)! I'll update myself once the chats are quiet.")
+            : loc("Güncelleme var: \(version)! Bana tıkla, kurayım.", "Update available: \(version)! Click me to install.")
         // Balonda kısaca ne geldiği de yazar
         let items = WhatsNew.summary(version, notes: Updater.shared.available?.notes, max: 2)
         avatar?.current.say(withEmoji("⬆️", text) + WhatsNew.bullets(items), for: items.isEmpty ? 10 : 14)
@@ -673,6 +678,19 @@ final class RobotManager {
         if let avatar = avatar, case .update(let version) = avatar.health,
            now - lastUpdateAnnounce > 30 * 60, avatar.current.state == .idle {
             announceUpdate(version)
+        }
+        // Otomatik güncelleme: açıksa ve yeni sürüm hazırsa, hiçbir sohbet çalışmıyor / seni beklemiyorken
+        // (2 dakikadır sakin, açık onay sorusu yok) kendini günceller; açılınca neyin yeni olduğunu söyler
+        if Preferences.autoUpdate && now - lastAutoUpdateCheck > 5 {
+            lastAutoUpdateCheck = now
+            if let version = Updater.shared.available?.version, version != autoUpdateTried, !Updater.shared.isBusy,
+               approvals.isEmpty, avatar?.approval == nil,
+               RobotModel.quietForUpdate(allModels, now: date) {
+                autoUpdateTried = version
+                avatar?.current.say(withEmoji("⬆️", loc("Ortalık sakin, kendimi \(version) sürümüne güncelliyorum.",
+                                                        "All quiet, updating myself to \(version).")), for: 10)
+                Updater.shared.installNow()
+            }
         }
         // Bekleme hatırlatmaları gibi zamanlayıcı bildirimleri
         for m in models.values where !m.pendingNotices.isEmpty {
