@@ -9,7 +9,7 @@ final class RoomTests: XCTestCase {
     }
 
     func testOutfitsParseAndColors() {
-        XCTAssertEqual(Outfits.all.count, 30)
+        XCTAssertEqual(Outfits.all.count, 35)
         XCTAssertTrue(Outfits.all.allSatisfy { Outfits.slots.contains($0.slot) && !$0.shapes.isEmpty && !$0.name.isEmpty })
         XCTAssertEqual(Set(Outfits.all.map(\.id)).count, Outfits.all.count)
         XCTAssertTrue(Outfits.all.compactMap(\.achievement).allSatisfy { Achievements.find($0) != nil })
@@ -76,11 +76,12 @@ final class RoomTests: XCTestCase {
     }
 
     func testOutfitTypesAndNews() {
-        // 6 tip × 5 parça: her yuvadan bir tane, biri gizli ödül
-        XCTAssertEqual(Outfits.types.count, 6)
+        // 7 tip × 5 parça: her yuvadan bir tane; ilk altısında biri gizli ödül, Teknolog'da gizli ödül yok
+        XCTAssertEqual(Outfits.types.count, 7)
         for t in Outfits.types {
             let items = Outfits.items(of: t.id)
             XCTAssertEqual(Set(items.map(\.slot)), Set(Outfits.slots), t.id)
+            if t.id == "techie" { XCTAssertEqual(items.filter(\.legendary).count, 0); continue }
             XCTAssertEqual(items.filter(\.legendary).count, 1, t.id)
             XCTAssertNil(items.first(where: \.legendary)?.achievement, t.id)   // gizli ödül seviyeyle açılır
         }

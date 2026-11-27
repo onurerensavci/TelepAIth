@@ -578,7 +578,112 @@ crown=[
 ]
 item("crown","head","Taç","Crown",crown,level=30,type="king",legendary=True)
 
-order={"coder":0,"hipster":1,"police":2,"marketing":3,"artist":4,"king":5}
+# =====================================================================
+# TEKNOLOG 📡 — kulaklık işçiliğinde cihazlar: metal gövde, AI renginde parlayan parçalar, üstten ışık
+# çift anten, VR gözlüğü, neon maske, retro fotoğraf makinesi, boombox (gizli ödül yok; seviyeyle açılır)
+# =====================================================================
+METAL=lambda x1,y1,x2,y2: lin(x1,y1,x2,y2,(0,"#8C88AA"),(1,"#3C3954"))
+DARKM=lambda x1,y1,x2,y2: lin(x1,y1,x2,y2,(0,"#5A5674"),(1,"#1A1826"))
+def glowball(x,y,r,o=0):
+    return [A(E(x,y,r*2.1,r*2.1,fill=rad(x,y,r*2.1,(0,"theme-light"),(1,"#FFFFFF00"))),"beat",0.18,0.9,p=[x,y],o=o),
+            E(x,y,r,r,fill=rad(x-r*0.4,y-r*0.45,r*1.5,(0,"theme-light"),(0.55,"theme"),(1,"theme-dark"))),
+            E(x-r*0.35,y-r*0.4,r*0.38,r*0.28,fill="#FFFFFFCC")]
+
+def rrect(x,y,w,h,r):
+    # Yuvarlak köşeli dikdörtgen yolu (çerçeve yapmak için iki tanesi bir yolda: evenodd ile ortası boş kalır)
+    k=0.5523*r; X=x+w; Y=y+h
+    return (f"M {x+r},{y} L {X-r},{y} C {X-r+k},{y} {X},{y+r-k} {X},{y+r} L {X},{Y-r} C {X},{Y-r+k} {X-r+k},{Y} {X-r},{Y} "
+            f"L {x+r},{Y} C {x+r-k},{Y} {x},{Y-r+k} {x},{Y-r} L {x},{y+r} C {x},{y+r-k} {x+r-k},{y} {x+r},{y} Z")
+
+# Çift anten: başın üstünü saran metal bant, yaylı iki anten, uçlarında AI renginde parlayan toplar; hafifçe sallanır
+def antenna(bx,tx,ty,o):
+    sh=[P(f"M {bx},12.6 L {tx},{ty}",stroke=DARKM(bx,13,tx,ty),w=1.9),
+        P(f"M {bx},12.6 L {tx},{ty}",stroke=SILVER(tx,ty,bx,13),w=0.9),
+        *[P(f"M {bx+(tx-bx)*k-2.1},{12.6+(ty-12.6)*k+0.5} L {bx+(tx-bx)*k+2.1},{12.6+(ty-12.6)*k-0.5}",stroke=SILVER(bx-2,0,bx+2,4),w=1.1)
+          for k in (0.1,0.18,0.26,0.34)],
+        *glowball(tx,ty,3.3,o)]
+    return [A(x,"sway",5,0.5,p=[bx,13],o=o) for x in sh]
+item("antenna","head","Çift anten","Twin antennas",[
+  P("M 9,38 C 9,8 91,8 91,38",stroke=DARKM(0,10,0,38),w=4.4),
+  P("M 9,38 C 9,8 91,8 91,38",stroke=lin(0,0,100,0,(0,"#6E6A88"),(0.5,"#C9C4DA"),(1,"#5A5674")),w=2),
+  P("M 18,22 C 28,14 72,14 82,22",stroke="#FFFFFF44",w=0.9),
+  R(3.5,33,10,12,3.5,fill=METAL(3.5,33,13.5,45)), R(5.5,35.5,6,7,2,fill=THEME(7,37,8)),
+  R(86.5,33,10,12,3.5,fill=METAL(86.5,33,96.5,45)), R(88.5,35.5,6,7,2,fill=THEME(90,37,8)),
+  *antenna(32,22,-11,0), *antenna(68,78,-11,0.5),
+  E(32,13.2,2.6,1.8,fill=SILVER(30,11,34,15)), E(68,13.2,2.6,1.8,fill=SILVER(66,11,70,15)),
+],level=17,type="techie")
+
+# VR gözlüğü: beyaz kasa, koyu yarı saydam cam (gözler arkadan seçilir), camda kayan AI renginde parlama, yan kayış, yanıp sönen ışık
+item("vr","eyes","VR gözlüğü","VR headset",[
+  R(0,44.5,16,10,4,fill=DARKM(0,44,0,55)), R(84,44.5,16,10,4,fill=DARKM(0,44,0,55)),
+  P("M 2,46.4 L 14,46.4 M 86,46.4 L 98,46.4",stroke="theme",w=1),
+  E(50,71.5,30,2.2,fill="#00000022"),
+  P(rrect(11,35,78,34,14)+" "+rrect(15.5,39.5,69,25,10),fill=lin(0,35,0,69,(0,"#FFFFFF"),(0.6,"#E4DFEE"),(1,"#B4AECB"))),
+  R(15.5,39.5,69,25,10,fill=lin(0,39,0,65,(0,"#1C193040"),(1,"#0B0A1470"))),
+  R(15.5,39.5,69,25,10,stroke="theme",sw=0.9),
+  A(P("M 22,63 L 34,41 L 41,41 L 29,63 Z",fill="#FFFFFF1E"),"slide",30,0.25),
+  P("M 20,42.6 C 30,40.6 70,40.6 80,42.6",stroke="#FFFFFF40",w=0.8),
+  P("M 42,69 C 44,64.6 56,64.6 58,69",fill="#CFC8DE"),
+  P("M 22,36.6 C 36,35.2 64,35.2 78,36.6",stroke="#FFFFFFCC",w=0.9),
+  A(E(83,38.6,1.1,1.1,fill="theme-light"),"twinkle",1,0.6),
+],level=19,type="techie")
+
+# Neon maske: ağzı örten metal maske, önde müzikle oynayan AI renginde ışık çubukları, yanlarda süzgeçler
+bars=[A(R(x-1,71.5-h/2,2,h,1,fill="theme-light"),"beat",0.35,1.6,p=[x,71.5],o=o)
+      for x,h,o in [(39,3,0),(43,5.5,0.3),(47,8,0.6),(50.5,9,0.15),(54,8,0.45),(58,5.5,0.75),(62,3,0.9)]]
+def filt(x):
+    return [E(x,72,5,5,fill=rad(x-1.6,70.2,6.6,(0,"#C9C4DA"),(0.55,"#6E6A88"),(1,"#2A283C"))),
+            E(x,72,3.2,3.2,stroke="theme",w=0.9),
+            P(f"M {x-2},{72} L {x+2},{72} M {x},{70} L {x},{74}",stroke="#1A182688",w=0.8),
+            E(x-1.7,70.2,1.2,0.8,fill="#FFFFFF77")]
+item("neonmask","face","Neon maske","Neon mask",[
+  P("M 23,66 L 9,57 M 77,66 L 91,57",stroke="#2A283A",w=1.6),
+  E(50,82.4,22,1.6,fill="#00000022"),
+  P("M 24,64.6 C 34,61.4 66,61.4 76,64.6 C 78.4,71.6 72,80.6 62,82 L 38,82 C 28,80.6 21.6,71.6 24,64.6 Z",fill=DARKM(0,62,0,82)),
+  P("M 34,66.6 L 66,66.6 C 67.4,66.6 68,67.4 68,68.6 L 68,74.4 C 68,75.6 67.4,76.4 66,76.4 L 34,76.4 C 32.6,76.4 32,75.6 32,74.4 L 32,68.6 C 32,67.4 32.6,66.6 34,66.6 Z",fill="#0E0C18"),
+  *bars,
+  P("M 27,65.6 C 36,63 64,63 73,65.6",stroke="#FFFFFF55",w=0.9),
+  *filt(26.5), *filt(73.5),
+],level=22,type="techie")
+
+# Retro fotoğraf makinesi: AI renginde askı, gümüş üst kapak, AI renginde deri kaplama, parlak lens, ara sıra flaş parıltısı
+item("camera","neck","Fotoğraf makinesi","Retro camera",[
+  P("M 27,80 C 30,86 34,89.6 38,91 M 73,80 C 70,86 66,89.6 62,91",stroke="theme-dark",w=2.6),
+  P("M 27.6,80.4 C 30.4,85.8 34.2,89 37.8,90.4 M 72.4,80.4 C 69.6,85.8 65.8,89 62.2,90.4",stroke="theme-light",w=0.8),
+  E(50,106.2,15,1.4,fill="#00000024"),
+  R(35,89,30,16.5,3.2,fill=lin(0,89,0,105.5,(0,"#3A3850"),(1,"#121119"))),
+  R(35,89,30,5.6,2.4,fill=SILVER(35,89,65,95)),
+  R(35,94,30,11.5,2.6,fill=THEME(40,96,26)),
+  P("M 35.6,95.6 L 64.4,95.6",stroke="#00000040",w=0.6),
+  R(38.4,87.4,4.6,2.2,0.8,fill=SILVER(38,87,43,90)),
+  R(55.6,90.2,5.4,2.6,0.8,fill=lin(0,90,0,93,(0,"#A8D4FF"),(1,"#1A3A6A"))),
+  E(50,98.2,7,7,fill=rad(48,96,9,(0,"#E4E0EE"),(0.5,"#8C88AA"),(1,"#2A283C"))),
+  E(50,98.2,5,5,fill=rad(50,98.2,5,(0,"#3A3850"),(1,"#0B0A14"))),
+  E(50,98.2,3.2,3.2,fill=rad(49,97,4.2,(0,"#7FA8E8"),(0.6,"#23407A"),(1,"#0B1020"))),
+  E(48.6,96.8,1.3,0.9,fill="#FFFFFFCC"),
+  P("M 36.4,90.4 L 63.6,90.4",stroke="#FFFFFFCC",w=0.6),
+  A(P(sparkle(59.4,91.4,2.6),fill="#FFFFFF"),"twinkle",1,0.3,p=[59.4,91.4]),
+],level=24,type="techie")
+
+# Boombox: metal kasa, tutma kolu, AI renginde iki hoparlör (bas vurdukça büyür), ışıklı ekolayzer, yükselen notalar
+def speaker(x,o):
+    return [E(x,92.6,5.3,5.3,fill=rad(x,92.6,5.3,(0,"#2A283C"),(1,"#121119"))),
+            A(E(x,92.6,4.2,4.2,fill=rad(x-1.2,91.2,5.6,(0,"theme-light"),(0.55,"theme"),(1,"theme-dark"))),"beat",0.07,2,p=[x,92.6],o=o),
+            A(E(x,92.6,1.5,1.5,fill=rad(x-0.5,92,2,(0,"#5A5674"),(1,"#121119"))),"beat",0.07,2,p=[x,92.6],o=o),
+            E(x-1.6,90.8,1,0.7,fill="#FFFFFF66")]
+item("boombox","side","Boombox","Boombox",[
+  E(108.5,101.2,12,1.6,fill="#00000026"),
+  P("M 100.6,80.4 L 100.6,75.6 C 100.6,74 101.8,73 103.4,73 L 113.6,73 C 115.2,73 116.4,74 116.4,75.6 L 116.4,80.4",stroke=DARKM(100,73,117,81),w=2.2),
+  P("M 101.4,79.6 L 101.4,75.8 C 101.4,74.6 102.4,73.8 103.6,73.8 L 113.4,73.8",stroke="#FFFFFF55",w=0.6),
+  R(96.5,79.5,24,21,3.6,fill=METAL(96.5,79.5,120.5,100.5)),
+  R(101,81.6,15,4.6,1.2,fill="#0E0C18"),
+  *[A(R(102.4+i*2.2,85.4-h,1.2,h,0.4,fill="theme-light"),"twinkle",1,1.4,o=i*0.17) for i,h in enumerate([1.6,2.6,3.4,2.2,3,1.8])],
+  *speaker(102.6,0), *speaker(114.4,0.5),
+  P("M 97.6,81.6 L 119.4,81.6",stroke="#FFFFFF44",w=0.7),
+  *[A(sh,"rise",9,0.45) for sh in note(118,72)],
+],level=27,type="techie")
+
+order={"coder":0,"hipster":1,"police":2,"marketing":3,"artist":4,"king":5,"techie":6}
 items.sort(key=lambda d:(order[d["type"]],d.get("legendary",False),d.get("level",0)))
 json.dump(items,open(ROOT / 'assets/outfits.json','w',encoding='utf-8'),ensure_ascii=False,indent=1)
 print(len(items))

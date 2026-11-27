@@ -68,7 +68,7 @@
 - **Akıllı uyarılar:** bir sohbet aynı adımda üst üste 3 kez başarısız olunca *takıldı gibi* der; iki sohbet aynı dosyayı düzenlerse uyarır; Claude `git push` yapınca o commit'in CI'sini izleyip *CI geçti* / *CI kırmızı* der (`gh` gerekir); tur bittiğinde 1,5 saattir commit'lenmemiş iş varsa bir kez hatırlatır.
 - **Pil dostu:** boştayken robot yavaşça durur ve yeniden çizilmez (sadece göz kırparken birkaç kare); bir şey olunca hemen canlanır. Sistemde *hareketi azalt* açıksa süzülmez.
 - **Robotun odası:** menüden ya da robota sağ tıklayıp *🏠 Robotun odası*. Solda robotun, seviyesi ve serisi; sağda beş sekme:
-  - **Gardırop:** 30 parça, 5 yuva: Baş, Gözlük, Yüz, Boyun ve Yanında. Her yuvadan istediğini seçip kendi kombinini yaparsın (kulaklık, bere, pilot gözlüğü, bıyık, atkı, yanında lastik ördek ya da roket…). Parçalar seviye atladıkça ya da başarımla açılır; her yuvada parıltılı, gizli bir efsanevi ödül var. Bir parça açılınca robot sevinir ve söyler.
+  - **Gardırop:** 35 parça, 5 yuva: Baş, Gözlük, Yüz, Boyun ve Yanında. Her yuvadan istediğini seçip kendi kombinini yaparsın (kulaklık, çift anten, VR gözlüğü, bıyık, atkı, yanında lastik ördek, boombox ya da roket…). Parçalar seviye atladıkça ya da başarımla açılır; aralarında 6 parıltılı, gizli efsanevi ödül var. Bir parça açılınca robot sevinir ve söyler.
   - **Efektler:** robotun etrafındaki efekti seçersin ya da *Otomatik* bırakırsın.
   - **Başarımlar:** gerçek işle XP kazanır (tur, düzenleme, çalışılan dakika, aktif gün); *Geveze*, *Büyük gün*, *Gece kuşu*, *Takım lideri* gibi 31 başarım. Yenisi açılınca robot söyler.
   - **Emek:** son 7 gün, 30 gün ya da tüm zamanlarda hangi AI ve hangi projede ne kadar çalışıldı: günlük grafik ve proje tablosu.

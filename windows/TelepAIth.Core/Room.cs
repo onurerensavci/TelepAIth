@@ -102,6 +102,8 @@ public static class Outfits
         new("marketing", "📣", "Pazarlamacı", "Marketer", "Fikir bulur, duyurur, uçurur", "Finds the idea, shouts it, launches it"),
         new("artist", "🎨", "Sanatçı", "Artist", "Her satırı bir tuval gibi görür", "Sees every line as a canvas"),
         new("king", "👑", "Kral", "King", "Robotların en yücesi", "The highest of all robots"),
+        // Gizli ödülü yok; 5 parçası seviyeyle açılır (17, 19, 22, 24, 27)
+        new("techie", "📡", "Teknolog", "Techie", "Her cihazı kurcalar", "Tinkers with every gadget"),
     };
 
     public static OutfitType? FindType(string? id) => Types.FirstOrDefault(t => t.Id == id);

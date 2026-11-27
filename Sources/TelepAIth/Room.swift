@@ -110,7 +110,7 @@ enum Outfits {
         }
     }
 
-    /// Tipler (kolaydan zora): her birinin 5 parçası var, sonuncusu gizli ödül.
+    /// Tipler (kolaydan zora): her birinin 5 parçası var (her yuvadan bir); ilk altısının sonuncusu gizli ödül.
     static let types: [OutfitType] = [
         OutfitType(id: "coder", emoji: "💻", nameTr: "Kodcu", nameEn: "Coder",
                    descTr: "Kulaklığı takar, ördeğiyle hata ayıklar", descEn: "Headphones on, debugging with a duck"),
@@ -124,6 +124,9 @@ enum Outfits {
                    descTr: "Her satırı bir tuval gibi görür", descEn: "Sees every line as a canvas"),
         OutfitType(id: "king", emoji: "👑", nameTr: "Kral", nameEn: "King",
                    descTr: "Robotların en yücesi", descEn: "The highest of all robots"),
+        // Gizli ödülü yok; 5 parçası seviyeyle açılır (17, 19, 22, 24, 27)
+        OutfitType(id: "techie", emoji: "📡", nameTr: "Teknolog", nameEn: "Techie",
+                   descTr: "Her cihazı kurcalar", descEn: "Tinkers with every gadget"),
     ]
 
     static func findType(_ id: String?) -> OutfitType? { types.first { $0.id == id } }

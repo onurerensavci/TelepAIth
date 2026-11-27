@@ -1,5 +1,16 @@
 [
  {
+  "version": "0.25.8",
+  "tr": [
+   "Gardıroba 5 yeni parça: çift anten, VR gözlüğü, neon maske, fotoğraf makinesi ve boombox (seviye 17, 19, 22, 24, 27)",
+   "Beşini toplayınca yeni Teknolog seti tamamlanıyor"
+  ],
+  "en": [
+   "5 new wardrobe pieces: twin antennas, VR headset, neon mask, retro camera and boombox (levels 17, 19, 22, 24, 27)",
+   "Collect all five to complete the new Techie set"
+  ]
+ },
+ {
   "version": "0.25.7",
   "tr": [
    "Yeni seçenek: Ayarlar → Genel → Güncellemeleri otomatik kur. Açıksa robot, hiçbir sohbet çalışmıyor ya da seni beklemiyorken kendini günceller"

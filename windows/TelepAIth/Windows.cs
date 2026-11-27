@@ -707,7 +707,7 @@ internal static class OnboardingWindow
             Ui.Para(L("Sen çalıştıkça robot seviye atlar ve gardıropta yeni parçalar açılır. Robota sağ tıkla → Robotun Odası.",
                 "As you work, the robot levels up and new pieces open in the wardrobe. Right-click the robot → Robot's Room.")),
             row,
-            Ui.Card(L("30 parça", "30 pieces"), L("Baş, gözlük, yüz, boyun ve yanına: her yuvadan istediğini giy, kendi kombinini yap.",
+            Ui.Card(L("35 parça", "35 pieces"), L("Baş, gözlük, yüz, boyun ve yanına: her yuvadan istediğini giy, kendi kombinini yap.",
                 "Head, eyes, face, neck and side: wear anything per slot and make your own combo."), null, "\uE7BF"),
             Ui.Card(L("Gizli ödüller ✨", "Secret rewards ✨"), L("Bazı parçalar parıltılı bir sürpriz; belli bir seviyede açılır.",
                 "Some pieces are shiny surprises that open at a certain level."), null, "\uE734"),

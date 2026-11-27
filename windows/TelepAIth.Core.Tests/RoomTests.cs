@@ -4,7 +4,7 @@ public static partial class Tests
 {
     public static void OutfitsParseAndColors()
     {
-        A.Eq(30, Outfits.All.Count);
+        A.Eq(35, Outfits.All.Count);
         A.True(Outfits.All.All(i => Outfits.Slots.Contains(i.Slot) && i.Shapes.Count > 0 && i.Name.Length > 0));
         A.True(Outfits.All.Select(i => i.Id).Distinct().Count() == Outfits.All.Count);
         // Başarımla açılan parçaların başarımı var
@@ -74,12 +74,13 @@ public static partial class Tests
 
     public static void OutfitTypesAndNews()
     {
-        // 6 tip × 5 parça: her yuvadan bir tane, biri gizli ödül
-        A.Eq(6, Outfits.Types.Length);
+        // 7 tip × 5 parça: her yuvadan bir tane; ilk altısında biri gizli ödül, Teknolog'da gizli ödül yok
+        A.Eq(7, Outfits.Types.Length);
         foreach (var t in Outfits.Types)
         {
             var items = Outfits.ItemsOf(t.Id);
             A.True(items.Select(i => i.Slot).OrderBy(x => x).SequenceEqual(Outfits.Slots.OrderBy(x => x)), t.Id);
+            if (t.Id == "techie") { A.Eq(0, items.Count(i => i.Legendary)); A.True(items.All(i => i.Achievement == null && i.Level > 0), "teknolog seviyeyle"); continue; }
             A.Eq(1, items.Count(i => i.Legendary));
             A.True(items.First(i => i.Legendary).Achievement == null, t.Id);   // gizli ödül seviyeyle açılır
         }
