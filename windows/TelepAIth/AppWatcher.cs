@@ -504,11 +504,15 @@ internal sealed class AppWatcher
     {
         if (!found.SidebarScanned) return;
         var summary = string.Join(" | ", SidebarChats.Parse(found.Sidebar).Select(r => $"{r.Row.Title}={r.Row.State}{(r.Current ? "*" : "")}"));
+        var current = SidebarChats.CurrentTitle(found.Sidebar, tracker.ChatKey) ?? "?";
+        var key = summary + " · açık: " + current;
         var had = _sidebarLogged.TryGetValue(pid, out var last);
-        if (had && (last.Text == summary || Now - last.At < 30)) return;
-        _sidebarLogged[pid] = (summary, Now);
+        // Değişince, en fazla 30 sn'de bir; açık sohbetin adı değişince hemen
+        var titleChanged = had && !last.Text.EndsWith(" · açık: " + current, StringComparison.Ordinal);
+        if (had && (last.Text == key || (Now - last.At < 30 && !titleChanged))) return;
+        _sidebarLogged[pid] = (key, Now);
         Log($"[{AppInfo.Version}] {name} yan menü ({(found.SidebarViaNav ? "nav" : "sol %40")}, {found.Sidebar.Count} öğe): " +
-            (summary.Length == 0 ? "durumlu sohbet yok" : summary) + " · açık: " + (SidebarChats.CurrentTitle(found.Sidebar, tracker.ChatKey) ?? "?"));
+            (summary.Length == 0 ? "durumlu sohbet yok" : summary) + " · açık: " + current);
     }
 
     /// <summary>Teşhis: yan menüde durum gibi görünen öğeler ve ipucu/açıklaması olanlar (algılamayı ayarlamak için)</summary>

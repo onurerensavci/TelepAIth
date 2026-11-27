@@ -438,19 +438,26 @@ final class AppWatcher {
                 for e in bg.update(items, currentChat: st.chatKey, now: now) { emitMain(e) }
                 st.sidebarInfo = (viaNav ? loc("gezinme bölümü", "nav section") : loc("gezinme bölümü yok, sol taraf", "no nav section, left side"))
                     + " · " + AppWatcher.sidebarInfo(items, background: bg)
-                // Algılama günlüğüne: yan menüde ne görüldü (değişince, en fazla 30 sn'de bir)
+                let current = SidebarChats.currentTitle(items, currentChat: st.chatKey)
+                // Algılama günlüğüne: yan menüde ne görüldü (değişince, en fazla 30 sn'de bir; açık sohbetin adı değişince hemen)
                 let summary = SidebarChats.parse(items).map { "\($0.row.title)=\($0.row.state)\($0.current ? "*" : "")" }.joined(separator: " | ")
-                if summary != st.lastSidebarLogged && now - st.lastSidebarLog > 30 {
+                let logKey = summary + " · açık: " + (current ?? "?")
+                let titleChanged = current != nil && current != chatTitles[target.pid]
+                if logKey != st.lastSidebarLogged && (now - st.lastSidebarLog > 30 || titleChanged) {
                     st.lastSidebarLog = now
-                    st.lastSidebarLogged = summary
-                    AppWatcher.log("[\(Updater.shared.currentVersion)] \(target.name) yan menü (\(viaNav ? "nav" : "sol %40"), \(items.count) öğe): " + (summary.isEmpty ? "durumlu sohbet yok" : summary)
-                                   + " · açık: " + (SidebarChats.currentTitle(items, currentChat: st.chatKey) ?? "?"))
+                    st.lastSidebarLogged = logKey
+                    AppWatcher.log("[\(Updater.shared.currentVersion)] \(target.name) yan menü (\(viaNav ? "nav" : "sol %40"), \(items.count) öğe): "
+                                   + (summary.isEmpty ? "durumlu sohbet yok" : summary) + " · açık: " + (current ?? "?"))
                 }
-                if let title = SidebarChats.currentTitle(items, currentChat: st.chatKey) {
+                if let title = current {
                     chatTitles[target.pid] = title
                     if st.knownChats.count > 300 { st.knownChats.removeAll() }
                     let url = SidebarChats.normalizeURL(st.chatKey) != nil ? st.chatKey : nil
                     st.knownChats[st.session(target.pid)] = (title, url)
+                    // Açık sohbetin adı öğrenildi ya da değişti: listede hemen görünsün ("Açık sohbet" yerine)
+                    if titleChanged && (st.generating || st.approving) {
+                        emitMain(AgentEvent(source: st.source, sessionID: st.session(target.pid), kind: .heartbeat))
+                    }
                 }
             }
 

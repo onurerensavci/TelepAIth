@@ -1,5 +1,18 @@
 [
  {
+  "version": "0.25.2",
+  "tr": [
+   "Sohbet listesinde açık sohbetin gerçek adı hemen görünüyor (\"Açık sohbet\" yerine)",
+   "Sohbet adlarının sonundaki \"Includes an artifact\", \"Starred\" gibi ekler temizleniyor",
+   "Açık sohbetin adı her değiştiğinde algılama günlüğüne yazılıyor"
+  ],
+  "en": [
+   "The chat list shows the open chat's real name right away (instead of \"Open chat\")",
+   "Suffixes like \"Includes an artifact\" and \"Starred\" are removed from chat names",
+   "The detection log records every change of the open chat's name"
+  ]
+ },
+ {
   "version": "0.25.1",
   "tr": [
    "Sohbetler yine robotun balonunda; artık 6 satır görünüyor, fazlası balonun içinde fare tekerleğiyle kaydırılıyor",

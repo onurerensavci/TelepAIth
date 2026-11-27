@@ -404,7 +404,13 @@ public sealed class ChatAppTracker
         if (found.SidebarScanned)
         {
             events.AddRange(Background.Update(found.Sidebar, ChatKey, now));
-            ChatTitle = SidebarChats.CurrentTitle(found.Sidebar, ChatKey) ?? ChatTitle;
+            var title = SidebarChats.CurrentTitle(found.Sidebar, ChatKey);
+            if (title != null && title != ChatTitle)
+            {
+                ChatTitle = title;
+                // Açık sohbetin adı öğrenildi ya da değişti: listede hemen görünsün ("Açık sohbet" yerine)
+                if (Generating || Approving) events.Add(Ev(EventKind.Heartbeat));
+            }
             if (ChatTitle != null)
             {
                 if (_known.Count > 300) _known.Clear();
@@ -519,7 +525,40 @@ public sealed class SidebarChats
         "scroll to bottom", "skip to content", "şunu dedin:",
     };
 
-    public static string StripStatus(string name)
+    /// <summary>Claude'un yan menüde adın sonuna eklediği işaretler ("TelepAIth Includes an artifact")</summary>
+    private static readonly string[] Decorations =
+    {
+        "includes an artifact", "contains an artifact", "has an artifact", "artifact içerir",
+        "starred", "pinned", "yıldızlı", "sabitlendi", "sabitlenmiş",
+    };
+
+    private static readonly string[] DecorationSeparators = { ", ", " · ", " - ", " — ", " | ", " " };
+
+    /// <summary>Adın sonundaki işaretleri at: "TelepAIth Includes an artifact" → "TelepAIth" (Mac'te stripDecorations)</summary>
+    public static string StripDecorations(string name)
+    {
+        var t = name.Trim();
+        var changed = true;
+        while (changed)
+        {
+            changed = false;
+            var l = t.ToLowerInvariant();
+            foreach (var d in Decorations)
+            {
+                var sep = DecorationSeparators.FirstOrDefault(s => l.EndsWith(s + d, StringComparison.Ordinal) && l.Length > d.Length + s.Length);
+                if (sep == null) continue;
+                t = t[..(t.Length - d.Length - sep.Length)].Trim();
+                changed = true;
+                break;
+            }
+        }
+        return t;
+    }
+
+    /// <summary>Addaki durum ekini ve işaretleri at: "Tarif, running" → "Tarif", "Kod Includes an artifact" → "Kod"</summary>
+    public static string StripStatus(string name) => StripDecorations(StripStatusOnly(StripDecorations(name)));
+
+    private static string StripStatusOnly(string name)
     {
         var t = name.Trim();
         if (IsNoise(t)) return "";

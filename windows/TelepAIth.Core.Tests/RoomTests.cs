@@ -172,6 +172,10 @@ public static partial class Tests
         A.Eq(0, junk.Count);
         A.Eq("", SidebarChats.StripStatus("You said: merhaba"));
         A.Eq("Copywriting fikirleri", SidebarChats.StripStatus("Copywriting fikirleri"));
+        // Claude'un adın sonuna eklediği işaretler temizlenir
+        A.Eq("TelepAIth", SidebarChats.StripStatus("TelepAIth Includes an artifact"));
+        A.Eq("Tarif", SidebarChats.StripStatus("Tarif, Starred · running"));
+        A.Eq("Includes an artifact", SidebarChats.StripDecorations("Includes an artifact"));   // tek başına: ad değil, dokunma (gürültü filtresi eler)
         // Claude sohbetleri resmî bağlantıyla açılır
         A.Eq("claude://claude.ai/chat/0b6a5e2c-1d2f-4c3b-9a8e-123456789abc", SidebarChats.DeepLink("https://claude.ai/chat/0b6a5e2c-1d2f-4c3b-9a8e-123456789abc?x=1"));
         A.True(SidebarChats.DeepLink("https://claude.ai/recents") == null);

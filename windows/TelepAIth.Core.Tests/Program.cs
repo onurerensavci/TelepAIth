@@ -718,6 +718,15 @@ public static partial class Tests
         bg.Update(new[] { row with { Name = "Sohbet B" } }, null, 30);
         A.Eq(0, bg.Count);
         A.Eq("Sohbet B", bg.Find(id)?.Title);
+        // Çalışırken açık sohbetin adı öğrenilince hemen bir sinyal gider (listede "Açık sohbet" yerine ad görünsün)
+        var tn = new ChatAppTracker("claude", 23, "Claude");
+        var gen = new FoundUi { Stop = new RectD(650, 810, 30, 30), Composer = composer };
+        tn.Update(gen, "Claude", 0);
+        var named = new FoundUi { Stop = new RectD(650, 810, 30, 30), Composer = composer, SidebarScanned = true };
+        named.Urls.Add("https://claude.ai/chat/ddd");
+        named.Sidebar.Add(new SidebarItem("SCAM OR LEGIT video Includes an artifact", "", "https://claude.ai/chat/ddd", new RectD(0, 100, 200, 20)));
+        var evs = tn.Update(named, "Claude", 1);
+        A.True(evs.Any(e => e.Project == "SCAM OR LEGIT video"), "ad hemen gelir, ek temizlenir");
     }
 
     public static void TrackerCpuFallback()

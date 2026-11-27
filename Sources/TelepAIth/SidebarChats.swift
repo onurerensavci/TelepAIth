@@ -97,8 +97,34 @@ final class SidebarChats {
                                         "open sidebar", "close sidebar", "toggle sidebar", "collapse sidebar", "expand sidebar",
                                         "scroll to bottom", "skip to content", "şunu dedin:"]
 
-    /// Addaki durum ekini at: "Tarif, running" → "Tarif"
+    /// Claude'un yan menüde adın sonuna eklediği işaretler ("TelepAIth Includes an artifact")
+    private static let decorations = ["includes an artifact", "contains an artifact", "has an artifact", "artifact içerir",
+                                      "starred", "pinned", "yıldızlı", "sabitlendi", "sabitlenmiş"]
+
+    /// Adın sonundaki işaretleri at: "TelepAIth Includes an artifact" → "TelepAIth" (Windows'ta StripDecorations)
+    static func stripDecorations(_ name: String) -> String {
+        var t = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        var changed = true
+        while changed {
+            changed = false
+            let l = t.lowercased()
+            outer: for d in decorations {
+                for sep in [", ", " · ", " - ", " — ", " | ", " "] where l.hasSuffix(sep + d) && l.count > d.count + sep.count {
+                    t = String(t.prefix(t.count - d.count - sep.count)).trimmingCharacters(in: .whitespaces)
+                    changed = true
+                    break outer
+                }
+            }
+        }
+        return t
+    }
+
+    /// Addaki durum ekini ve işaretleri at: "Tarif, running" → "Tarif", "Kod Includes an artifact" → "Kod"
     static func stripStatus(_ name: String) -> String {
+        stripDecorations(stripStatusOnly(stripDecorations(name)))
+    }
+
+    private static func stripStatusOnly(_ name: String) -> String {
         let t = name.trimmingCharacters(in: .whitespacesAndNewlines)
         if isNoise(t) { return "" }
         let l = normalized(t)

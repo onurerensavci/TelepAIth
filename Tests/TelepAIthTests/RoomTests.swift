@@ -138,6 +138,9 @@ final class RoomTests: XCTestCase {
         XCTAssertTrue(junk.isEmpty)
         XCTAssertEqual(SidebarChats.stripStatus("You said: merhaba"), "")
         XCTAssertEqual(SidebarChats.stripStatus("Copywriting fikirleri"), "Copywriting fikirleri")
+        // Claude'un adın sonuna eklediği işaretler temizlenir
+        XCTAssertEqual(SidebarChats.stripStatus("TelepAIth Includes an artifact"), "TelepAIth")
+        XCTAssertEqual(SidebarChats.stripStatus("Tarif, Starred · running"), "Tarif")
         // Claude sohbetleri resmî bağlantıyla açılır
         XCTAssertEqual(SidebarChats.deepLink("https://claude.ai/chat/0b6a5e2c-1d2f-4c3b-9a8e-123456789abc?x=1")?.absoluteString,
                        "claude://claude.ai/chat/0b6a5e2c-1d2f-4c3b-9a8e-123456789abc")
