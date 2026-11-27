@@ -1,5 +1,16 @@
 [
  {
+  "version": "0.25.0",
+  "tr": [
+   "Robota tıklayınca yanında Sohbetler paneli açılıyor: bütün sohbetler, kaydırılabilir, gruplu (Seni bekliyor · Yeni bitti · Çalışıyor · Bitti)",
+   "Her satırda hangi uygulama olduğu, durumu ve süresi yazıyor; tıklayınca o sohbet açılıyor"
+  ],
+  "en": [
+   "Clicking the robot opens a Chats panel beside it: every chat, scrollable and grouped (Needs you · Just finished · Working · Done)",
+   "Each row shows the app, state and time; click it to open that chat"
+  ]
+ },
+ {
   "version": "0.24.3",
   "tr": [
    "Sohbetler listesine artık Claude'un mesajları karışmıyor: robot yan menüyü yapısından tanıyor, sohbet içeriğini hiç okumuyor ve tıklamıyor"

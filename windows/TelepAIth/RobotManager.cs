@@ -24,6 +24,8 @@ internal sealed class RobotManager
     private double _lastTick, _lastForegroundCheck, _lastDockCheck, _lastMiniCheck, _lastSlowCheck, _lastUpdateAnnounce = -1e9;
     private bool _wasFocused = FocusMode.IsActive;
     private readonly AppWatcher _watcher = new();
+    /// <summary>Robota tıklayınca açılan Sohbetler paneli</summary>
+    private readonly ChatsPanel _chatsPanel = new();
     private readonly Dictionary<int, (int? Pid, DateTime At)> _ancestorCache = new();
     /// <summary>Takıldı, çakışma, CI, commit hatırlatması ve kullanım sınırları</summary>
     public readonly Insights Insights = new();
@@ -98,6 +100,9 @@ internal sealed class RobotManager
         Notifier.OnClick = Activate;
 
         _watcher.EventFound += e => Application.Current.Dispatcher.BeginInvoke(() => Handle(e));
+        // Sohbetler paneli: bütün sohbetler; satıra tıklayınca o sohbet açılır
+        _chatsPanel.Rows = () => DisplayPicker.AllChatRows(AllModels, DateTime.Now);
+        _chatsPanel.Open = OpenChat;
         // Listeden seçilen sohbet açılamadıysa söyle (sessizce yanlış sohbette kalmasın)
         _watcher.OpenChatFailed += _ => _avatar?.Current.Say(WithEmoji("🔎", L("Bu sohbeti uygulamanın yan menüsünde bulamadım, uygulamayı öne getirdim. Yan menü açık mı?",
             "I couldn't find this chat in the app's sidebar, so I brought the app forward. Is the sidebar open?")), 7);
@@ -379,14 +384,15 @@ internal sealed class RobotManager
                 break;
             default:
                 _avatar.Current.Wake();
-                // Tıklayınca her zaman sohbetler: açıksa kapat, değilse aç (sohbet yoksa "şu an sohbet yok" yazar)
-                if (_avatar.ChatList != null)
+                // Tıklayınca Sohbetler paneli: açıksa kapat, değilse robotun yanında aç (bütün sohbetler, kaydırılabilir)
+                if (_chatsPanel.IsOpen)
                 {
-                    _avatar.ChatList = null;
+                    _chatsPanel.Close();
                     break;
                 }
-                _avatar.ChatList = DisplayPicker.AllChatRows(AllModels, DateTime.Now);
-                _avatar.ChatListUntil = DateTime.Now.AddSeconds(15);
+                // Dışarı tıklama paneli az önce kapattıysa aynı tıklamayla yeniden açılmasın
+                if ((DateTime.Now - _chatsPanel.ClosedAt).TotalSeconds < 0.35) break;
+                _chatsPanel.Show(_avatar.HeadX, _avatar.HeadY, _avatar.HeadPx, Native.MonitorAt((int)_avatar.HeadX, (int)_avatar.HeadY));
                 break;
         }
     }
@@ -674,7 +680,7 @@ internal sealed class RobotManager
             ["subtitle"] = _avatar?.Current.BubbleSubtitle,
             ["minis"] = _avatar?.Minis.Count ?? 0,
             ["extras"] = _avatar?.Extras.Count ?? 0,
-            ["chatList"] = _avatar?.ChatList is { } cl
+            ["chatList"] = _chatsPanel.Shown is { } cl
                 ? new System.Text.Json.Nodes.JsonArray(cl.Select(r => (System.Text.Json.Nodes.JsonNode?)$"{r.Source}/{r.Title}: {r.Status}").ToArray())
                 : null,
             ["health"] = _avatar?.Health.ToString(),

@@ -27,6 +27,8 @@ final class RobotManager {
     private var timer: Timer?
     private var lastTick = CACurrentMediaTime()
     private let watcher = AppWatcher()
+    /// Robota tıklayınca açılan Sohbetler paneli
+    let chatsPanel = ChatsPanel()
     /// Menü için: izlenen masaüstü uygulamalarında ne görüyorum
     private(set) var watcherStatus: [String: String] = [:]
     private var lastTrustCheck = CACurrentMediaTime()
@@ -136,6 +138,12 @@ final class RobotManager {
         Notifier.shared.onOpenChat = { [weak self] source, session, target in self?.openChat(source: source, sessionID: session, target: target) }
 
         watcher.onEvent = { [weak self] event in self?.handle(event) }
+        // Sohbetler paneli: bütün sohbetler; satıra tıklayınca o sohbet açılır
+        chatsPanel.rows = { [weak self] in RobotModel.allChatRows(self?.allModels ?? []) }
+        chatsPanel.model.onOpen = { [weak self] row in
+            self?.chatsPanel.close()
+            self?.openChat(row)
+        }
         // Listeden seçilen sohbet açılamadıysa söyle (sessizce yanlış sohbette kalmasın)
         watcher.onOpenChatFailed = { [weak self] _ in
             self?.avatar?.current.say(withEmoji("🔎", loc("Bu sohbeti uygulamanın yan menüsünde bulamadım, uygulamayı öne getirdim. Yan menü açık mı?",
@@ -519,13 +527,16 @@ final class RobotManager {
             if Preferences.watchApps && !AppWatcher.isTrusted { AppWatcher.resetAndRequestTrust() }
         case .ok:
             avatar.current.wake()
-            // Tıklayınca her zaman sohbetler: açıksa kapat, değilse aç (sohbet yoksa "şu an sohbet yok" yazar)
-            if avatar.chatList != nil {
-                avatar.setChatList(nil)
+            // Tıklayınca Sohbetler paneli: açıksa kapat, değilse robotun yanında aç (bütün sohbetler, kaydırılabilir)
+            if chatsPanel.isOpen {
+                chatsPanel.close()
                 return
             }
-            avatar.chatListUntil = Date().addingTimeInterval(15)
-            avatar.setChatList(RobotModel.allChatRows(allModels))
+            // Dışarı tıklama paneli az önce kapattıysa aynı tıklamayla yeniden açılmasın
+            if Date().timeIntervalSince(chatsPanel.closedAt) < 0.35 { return }
+            let size = Layout.headSize
+            chatsPanel.show(near: NSRect(x: avatar.head.x - size.width / 2, y: avatar.head.y - size.height / 2,
+                                         width: size.width, height: size.height))
         }
     }
 
